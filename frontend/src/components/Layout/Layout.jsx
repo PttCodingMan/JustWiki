@@ -73,7 +73,12 @@ export default function Layout({ children }) {
 
       {/* Main */}
       <div className="flex flex-1 overflow-hidden">
-        {sidebarOpen && <Sidebar />}
+        <div
+          className="shrink-0 overflow-hidden transition-all duration-200 ease-in-out"
+          style={{ width: sidebarOpen ? '240px' : '0px' }}
+        >
+          <Sidebar />
+        </div>
         <main className="flex-1 overflow-auto bg-gray-50 p-6">
           {children}
         </main>

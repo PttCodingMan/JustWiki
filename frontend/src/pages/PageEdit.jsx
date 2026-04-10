@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import usePages from '../store/usePages'
 import Editor from '../components/Editor/Editor'
+import useUnsavedWarning from '../hooks/useUnsavedWarning'
 
 export default function PageEdit() {
   const { slug } = useParams()
@@ -12,14 +13,25 @@ export default function PageEdit() {
   const [content, setContent] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [dirty, setDirty] = useState(false)
+  const originalRef = useRef({ title: '', content: '' })
+
+  useUnsavedWarning(dirty)
 
   useEffect(() => {
     getPage(slug).then((p) => {
       setPage(p)
       setTitle(p.title)
       setContent(p.content_md)
+      originalRef.current = { title: p.title, content: p.content_md }
     })
   }, [slug])
+
+  useEffect(() => {
+    if (!page) return
+    const { title: origTitle, content: origContent } = originalRef.current
+    setDirty(title !== origTitle || content !== origContent)
+  }, [title, content, page])
 
   const handleSave = useCallback(async () => {
     if (saving) return
@@ -28,6 +40,7 @@ export default function PageEdit() {
     try {
       await updatePage(slug, { title, content_md: content })
       await fetchTree()
+      setDirty(false)
       navigate(`/page/${slug}`)
     } catch (err) {
       console.error('Save failed:', err)

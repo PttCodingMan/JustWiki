@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import usePages from '../../store/usePages'
 import useBookmarks from '../../store/useBookmarks'
@@ -36,17 +36,13 @@ export default function Sidebar() {
   const { tree } = usePages()
   const { bookmarks } = useBookmarks()
   const { stats, fetchStats } = useActivity()
-  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    if (!loaded) {
-      fetchStats()
-      setLoaded(true)
-    }
-  }, [loaded])
+    fetchStats()
+  }, [])
 
   return (
-    <aside className="w-60 bg-white border-r border-gray-200 overflow-y-auto shrink-0">
+    <aside className="w-60 min-w-60 bg-white border-r border-gray-200 overflow-y-auto">
       <div className="p-3">
         {/* Quick links */}
         <div className="mb-4">

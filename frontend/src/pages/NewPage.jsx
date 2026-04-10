@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import usePages from '../store/usePages'
 import api from '../api/client'
 import Editor from '../components/Editor/Editor'
+import useUnsavedWarning from '../hooks/useUnsavedWarning'
 
 export default function NewPage() {
   const navigate = useNavigate()
@@ -13,7 +14,12 @@ export default function NewPage() {
   const [selectedTemplate, setSelectedTemplate] = useState(null)
   const [showTemplates, setShowTemplates] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
+  const [editorKey, setEditorKey] = useState(0)
+  const dirty = !saved && !showTemplates && (title.trim() !== '' || content.trim() !== '')
+
+  useUnsavedWarning(dirty)
 
   useEffect(() => {
     api.get('/templates').then((res) => setTemplates(res.data))
@@ -22,11 +28,19 @@ export default function NewPage() {
   const selectTemplate = (tmpl) => {
     setSelectedTemplate(tmpl)
     setContent(tmpl.content_md)
+    setEditorKey((k) => k + 1)
     setShowTemplates(false)
   }
 
   const skipTemplates = () => {
+    setSelectedTemplate(null)
+    setContent('')
+    setEditorKey((k) => k + 1)
     setShowTemplates(false)
+  }
+
+  const changeTemplate = () => {
+    setShowTemplates(true)
   }
 
   const handleSave = useCallback(async () => {
@@ -40,6 +54,7 @@ export default function NewPage() {
         template_id: selectedTemplate?.id,
       })
       await fetchTree()
+      setSaved(true)
       navigate(`/page/${page.slug}`)
     } catch (err) {
       console.error('Create failed:', err)
@@ -121,12 +136,29 @@ export default function NewPage() {
         </div>
       )}
       {selectedTemplate && (
-        <div className="text-xs text-gray-400 mb-3">
-          Template: {selectedTemplate.name}
+        <div className="flex items-center gap-2 text-xs text-gray-400 mb-3">
+          <span>Template: {selectedTemplate.name}</span>
+          <button
+            onClick={changeTemplate}
+            className="text-blue-500 hover:text-blue-700 underline"
+          >
+            Change
+          </button>
+        </div>
+      )}
+      {!selectedTemplate && (
+        <div className="flex items-center gap-2 text-xs text-gray-400 mb-3">
+          <span>Blank page</span>
+          <button
+            onClick={changeTemplate}
+            className="text-blue-500 hover:text-blue-700 underline"
+          >
+            Use template
+          </button>
         </div>
       )}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 min-h-[500px]">
-        <Editor defaultValue={content} onChange={setContent} />
+        <Editor key={editorKey} defaultValue={content} onChange={setContent} />
       </div>
     </div>
   )

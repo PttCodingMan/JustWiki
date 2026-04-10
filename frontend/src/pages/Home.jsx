@@ -3,18 +3,19 @@ import { Link } from 'react-router-dom'
 import usePages from '../store/usePages'
 import useTags from '../store/useTags'
 
+const PER_PAGE = 20
+
 export default function Home() {
   const { pages, total, loading, fetchPages } = usePages()
   const { allTags, fetchAllTags } = useTags()
-  const [selectedTag, setSelectedTag] = useState('')
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
-    fetchPages()
+    fetchPages(page, PER_PAGE)
     fetchAllTags()
-  }, [])
+  }, [page])
 
-  // Client-side tag filter (since tag filter on list isn't in the backend yet for list endpoint)
-  const filteredPages = pages
+  const totalPages = Math.ceil(total / PER_PAGE)
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -45,7 +46,7 @@ export default function Home() {
 
       {loading ? (
         <p className="text-gray-500">Loading...</p>
-      ) : filteredPages.length === 0 ? (
+      ) : pages.length === 0 ? (
         <div className="text-center py-16">
           <p className="text-gray-400 text-lg mb-4">No pages yet</p>
           <Link
@@ -56,22 +57,59 @@ export default function Home() {
           </Link>
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          {filteredPages.map((page, i) => (
-            <Link
-              key={page.id}
-              to={`/page/${page.slug}`}
-              className={`block px-5 py-4 hover:bg-gray-50 transition-colors ${
-                i > 0 ? 'border-t border-gray-100' : ''
-              }`}
-            >
-              <div className="font-medium text-gray-800">{page.title}</div>
-              <div className="text-sm text-gray-400 mt-1">
-                /{page.slug} &middot; {new Date(page.updated_at).toLocaleDateString()} &middot; {page.view_count} views
+        <>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+            {pages.map((p, i) => (
+              <Link
+                key={p.id}
+                to={`/page/${p.slug}`}
+                className={`block px-5 py-4 hover:bg-gray-50 transition-colors ${
+                  i > 0 ? 'border-t border-gray-100' : ''
+                }`}
+              >
+                <div className="font-medium text-gray-800">{p.title}</div>
+                <div className="text-sm text-gray-400 mt-1">
+                  /{p.slug} &middot; {new Date(p.updated_at).toLocaleDateString()} &middot; {p.view_count} views
+                </div>
+              </Link>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-6">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <div className="flex gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={`w-8 h-8 text-sm rounded-lg ${
+                      p === page
+                        ? 'bg-blue-600 text-white'
+                        : 'hover:bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
               </div>
-            </Link>
-          ))}
-        </div>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
