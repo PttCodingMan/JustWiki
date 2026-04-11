@@ -21,10 +21,10 @@ export default function SearchResults() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-800 mb-2">
+      <h1 className="text-2xl font-bold text-text mb-2">
         Search: "{q}"
       </h1>
-      <p className="text-sm text-gray-400 mb-4">
+      <p className="text-sm text-text-secondary mb-4">
         {total} result{total !== 1 ? 's' : ''} found
       </p>
 
@@ -34,7 +34,7 @@ export default function SearchResults() {
           <button
             onClick={() => setSelectedTag('')}
             className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-              !selectedTag ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+              !selectedTag ? 'bg-primary text-primary-text border-primary' : 'bg-surface text-text-secondary border-border hover:border-primary'
             }`}
           >
             All
@@ -44,7 +44,7 @@ export default function SearchResults() {
               key={t.id}
               onClick={() => setSelectedTag(t.name)}
               className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                selectedTag === t.name ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                selectedTag === t.name ? 'bg-primary text-primary-text border-primary' : 'bg-surface text-text-secondary border-border hover:border-primary'
               }`}
             >
               {t.name} ({t.page_count})
@@ -54,9 +54,9 @@ export default function SearchResults() {
       )}
 
       {loading ? (
-        <p className="text-gray-500">Searching...</p>
+        <p className="text-text-secondary">Searching...</p>
       ) : results.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-text-secondary">
           No results found for "{q}"
         </div>
       ) : (
@@ -65,14 +65,14 @@ export default function SearchResults() {
             <Link
               key={r.id}
               to={`/page/${r.slug}`}
-              className="block bg-white rounded-xl shadow-sm border border-gray-200 px-5 py-4 hover:border-blue-200 transition-colors"
+              className="block bg-surface rounded-xl shadow-sm border border-border px-5 py-4 hover:border-primary/30 transition-colors"
             >
-              <div className="font-medium text-gray-800">{r.title}</div>
+              <div className="font-medium text-text">{r.title}</div>
               <div
-                className="text-sm text-gray-500 mt-1 line-clamp-2"
+                className="text-sm text-text-secondary mt-1 line-clamp-2"
                 dangerouslySetInnerHTML={{ __html: r.snippet }}
               />
-              <div className="text-xs text-gray-400 mt-2">
+              <div className="text-xs text-text-secondary mt-2">
                 /{r.slug} &middot; {r.view_count} views &middot; {new Date(r.updated_at).toLocaleDateString()}
               </div>
             </Link>

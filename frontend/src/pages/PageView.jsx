@@ -86,13 +86,13 @@ export default function PageView() {
     await removeTag(slug, tagName)
   }
 
-  if (loading) return <div className="text-gray-500">Loading...</div>
+  if (loading) return <div className="text-text-secondary">Loading...</div>
   if (!page) return null
 
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center gap-3 mb-4">
-        <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">{page.title}</h1>
+        <h1 className="text-2xl font-bold text-text">{page.title}</h1>
         <button
           onClick={handleToggleBookmark}
           className={`text-xl transition-colors ${bookmarked ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-400'}`}
@@ -105,11 +105,11 @@ export default function PageView() {
       {/* Tags */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         {pageTags.map((t) => (
-          <span key={t.id} className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">
+          <span key={t.id} className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-primary-soft text-primary dark:text-accent rounded-full">
             {t.name}
             <button
               onClick={() => handleRemoveTag(t.name)}
-              className="text-blue-400 hover:text-blue-600 dark:hover:text-blue-200 ml-0.5"
+              className="text-primary/60 hover:text-primary ml-0.5"
               title="Remove tag"
             >
               &times;
@@ -124,31 +124,31 @@ export default function PageView() {
               onChange={(e) => setNewTag(e.target.value)}
               onBlur={() => { if (!newTag.trim()) setShowTagInput(false) }}
               placeholder="Tag name"
-              className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-full w-24 outline-none focus:border-blue-400 bg-transparent dark:text-gray-200"
+              className="text-xs px-2 py-1 border border-border rounded-full w-24 outline-none focus:border-primary bg-transparent text-text"
             />
           </form>
         ) : (
           <button
             onClick={() => setShowTagInput(true)}
-            className="text-xs px-2 py-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 border border-dashed border-gray-300 dark:border-gray-600 rounded-full hover:border-gray-400"
+            className="text-xs px-2 py-1 text-text-secondary hover:text-text border border-dashed border-border rounded-full hover:border-text-secondary"
           >
             + tag
           </button>
         )}
       </div>
 
-      <div className="text-sm text-gray-400 dark:text-gray-500 mb-6">
+      <div className="text-sm text-text-secondary mb-6">
         {page.author_name && <>{page.author_name} &middot; </>}
         /{page.slug} &middot; {page.view_count} views &middot; Updated {new Date(page.updated_at).toLocaleString()}
       </div>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8">
+      <div className="bg-surface rounded-xl shadow-sm border border-border p-8">
         <MarkdownViewer content={page.content_md} />
       </div>
 
       {/* Backlinks */}
       {backlinks.length > 0 && (
-        <div className="mt-6 p-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+        <div className="mt-6 p-4 bg-surface rounded-xl shadow-sm border border-border">
+          <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3">
             Linked from ({backlinks.length})
           </h3>
           <div className="flex flex-wrap gap-2">
@@ -156,7 +156,7 @@ export default function PageView() {
               <Link
                 key={bl.id}
                 to={`/page/${bl.slug}`}
-                className="text-sm px-3 py-1.5 bg-gray-50 dark:bg-gray-700 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600"
+                className="text-sm px-3 py-1.5 bg-surface-hover text-primary rounded-lg hover:bg-primary-soft border border-border"
               >
                 {bl.title}
               </Link>
@@ -194,25 +194,25 @@ export default function PageView() {
             </svg>
           </button>
           {menuOpen && (
-            <div className="absolute right-0 bottom-full mb-2 w-44 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+            <div className="absolute right-0 bottom-full mb-2 w-44 bg-surface rounded-lg shadow-lg border border-border py-1 z-50">
               <button
                 onClick={() => { setMenuOpen(false); navigate(`/page/${slug}/versions`) }}
-                className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
               >
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                 </svg>
                 History
               </button>
-              <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
+              <div className="border-t border-border my-1" />
               <button
                 onClick={() => {
                   setMenuOpen(false)
                   window.open(`/api/export/page/${slug}?format=html`, '_blank')
                 }}
-                className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
               >
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 Export HTML
@@ -222,14 +222,14 @@ export default function PageView() {
                   setMenuOpen(false)
                   window.open(`/api/export/page/${slug}?format=pdf`, '_blank')
                 }}
-                className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
               >
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
                 Export PDF
               </button>
-              <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
+              <div className="border-t border-border my-1" />
               <button
                 onClick={() => { setMenuOpen(false); handleDelete() }}
                 className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2"

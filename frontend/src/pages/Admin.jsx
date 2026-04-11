@@ -32,19 +32,19 @@ function BackupSection() {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-      <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Backup & Restore</h2>
+    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+      <h2 className="text-lg font-semibold text-text mb-4">Backup & Restore</h2>
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1">
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Download Backup</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Download a .zip file containing the database and all media files.</p>
-          <button onClick={handleBackup} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+          <h3 className="text-sm font-medium text-text mb-2">Download Backup</h3>
+          <p className="text-sm text-text-secondary mb-3">Download a .zip file containing the database and all media files.</p>
+          <button onClick={handleBackup} className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover">
             Download Backup
           </button>
         </div>
         <div className="flex-1">
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Restore from Backup</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Upload a .zip backup to restore data. This replaces all current data.</p>
+          <h3 className="text-sm font-medium text-text mb-2">Restore from Backup</h3>
+          <p className="text-sm text-text-secondary mb-3">Upload a .zip backup to restore data. This replaces all current data.</p>
           <div className="flex items-center gap-2">
             <input ref={fileRef} type="file" accept=".zip" className="text-sm" />
             <button onClick={handleRestore} disabled={restoring} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50">
@@ -64,12 +64,12 @@ function BackupSection() {
 
 function ExportSection() {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-      <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Site Export</h2>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Export the entire wiki as a static HTML website.</p>
+    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+      <h2 className="text-lg font-semibold text-text mb-4">Site Export</h2>
+      <p className="text-sm text-text-secondary mb-3">Export the entire wiki as a static HTML website.</p>
       <button
         onClick={() => window.open('/api/export/site?format=html', '_blank')}
-        className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+        className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover"
       >
         Export Static Site (.zip)
       </button>
@@ -125,19 +125,19 @@ function UsersSection() {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Users</h2>
+        <h2 className="text-lg font-semibold text-text">Users</h2>
         <button
           onClick={() => setShowCreate(!showCreate)}
-          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+          className="px-3 py-1.5 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover"
         >
           + Add User
         </button>
       </div>
 
       {showCreate && (
-        <form onSubmit={handleCreate} className="mb-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+        <form onSubmit={handleCreate} className="mb-4 p-4 bg-surface-hover rounded-lg border border-border">
           <div className="flex flex-col sm:flex-row gap-3">
             <input
               type="text"
@@ -145,7 +145,7 @@ function UsersSection() {
               value={form.username}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
               required
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-400"
+              className="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
             />
             <input
               type="password"
@@ -153,12 +153,12 @@ function UsersSection() {
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
               required
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-400"
+              className="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
             />
             <select
               value={form.role}
               onChange={(e) => setForm({ ...form, role: e.target.value })}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-400"
+              className="px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
             >
               <option value="editor">Editor</option>
               <option value="admin">Admin</option>
@@ -174,28 +174,28 @@ function UsersSection() {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-200">
-              <th className="text-left py-2 px-3 text-gray-500 dark:text-gray-400 font-medium">Username</th>
-              <th className="text-left py-2 px-3 text-gray-500 dark:text-gray-400 font-medium">Role</th>
-              <th className="text-left py-2 px-3 text-gray-500 dark:text-gray-400 font-medium">Created</th>
-              <th className="text-right py-2 px-3 text-gray-500 dark:text-gray-400 font-medium">Actions</th>
+            <tr className="border-b border-border">
+              <th className="text-left py-2 px-3 text-text-secondary font-medium">Username</th>
+              <th className="text-left py-2 px-3 text-text-secondary font-medium">Role</th>
+              <th className="text-left py-2 px-3 text-text-secondary font-medium">Created</th>
+              <th className="text-right py-2 px-3 text-text-secondary font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
             {users.map((u) => (
-              <tr key={u.id} className="border-b border-gray-100">
-                <td className="py-2 px-3 text-gray-800 dark:text-gray-200">{u.username}</td>
+              <tr key={u.id} className="border-b border-border">
+                <td className="py-2 px-3 text-text">{u.username}</td>
                 <td className="py-2 px-3">
                   <select
                     value={u.role}
                     onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                    className="text-sm px-2 py-1 border border-gray-200 rounded"
+                    className="text-sm px-2 py-1 border border-border rounded bg-surface text-text"
                   >
                     <option value="editor">Editor</option>
                     <option value="admin">Admin</option>
                   </select>
                 </td>
-                <td className="py-2 px-3 text-gray-500">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '-'}</td>
+                <td className="py-2 px-3 text-text-secondary">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '-'}</td>
                 <td className="py-2 px-3 text-right">
                   <button onClick={() => handleDelete(u.id)} className="text-red-500 hover:text-red-700 text-sm">
                     Delete
@@ -214,12 +214,12 @@ export default function Admin() {
   const { user } = useAuth()
 
   if (user?.role !== 'admin') {
-    return <div className="text-center text-gray-500 mt-8">Admin access required.</div>
+    return <div className="text-center text-text-secondary mt-8">Admin access required.</div>
   }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Admin</h1>
+      <h1 className="text-2xl font-bold text-text">Admin</h1>
       <UsersSection />
       <BackupSection />
       <ExportSection />

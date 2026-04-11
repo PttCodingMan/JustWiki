@@ -20,7 +20,7 @@ export default function Home() {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">All Pages</h1>
+        <h1 className="text-2xl font-bold text-text">All Pages</h1>
       </div>
 
       {/* Tag filter bar */}
@@ -30,39 +30,39 @@ export default function Home() {
             <Link
               key={t.id}
               to={`/search?q=&tag=${encodeURIComponent(t.name)}`}
-              className="text-xs px-2.5 py-1 bg-gray-100 text-gray-600 rounded-full border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors"
+              className="text-xs px-2.5 py-1 bg-surface-hover text-text-secondary rounded-full border border-border hover:border-primary hover:bg-primary-soft transition-colors"
             >
-              {t.name} <span className="text-gray-400">({t.page_count})</span>
+              {t.name} <span className="text-text-secondary">({t.page_count})</span>
             </Link>
           ))}
         </div>
       )}
 
       {loading ? (
-        <p className="text-gray-500">Loading...</p>
+        <p className="text-text-secondary">Loading...</p>
       ) : pages.length === 0 ? (
         <div className="text-center py-16">
-          <p className="text-gray-400 text-lg mb-4">No pages yet</p>
+          <p className="text-text-secondary text-lg mb-4">No pages yet</p>
           <Link
             to="/new"
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+            className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm font-medium hover:bg-primary-hover"
           >
             Create your first page
           </Link>
         </div>
       ) : (
         <>
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="bg-surface rounded-xl shadow-sm border border-border">
             {pages.map((p, i) => (
               <Link
                 key={p.id}
                 to={`/page/${p.slug}`}
-                className={`block px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
-                  i > 0 ? 'border-t border-gray-100 dark:border-gray-700' : ''
+                className={`block px-5 py-4 hover:bg-surface-hover transition-colors ${
+                  i > 0 ? 'border-t border-border' : ''
                 }`}
               >
-                <div className="font-medium text-gray-800 dark:text-gray-100">{p.title}</div>
-                <div className="text-sm text-gray-400 mt-1">
+                <div className="font-medium text-text">{p.title}</div>
+                <div className="text-sm text-text-secondary mt-1">
                   /{p.slug} &middot; {new Date(p.updated_at).toLocaleDateString()} &middot; {p.view_count} views
                 </div>
               </Link>
@@ -75,7 +75,7 @@ export default function Home() {
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 text-sm rounded-lg border border-border hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Previous
               </button>
@@ -86,8 +86,8 @@ export default function Home() {
                     onClick={() => setPage(p)}
                     className={`w-8 h-8 text-sm rounded-lg ${
                       p === page
-                        ? 'bg-blue-600 text-white'
-                        : 'hover:bg-gray-100 text-gray-600'
+                        ? 'bg-primary text-primary-text'
+                        : 'hover:bg-surface-hover text-text-secondary'
                     }`}
                   >
                     {p}
@@ -97,7 +97,7 @@ export default function Home() {
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 text-sm rounded-lg border border-border hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed text-text"
               >
                 Next
               </button>

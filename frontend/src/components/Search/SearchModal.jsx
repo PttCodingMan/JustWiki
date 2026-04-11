@@ -60,12 +60,12 @@ export default function SearchModal({ isOpen, onClose }) {
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]" onClick={onClose}>
       <div className="fixed inset-0 bg-black/40" />
       <div
-        className="relative bg-white rounded-xl shadow-2xl w-full max-w-xl mx-4 overflow-hidden"
+        className="relative bg-surface rounded-xl shadow-2xl w-full max-w-xl mx-4 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search input */}
-        <div className="flex items-center px-4 border-b border-gray-200">
-          <svg className="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <div className="flex items-center px-4 border-b border-border">
+          <svg className="w-5 h-5 text-text-secondary shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
           </svg>
@@ -75,18 +75,18 @@ export default function SearchModal({ isOpen, onClose }) {
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             placeholder="Search pages..."
-            className="w-full px-3 py-4 text-base outline-none bg-transparent"
+            className="w-full px-3 py-4 text-base outline-none bg-transparent text-text"
           />
-          <kbd className="text-xs text-gray-400 border border-gray-200 rounded px-1.5 py-0.5 shrink-0">ESC</kbd>
+          <kbd className="text-xs text-text-secondary border border-border rounded px-1.5 py-0.5 shrink-0">ESC</kbd>
         </div>
 
         {/* Results */}
         <div className="max-h-80 overflow-y-auto">
           {loading && (
-            <div className="px-4 py-6 text-center text-gray-400 text-sm">Searching...</div>
+            <div className="px-4 py-6 text-center text-text-secondary text-sm">Searching...</div>
           )}
           {!loading && query && results.length === 0 && (
-            <div className="px-4 py-6 text-center text-gray-400 text-sm">No results found</div>
+            <div className="px-4 py-6 text-center text-text-secondary text-sm">No results found</div>
           )}
           {!loading && results.map((r, i) => (
             <button
@@ -95,13 +95,13 @@ export default function SearchModal({ isOpen, onClose }) {
                 navigate(`/page/${r.slug}`)
                 onClose()
               }}
-              className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${
-                i === selectedIdx ? 'bg-blue-50' : ''
+              className={`w-full text-left px-4 py-3 hover:bg-surface-hover transition-colors ${
+                i === selectedIdx ? 'bg-primary-soft' : ''
               }`}
             >
-              <div className="font-medium text-gray-800 text-sm">{r.title}</div>
+              <div className="font-medium text-text text-sm">{r.title}</div>
               <div
-                className="text-xs text-gray-500 mt-0.5 line-clamp-2"
+                className="text-xs text-text-secondary mt-0.5 line-clamp-2"
                 dangerouslySetInnerHTML={{ __html: r.snippet }}
               />
             </button>
@@ -110,7 +110,7 @@ export default function SearchModal({ isOpen, onClose }) {
 
         {/* Footer */}
         {results.length > 0 && (
-          <div className="px-4 py-2 border-t border-gray-100 text-xs text-gray-400 flex gap-3">
+          <div className="px-4 py-2 border-t border-border text-xs text-text-secondary flex gap-3">
             <span><kbd className="border rounded px-1">↑↓</kbd> navigate</span>
             <span><kbd className="border rounded px-1">Enter</kbd> open</span>
           </div>

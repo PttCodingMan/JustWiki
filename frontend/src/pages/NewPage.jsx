@@ -109,24 +109,24 @@ export default function NewPage() {
   if (showTemplates) {
     return (
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6">New Page</h1>
-        <p className="text-gray-500 mb-4">Start from a template or blank page</p>
+        <h1 className="text-2xl font-bold text-text mb-6">New Page</h1>
+        <p className="text-text-secondary mb-4">Start from a template or blank page</p>
         <div className="grid grid-cols-2 gap-3 mb-4">
           <button
             onClick={skipTemplates}
-            className="p-4 bg-white rounded-xl border-2 border-dashed border-gray-300 hover:border-blue-400 text-left transition-colors"
+            className="p-4 bg-surface rounded-xl border-2 border-dashed border-border hover:border-primary text-left transition-colors"
           >
-            <div className="font-medium text-gray-700">Blank Page</div>
-            <div className="text-sm text-gray-400 mt-1">Start from scratch</div>
+            <div className="font-medium text-text">Blank Page</div>
+            <div className="text-sm text-text-secondary mt-1">Start from scratch</div>
           </button>
           {templates.map((tmpl) => (
             <button
               key={tmpl.id}
               onClick={() => selectTemplate(tmpl)}
-              className="p-4 bg-white rounded-xl border border-gray-200 hover:border-blue-400 text-left transition-colors"
+              className="p-4 bg-surface rounded-xl border border-border hover:border-primary text-left transition-colors"
             >
-              <div className="font-medium text-gray-700">{tmpl.name}</div>
-              <div className="text-sm text-gray-400 mt-1">{tmpl.description}</div>
+              <div className="font-medium text-text">{tmpl.name}</div>
+              <div className="text-sm text-text-secondary mt-1">{tmpl.description}</div>
             </button>
           ))}
         </div>
@@ -141,21 +141,21 @@ export default function NewPage() {
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="text-2xl font-bold text-gray-800 bg-transparent border-none outline-none flex-1 mr-4"
+          className="text-2xl font-bold text-text bg-transparent border-none outline-none flex-1 mr-4"
           placeholder="Page title"
           autoFocus
         />
         <div className="flex gap-2">
           <button
             onClick={() => navigate('/')}
-            className="px-3 py-1.5 text-sm text-gray-600 rounded-lg hover:bg-gray-100"
+            className="px-3 py-1.5 text-sm text-text-secondary rounded-lg hover:bg-surface-hover"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={saving || !title.trim()}
-            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-3 py-1.5 text-sm bg-primary text-primary-text rounded-lg hover:bg-primary-hover disabled:opacity-50"
           >
             {saving ? 'Creating...' : 'Create'}
           </button>
@@ -167,28 +167,28 @@ export default function NewPage() {
         </div>
       )}
       {selectedTemplate && (
-        <div className="flex items-center gap-2 text-xs text-gray-400 mb-3">
+        <div className="flex items-center gap-2 text-xs text-text-secondary mb-3">
           <span>Template: {selectedTemplate.name}</span>
           <button
             onClick={changeTemplate}
-            className="text-blue-500 hover:text-blue-700 underline"
+            className="text-primary hover:text-primary-hover underline"
           >
             Change
           </button>
         </div>
       )}
       {!selectedTemplate && (
-        <div className="flex items-center gap-2 text-xs text-gray-400 mb-3">
+        <div className="flex items-center gap-2 text-xs text-text-secondary mb-3">
           <span>Blank page</span>
           <button
             onClick={changeTemplate}
-            className="text-blue-500 hover:text-blue-700 underline"
+            className="text-primary hover:text-primary-hover underline"
           >
             Use template
           </button>
         </div>
       )}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 min-h-[500px]">
+      <div className="bg-surface rounded-xl shadow-sm border border-border min-h-[500px]">
         <Editor key={editorKey} ref={editorRef} defaultValue={content} onChange={setContent} onDrawioOpen={handleDrawioOpen} />
       </div>
 

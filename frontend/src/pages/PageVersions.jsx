@@ -145,7 +145,7 @@ export default function PageVersions() {
     }
   }
 
-  if (loading) return <div className="text-gray-500">Loading...</div>
+  if (loading) return <div className="text-text-secondary">Loading...</div>
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -153,22 +153,22 @@ export default function PageVersions() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(`/page/${slug}`)}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-text-secondary hover:text-text"
           >
             &larr;
           </button>
-          <h1 className="text-2xl font-bold text-gray-800">Version History</h1>
+          <h1 className="text-2xl font-bold text-text">Version History</h1>
         </div>
         <Link
           to={`/page/${slug}`}
-          className="px-3 py-1.5 text-sm text-gray-600 rounded-lg hover:bg-gray-100"
+          className="px-3 py-1.5 text-sm text-text-secondary rounded-lg hover:bg-surface-hover"
         >
           Back to page
         </Link>
       </div>
 
       {versions.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-text-secondary">
           <p className="text-lg mb-2">No version history yet</p>
           <p className="text-sm">Versions are created each time you edit a page</p>
         </div>
@@ -176,7 +176,7 @@ export default function PageVersions() {
         <div className="grid grid-cols-[280px_1fr] gap-6">
           {/* Timeline */}
           <div className="space-y-1">
-            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3">
               Versions ({versions.length})
             </div>
             {versions.map((v) => (
@@ -184,8 +184,8 @@ export default function PageVersions() {
                 key={v.version_num}
                 className={`relative p-3 rounded-lg border cursor-pointer transition-colors ${
                   selectedV1 === v.version_num || selectedV2 === v.version_num
-                    ? 'border-blue-400 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                    ? 'border-primary bg-primary-soft'
+                    : 'border-border hover:border-text-secondary bg-surface'
                 }`}
                 onClick={() => {
                   if (selectedV1 === v.version_num) {
@@ -203,22 +203,22 @@ export default function PageVersions() {
                 }}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-sm text-gray-700">v{v.version_num}</span>
+                  <span className="font-medium text-sm text-text">v{v.version_num}</span>
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
                       setConfirmRevert(v.version_num)
                     }}
-                    className="text-xs text-blue-600 hover:text-blue-800"
+                    className="text-xs text-primary hover:text-primary-hover"
                     title="Revert to this version"
                   >
                     Revert
                   </button>
                 </div>
-                <div className="text-xs text-gray-400 mt-1">
+                <div className="text-xs text-text-secondary mt-1">
                   {v.display_name || v.username || 'unknown'} &middot; {new Date(v.edited_at).toLocaleString()}
                 </div>
-                <div className="text-xs text-gray-500 mt-0.5 truncate">{v.title}</div>
+                <div className="text-xs text-text-secondary mt-0.5 truncate">{v.title}</div>
               </div>
             ))}
           </div>
@@ -233,7 +233,7 @@ export default function PageVersions() {
                 v2={diffData.v2.num}
               />
             ) : (
-              <div className="text-center py-16 text-gray-400 border border-dashed border-gray-200 rounded-lg">
+              <div className="text-center py-16 text-text-secondary border border-dashed border-border rounded-lg">
                 Select two versions to compare
               </div>
             )}
@@ -244,23 +244,23 @@ export default function PageVersions() {
       {/* Revert confirmation modal */}
       {confirmRevert && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">Revert to v{confirmRevert}?</h3>
-            <p className="text-sm text-gray-500 mb-4">
+          <div className="bg-surface rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-semibold text-text mb-2">Revert to v{confirmRevert}?</h3>
+            <p className="text-sm text-text-secondary mb-4">
               The current version will be saved as a new version before reverting.
               This action can be undone.
             </p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setConfirmRevert(null)}
-                className="px-3 py-1.5 text-sm text-gray-600 rounded-lg hover:bg-gray-100"
+                className="px-3 py-1.5 text-sm text-text-secondary rounded-lg hover:bg-surface-hover"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleRevert(confirmRevert)}
                 disabled={reverting}
-                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                className="px-3 py-1.5 text-sm bg-primary text-primary-text rounded-lg hover:bg-primary-hover disabled:opacity-50"
               >
                 {reverting ? 'Reverting...' : 'Revert'}
               </button>

@@ -140,23 +140,23 @@ export default function GraphView() {
     }
   }, [graphData, navigate])
 
-  if (loading) return <div className="text-gray-500">Loading...</div>
+  if (loading) return <div className="text-text-secondary">Loading...</div>
 
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold text-gray-800">Knowledge Graph</h1>
-        <div className="text-sm text-gray-400">
+        <h1 className="text-2xl font-bold text-text">Knowledge Graph</h1>
+        <div className="text-sm text-text-secondary">
           {graphData?.nodes?.length || 0} pages &middot; {graphData?.links?.length || 0} links
         </div>
       </div>
       {!graphData || graphData.nodes.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-text-secondary">
           <p className="text-lg mb-2">No pages to visualize</p>
           <p className="text-sm">Create pages with [[wikilinks]] to build your knowledge graph</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-surface rounded-xl shadow-sm border border-border overflow-hidden">
           <svg
             ref={svgRef}
             width="100%"

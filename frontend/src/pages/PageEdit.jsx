@@ -155,7 +155,7 @@ export default function PageEdit() {
     return () => window.removeEventListener('keydown', handler)
   }, [handleSave])
 
-  if (!page) return <div className="text-gray-500">Loading...</div>
+  if (!page) return <div className="text-text-secondary">Loading...</div>
 
   return (
     <div className={showPreview ? 'edit-split-root' : 'max-w-4xl mx-auto'}>
@@ -164,7 +164,7 @@ export default function PageEdit() {
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="text-2xl font-bold text-gray-800 dark:text-gray-100 bg-transparent border-none outline-none w-full"
+          className="text-2xl font-bold text-text bg-transparent border-none outline-none w-full"
           placeholder="Page title"
         />
       </div>
@@ -173,12 +173,12 @@ export default function PageEdit() {
           {error}
         </div>
       )}
-      <div className="text-xs text-gray-400 mb-3">Press Ctrl+S to save &middot; Type / for commands</div>
+      <div className="text-xs text-text-secondary mb-3">Press Ctrl+S to save &middot; Type / for commands</div>
 
       <div className={showPreview ? 'edit-split-panels' : ''}>
         {/* Editor panel */}
         <div className={showPreview ? 'edit-split-editor' : ''}>
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 min-h-[500px]">
+          <div className="bg-surface rounded-xl shadow-sm border border-border min-h-[500px]">
             <Editor
               ref={editorRef}
               defaultValue={content}
@@ -190,7 +190,7 @@ export default function PageEdit() {
           {/* Diagram previews */}
           {diagramIds.length > 0 && (
             <div className="mt-4">
-              <div className="text-sm font-medium text-gray-500 mb-2">
+              <div className="text-sm font-medium text-text-secondary mb-2">
                 Diagrams in this page (click to edit)
               </div>
               <div className="space-y-3">
@@ -223,8 +223,8 @@ export default function PageEdit() {
         {/* Live preview panel */}
         {showPreview && (
           <div className="edit-split-preview">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 min-h-[500px] p-6 overflow-auto">
-              <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-4 pb-2 border-b border-gray-100 dark:border-gray-700">Preview</div>
+            <div className="bg-surface rounded-xl shadow-sm border border-border min-h-[500px] p-6 overflow-auto">
+              <div className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-4 pb-2 border-b border-border">Preview</div>
               <MarkdownViewer content={content} />
             </div>
           </div>

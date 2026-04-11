@@ -16,15 +16,15 @@ function CommentItem({ comment, currentUser, onDelete, onUpdate }) {
 
   return (
     <div className="flex gap-3 py-3">
-      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-medium shrink-0">
+      <div className="w-8 h-8 rounded-full bg-primary-soft text-primary flex items-center justify-center text-sm font-medium shrink-0">
         {((comment.display_name || comment.username) || '?')[0].toUpperCase()}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{comment.display_name || comment.username}</span>
-          <span className="text-xs text-gray-400">{new Date(comment.created_at).toLocaleString()}</span>
+          <span className="text-sm font-medium text-text">{comment.display_name || comment.username}</span>
+          <span className="text-xs text-text-secondary">{new Date(comment.created_at).toLocaleString()}</span>
           {comment.updated_at !== comment.created_at && (
-            <span className="text-xs text-gray-400">(edited)</span>
+            <span className="text-xs text-text-secondary">(edited)</span>
           )}
         </div>
         {editing ? (
@@ -32,23 +32,23 @@ function CommentItem({ comment, currentUser, onDelete, onUpdate }) {
             <textarea
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-400 resize-none"
+              className="w-full p-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary resize-none bg-surface text-text"
               rows={3}
             />
             <div className="flex gap-2 mt-1">
-              <button onClick={handleSave} className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">Save</button>
-              <button onClick={() => { setEditing(false); setEditContent(comment.content) }} className="text-xs px-3 py-1 text-gray-500 hover:text-gray-700">Cancel</button>
+              <button onClick={handleSave} className="text-xs px-3 py-1 bg-primary text-primary-text rounded hover:bg-primary-hover">Save</button>
+              <button onClick={() => { setEditing(false); setEditContent(comment.content) }} className="text-xs px-3 py-1 text-text-secondary hover:text-text">Cancel</button>
             </div>
           </div>
         ) : (
-          <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{comment.content}</div>
+          <div className="text-sm text-text whitespace-pre-wrap">{comment.content}</div>
         )}
         {!editing && (isOwner || isAdmin) && (
           <div className="flex gap-3 mt-1">
             {isOwner && (
-              <button onClick={() => setEditing(true)} className="text-xs text-gray-400 hover:text-gray-600">Edit</button>
+              <button onClick={() => setEditing(true)} className="text-xs text-text-secondary hover:text-text">Edit</button>
             )}
-            <button onClick={() => onDelete(comment.id)} className="text-xs text-gray-400 hover:text-red-500">Delete</button>
+            <button onClick={() => onDelete(comment.id)} className="text-xs text-text-secondary hover:text-red-500">Delete</button>
           </div>
         )}
       </div>
@@ -106,17 +106,17 @@ export default function Comments({ slug }) {
   }
 
   return (
-    <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
+    <div className="mt-6 bg-surface rounded-xl shadow-sm border border-border p-6">
+      <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">
         Discussion {total > 0 && `(${total})`}
       </h3>
 
       {loading ? (
-        <div className="text-sm text-gray-400">Loading...</div>
+        <div className="text-sm text-text-secondary">Loading...</div>
       ) : (
         <>
           {comments.length > 0 && (
-            <div className="divide-y divide-gray-100 mb-4">
+            <div className="divide-y divide-border mb-4">
               {comments.map((c) => (
                 <CommentItem
                   key={c.id}
@@ -134,14 +134,14 @@ export default function Comments({ slug }) {
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
               placeholder="Write a comment..."
-              className="w-full p-3 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400 resize-none"
+              className="w-full p-3 border border-border bg-surface text-text rounded-lg text-sm focus:outline-none focus:border-primary resize-none"
               rows={3}
             />
             <div className="flex justify-end mt-2">
               <button
                 type="submit"
                 disabled={submitting || !newComment.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover disabled:opacity-50"
               >
                 {submitting ? 'Posting...' : 'Comment'}
               </button>
