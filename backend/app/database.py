@@ -275,13 +275,35 @@ async def rebuild_all_search_indexes(db):
         await db.commit()
 
 
+async def rebuild_all_backlinks(db):
+    """Rebuild backlinks for all existing pages."""
+    from app.services.wikilink import parse_and_update_backlinks
+
+    rows = await db.execute_fetchall("SELECT COUNT(*) as cnt FROM backlinks")
+    if rows[0]["cnt"] > 0:
+        return  # Already populated
+
+    pages = await db.execute_fetchall("SELECT id, content_md FROM pages")
+    for p in pages:
+        await parse_and_update_backlinks(db, p["id"], p["content_md"])
+    if pages:
+        await db.commit()
+
+
 async def init_db():
     db = await get_db()
-    await db.executescript(SCHEMA_SQL)
+    # Execute each statement individually to avoid blocking the event loop
+    for statement in SCHEMA_SQL.split(';'):
+        statement = statement.strip()
+        if statement:
+            await db.execute(statement)
     await db.commit()
 
     # Rebuild search index for existing pages
     await rebuild_all_search_indexes(db)
+
+    # Rebuild backlinks for existing pages
+    await rebuild_all_backlinks(db)
 
     # Seed default templates
     for t in DEFAULT_TEMPLATES:

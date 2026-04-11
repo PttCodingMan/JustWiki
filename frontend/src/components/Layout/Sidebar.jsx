@@ -1,45 +1,145 @@
-import { useEffect } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import usePages from '../../store/usePages'
 import useBookmarks from '../../store/useBookmarks'
-import useActivity from '../../store/useActivity'
 
-function TreeNode({ node, depth = 0 }) {
+function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
   const location = useLocation()
+  const { movePage } = usePages()
   const isActive = location.pathname === `/page/${node.slug}`
+  const hasChildren = node.children?.length > 0
+  const [expanded, setExpanded] = useState(isActive || depth < 1)
+  const [dropPosition, setDropPosition] = useState(null) // 'before' | 'inside' | 'after'
+  const rowRef = useRef(null)
+
+  // Auto-expand if a child is active
+  useEffect(() => {
+    if (hasChildren && isChildActive(node, location.pathname)) {
+      setExpanded(true)
+    }
+  }, [location.pathname])
+
+  const handleDragStart = (e) => {
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      slug: node.slug,
+      id: node.id,
+      parentId,
+    }))
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+
+    const rect = rowRef.current.getBoundingClientRect()
+    const y = e.clientY - rect.top
+    const ratio = y / rect.height
+
+    if (ratio < 0.25) setDropPosition('before')
+    else if (ratio > 0.75) setDropPosition('after')
+    else setDropPosition('inside')
+  }
+
+  const handleDragLeave = () => {
+    setDropPosition(null)
+  }
+
+  const handleDrop = async (e) => {
+    e.preventDefault()
+    setDropPosition(null)
+
+    let data
+    try {
+      data = JSON.parse(e.dataTransfer.getData('application/json'))
+    } catch { return }
+
+    if (data.id === node.id) return // can't drop on self
+
+    try {
+      if (dropPosition === 'inside') {
+        // Move as child of this node
+        await movePage(data.slug, node.id, 0)
+      } else if (dropPosition === 'before') {
+        // Move as sibling before this node (same parent)
+        await movePage(data.slug, parentId, Math.max(0, index))
+      } else {
+        // Move as sibling after this node
+        await movePage(data.slug, parentId, index + 1)
+      }
+    } catch (err) {
+      console.error('Move failed:', err)
+    }
+  }
+
+  const dropIndicatorClass =
+    dropPosition === 'before' ? 'border-t-2 border-blue-400' :
+    dropPosition === 'after' ? 'border-b-2 border-blue-400' :
+    dropPosition === 'inside' ? 'bg-blue-50 ring-1 ring-blue-300' : ''
 
   return (
     <div>
-      <Link
-        to={`/page/${node.slug}`}
-        className={`block px-3 py-1.5 text-sm rounded-lg truncate transition-colors ${
+      <div
+        ref={rowRef}
+        draggable
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`flex items-center group rounded-lg transition-colors cursor-grab active:cursor-grabbing ${dropIndicatorClass} ${
           isActive
-            ? 'bg-blue-50 text-blue-700 font-medium'
+            ? 'bg-blue-50 text-blue-700'
             : 'text-gray-600 hover:bg-gray-100'
         }`}
-        style={{ paddingLeft: `${12 + depth * 16}px` }}
-        title={node.title}
+        style={{ paddingLeft: `${8 + depth * 16}px` }}
       >
-        {node.children?.length > 0 && (
-          <span className="mr-1 text-gray-400">&#9656;</span>
+        {hasChildren ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setExpanded(!expanded)
+            }}
+            className="w-5 h-5 flex items-center justify-center shrink-0 text-gray-400 hover:text-gray-600"
+          >
+            <svg
+              className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path d="M6 4l8 6-8 6V4z" />
+            </svg>
+          </button>
+        ) : (
+          <span className="w-5 shrink-0" />
         )}
-        {node.title}
-      </Link>
-      {node.children?.map((child) => (
-        <TreeNode key={child.id} node={child} depth={depth + 1} />
-      ))}
+        <Link
+          to={`/page/${node.slug}`}
+          className={`flex-1 py-1.5 pr-2 text-sm truncate ${isActive ? 'font-medium' : ''}`}
+          title={node.title}
+          draggable={false}
+        >
+          {node.title}
+        </Link>
+      </div>
+      {hasChildren && expanded && (
+        <div>
+          {node.children.map((child, i) => (
+            <TreeNode key={child.id} node={child} depth={depth + 1} parentId={node.id} index={i} />
+          ))}
+        </div>
+      )}
     </div>
   )
+}
+
+function isChildActive(node, pathname) {
+  if (pathname === `/page/${node.slug}`) return true
+  return node.children?.some((c) => isChildActive(c, pathname)) || false
 }
 
 export default function Sidebar() {
   const { tree } = usePages()
   const { bookmarks } = useBookmarks()
-  const { stats, fetchStats } = useActivity()
-
-  useEffect(() => {
-    fetchStats()
-  }, [])
 
   return (
     <aside className="w-60 min-w-60 bg-white border-r border-gray-200 overflow-y-auto">
@@ -54,6 +154,18 @@ export default function Sidebar() {
               <path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
             </svg>
             Recent Changes
+          </Link>
+          <Link
+            to="/graph"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <circle cx="6" cy="6" r="3" />
+              <circle cx="18" cy="18" r="3" />
+              <circle cx="18" cy="6" r="3" />
+              <path d="M8.5 8.5l7 7M8.5 6h7" />
+            </svg>
+            Graph View
           </Link>
         </div>
 
@@ -77,45 +189,6 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* Recently updated */}
-        {stats?.recently_updated?.length > 0 && (
-          <div className="mb-4">
-            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-3">
-              Recently Updated
-            </div>
-            {stats.recently_updated.slice(0, 5).map((p) => (
-              <Link
-                key={`recent-${p.id}`}
-                to={`/page/${p.slug}`}
-                className="block px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg truncate"
-                title={p.title}
-              >
-                {p.title}
-              </Link>
-            ))}
-          </div>
-        )}
-
-        {/* Popular pages */}
-        {stats?.top_viewed?.length > 0 && (
-          <div className="mb-4">
-            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-3">
-              Popular
-            </div>
-            {stats.top_viewed.slice(0, 5).map((p) => (
-              <Link
-                key={`pop-${p.id}`}
-                to={`/page/${p.slug}`}
-                className="flex items-center justify-between px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
-                title={p.title}
-              >
-                <span className="truncate">{p.title}</span>
-                <span className="text-xs text-gray-400 shrink-0 ml-1">{p.view_count}</span>
-              </Link>
-            ))}
-          </div>
-        )}
-
         {/* Pages tree */}
         <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-3">
           Pages
@@ -123,8 +196,8 @@ export default function Sidebar() {
         {tree.length === 0 && (
           <p className="text-sm text-gray-400 px-3">No pages yet</p>
         )}
-        {tree.map((node) => (
-          <TreeNode key={node.id} node={node} />
+        {tree.map((node, i) => (
+          <TreeNode key={node.id} node={node} parentId={null} index={i} />
         ))}
       </div>
     </aside>

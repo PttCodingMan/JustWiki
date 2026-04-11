@@ -38,6 +38,13 @@ const usePages = create((set) => ({
   deletePage: async (slug) => {
     await api.delete(`/pages/${slug}`)
   },
+
+  movePage: async (slug, parentId, sortOrder) => {
+    await api.patch(`/pages/${slug}/move`, { parent_id: parentId, sort_order: sortOrder })
+    // Refresh tree after move
+    const res = await api.get('/pages/tree')
+    set({ tree: res.data })
+  },
 }))
 
 export default usePages

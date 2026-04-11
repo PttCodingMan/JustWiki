@@ -9,6 +9,8 @@ import PageEdit from './pages/PageEdit'
 import NewPage from './pages/NewPage'
 import SearchResults from './pages/SearchResults'
 import Activity from './pages/Activity'
+import PageVersions from './pages/PageVersions'
+import GraphView from './pages/GraphView'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -21,7 +23,7 @@ export default function App() {
 
   useEffect(() => {
     checkAuth()
-  }, [])
+  }, [checkAuth])
 
   return (
     <Routes>
@@ -36,8 +38,10 @@ export default function App() {
                 <Route path="/new" element={<NewPage />} />
                 <Route path="/search" element={<SearchResults />} />
                 <Route path="/activity" element={<Activity />} />
+                <Route path="/graph" element={<GraphView />} />
                 <Route path="/page/:slug" element={<PageView />} />
                 <Route path="/page/:slug/edit" element={<PageEdit />} />
+                <Route path="/page/:slug/versions" element={<PageVersions />} />
               </Routes>
             </Layout>
           </PrivateRoute>

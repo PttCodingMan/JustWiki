@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import init_db, close_db
 from app.auth import ensure_admin_exists
-from app.routers import auth_router, pages, media, templates, search, tags, activity, bookmarks
+from app.routers import auth_router, pages, media, templates, search, tags, activity, bookmarks, versions, diagrams
 
 
 @asynccontextmanager
@@ -33,6 +33,8 @@ app.include_router(search.router)
 app.include_router(tags.router)
 app.include_router(activity.router)
 app.include_router(bookmarks.router)
+app.include_router(versions.router)
+app.include_router(diagrams.router)
 
 
 @app.get("/api/health")

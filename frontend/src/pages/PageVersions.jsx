@@ -1,0 +1,273 @@
+import { useEffect, useState } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import api from '../api/client'
+
+function DiffViewer({ oldText, newText, v1, v2 }) {
+  const oldLines = (oldText || '').split('\n')
+  const newLines = (newText || '').split('\n')
+
+  // Simple LCS-based diff
+  const diff = computeDiff(oldLines, newLines)
+
+  return (
+    <div className="grid grid-cols-2 gap-0 border border-gray-200 rounded-lg overflow-hidden text-sm font-mono">
+      <div className="bg-gray-50 px-3 py-2 border-b border-r border-gray-200 font-sans font-medium text-gray-600 text-xs">
+        Version {v1} (old)
+      </div>
+      <div className="bg-gray-50 px-3 py-2 border-b border-gray-200 font-sans font-medium text-gray-600 text-xs">
+        Version {v2} (new)
+      </div>
+      <div className="border-r border-gray-200 overflow-auto max-h-[600px]">
+        {diff.map((d, i) => (
+          <div
+            key={`l-${i}`}
+            className={`px-3 py-0.5 whitespace-pre-wrap break-all ${
+              d.type === 'removed' ? 'bg-red-50 text-red-800' :
+              d.type === 'modified' ? 'bg-yellow-50 text-yellow-800' :
+              d.type === 'added' ? 'bg-gray-100 text-gray-400' :
+              'text-gray-700'
+            }`}
+          >
+            {d.type === 'added' ? '' : d.old}
+          </div>
+        ))}
+      </div>
+      <div className="overflow-auto max-h-[600px]">
+        {diff.map((d, i) => (
+          <div
+            key={`r-${i}`}
+            className={`px-3 py-0.5 whitespace-pre-wrap break-all ${
+              d.type === 'added' ? 'bg-green-50 text-green-800' :
+              d.type === 'modified' ? 'bg-yellow-50 text-yellow-800' :
+              d.type === 'removed' ? 'bg-gray-100 text-gray-400' :
+              'text-gray-700'
+            }`}
+          >
+            {d.type === 'removed' ? '' : d.new}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function computeDiff(oldLines, newLines) {
+  const result = []
+  let oi = 0, ni = 0
+
+  while (oi < oldLines.length || ni < newLines.length) {
+    if (oi < oldLines.length && ni < newLines.length) {
+      if (oldLines[oi] === newLines[ni]) {
+        result.push({ type: 'same', old: oldLines[oi], new: newLines[ni] })
+        oi++; ni++
+      } else {
+        // Look ahead to find if old line appears later in new
+        let foundInNew = newLines.indexOf(oldLines[oi], ni)
+        let foundInOld = oldLines.indexOf(newLines[ni], oi)
+
+        if (foundInNew !== -1 && (foundInOld === -1 || foundInNew - ni <= foundInOld - oi)) {
+          // Lines were added before this point
+          while (ni < foundInNew) {
+            result.push({ type: 'added', old: '', new: newLines[ni] })
+            ni++
+          }
+        } else if (foundInOld !== -1) {
+          // Lines were removed
+          while (oi < foundInOld) {
+            result.push({ type: 'removed', old: oldLines[oi], new: '' })
+            oi++
+          }
+        } else {
+          // Modified line
+          result.push({ type: 'modified', old: oldLines[oi], new: newLines[ni] })
+          oi++; ni++
+        }
+      }
+    } else if (oi < oldLines.length) {
+      result.push({ type: 'removed', old: oldLines[oi], new: '' })
+      oi++
+    } else {
+      result.push({ type: 'added', old: '', new: newLines[ni] })
+      ni++
+    }
+  }
+  return result
+}
+
+export default function PageVersions() {
+  const { slug } = useParams()
+  const navigate = useNavigate()
+  const [versions, setVersions] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [diffData, setDiffData] = useState(null)
+  const [selectedV1, setSelectedV1] = useState(null)
+  const [selectedV2, setSelectedV2] = useState(null)
+  const [reverting, setReverting] = useState(false)
+  const [confirmRevert, setConfirmRevert] = useState(null)
+
+  useEffect(() => {
+    api.get(`/pages/${slug}/versions`).then((res) => {
+      setVersions(res.data.versions)
+      setLoading(false)
+      // Auto-select latest two for diff
+      if (res.data.versions.length >= 2) {
+        const sorted = [...res.data.versions].sort((a, b) => a.version_num - b.version_num)
+        setSelectedV1(sorted[sorted.length - 2].version_num)
+        setSelectedV2(sorted[sorted.length - 1].version_num)
+      }
+    }).catch(() => {
+      setLoading(false)
+    })
+  }, [slug])
+
+  useEffect(() => {
+    if (selectedV1 != null && selectedV2 != null && selectedV1 !== selectedV2) {
+      const v1 = Math.min(selectedV1, selectedV2)
+      const v2 = Math.max(selectedV1, selectedV2)
+      api.get(`/pages/${slug}/diff`, { params: { v1, v2 } }).then((res) => {
+        setDiffData(res.data)
+      })
+    } else {
+      setDiffData(null)
+    }
+  }, [selectedV1, selectedV2, slug])
+
+  const handleRevert = async (versionNum) => {
+    setReverting(true)
+    try {
+      await api.post(`/pages/${slug}/revert/${versionNum}`)
+      setConfirmRevert(null)
+      navigate(`/page/${slug}`)
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Revert failed')
+    } finally {
+      setReverting(false)
+    }
+  }
+
+  if (loading) return <div className="text-gray-500">Loading...</div>
+
+  return (
+    <div className="max-w-5xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate(`/page/${slug}`)}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            &larr;
+          </button>
+          <h1 className="text-2xl font-bold text-gray-800">Version History</h1>
+        </div>
+        <Link
+          to={`/page/${slug}`}
+          className="px-3 py-1.5 text-sm text-gray-600 rounded-lg hover:bg-gray-100"
+        >
+          Back to page
+        </Link>
+      </div>
+
+      {versions.length === 0 ? (
+        <div className="text-center py-16 text-gray-400">
+          <p className="text-lg mb-2">No version history yet</p>
+          <p className="text-sm">Versions are created each time you edit a page</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-[280px_1fr] gap-6">
+          {/* Timeline */}
+          <div className="space-y-1">
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+              Versions ({versions.length})
+            </div>
+            {versions.map((v) => (
+              <div
+                key={v.version_num}
+                className={`relative p-3 rounded-lg border cursor-pointer transition-colors ${
+                  selectedV1 === v.version_num || selectedV2 === v.version_num
+                    ? 'border-blue-400 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
+                onClick={() => {
+                  if (selectedV1 === v.version_num) {
+                    setSelectedV1(null)
+                  } else if (selectedV2 === v.version_num) {
+                    setSelectedV2(null)
+                  } else if (!selectedV1) {
+                    setSelectedV1(v.version_num)
+                  } else if (!selectedV2) {
+                    setSelectedV2(v.version_num)
+                  } else {
+                    setSelectedV1(selectedV2)
+                    setSelectedV2(v.version_num)
+                  }
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-sm text-gray-700">v{v.version_num}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setConfirmRevert(v.version_num)
+                    }}
+                    className="text-xs text-blue-600 hover:text-blue-800"
+                    title="Revert to this version"
+                  >
+                    Revert
+                  </button>
+                </div>
+                <div className="text-xs text-gray-400 mt-1">
+                  {v.username || 'unknown'} &middot; {new Date(v.edited_at).toLocaleString()}
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5 truncate">{v.title}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Diff panel */}
+          <div>
+            {diffData ? (
+              <DiffViewer
+                oldText={diffData.v1.content_md}
+                newText={diffData.v2.content_md}
+                v1={diffData.v1.num}
+                v2={diffData.v2.num}
+              />
+            ) : (
+              <div className="text-center py-16 text-gray-400 border border-dashed border-gray-200 rounded-lg">
+                Select two versions to compare
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Revert confirmation modal */}
+      {confirmRevert && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">Revert to v{confirmRevert}?</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              The current version will be saved as a new version before reverting.
+              This action can be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmRevert(null)}
+                className="px-3 py-1.5 text-sm text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleRevert(confirmRevert)}
+                disabled={reverting}
+                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {reverting ? 'Reverting...' : 'Revert'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

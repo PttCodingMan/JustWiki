@@ -33,6 +33,11 @@ class PageUpdate(BaseModel):
     sort_order: Optional[int] = None
 
 
+class PageMoveRequest(BaseModel):
+    parent_id: Optional[int] = None
+    sort_order: Optional[int] = None
+
+
 class PageResponse(BaseModel):
     id: int
     slug: str
@@ -86,3 +91,28 @@ class MediaResponse(BaseModel):
     uploaded_by: Optional[int] = None
     uploaded_at: Optional[str] = None
     url: str = ""
+
+
+# ── Diagrams ──
+class DiagramCreate(BaseModel):
+    name: str
+    xml_data: str
+    page_id: Optional[int] = None
+
+
+class DiagramUpdate(BaseModel):
+    name: Optional[str] = None
+    xml_data: Optional[str] = None
+    svg_cache: Optional[str] = None
+    page_id: Optional[int] = None
+
+
+class DiagramResponse(BaseModel):
+    id: int
+    page_id: Optional[int] = None
+    name: str
+    xml_data: str
+    svg_cache: Optional[str] = None
+    created_by: Optional[int] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None

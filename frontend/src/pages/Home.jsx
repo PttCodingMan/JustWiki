@@ -19,14 +19,8 @@ export default function Home() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-800">All Pages</h1>
-        <Link
-          to="/new"
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
-        >
-          + New Page
-        </Link>
       </div>
 
       {/* Tag filter bar */}

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { Editor as MilkdownEditor, rootCtx, defaultValueCtx, commandsCtx } from '@milkdown/kit/core'
 import { commonmark, headingSchema, blockquoteSchema, hrSchema, bulletListSchema, orderedListSchema, codeBlockSchema, paragraphSchema } from '@milkdown/kit/preset/commonmark'
 import { clearTextInCurrentBlockCommand, setBlockTypeCommand, wrapInBlockTypeCommand, addBlockTypeCommand } from '@milkdown/kit/preset/commonmark'
@@ -8,7 +8,8 @@ import { clipboard } from '@milkdown/kit/plugin/clipboard'
 import { history } from '@milkdown/kit/plugin/history'
 import { getMarkdown } from '@milkdown/kit/utils'
 import { slashFactory, SlashProvider } from '@milkdown/kit/plugin/slash'
-import { TextSelection } from '@milkdown/kit/prose/state'
+import { TextSelection, Plugin, PluginKey } from '@milkdown/kit/prose/state'
+import { $prose } from '@milkdown/kit/utils'
 import api from '../../api/client'
 
 const SLASH_ITEMS = [
@@ -24,9 +25,12 @@ const SLASH_ITEMS = [
   { id: 'callout-warning', label: 'Warning Callout', icon: '\u26A0', desc: ':::warning block' },
   { id: 'callout-tip', label: 'Tip Callout', icon: '\u2713', desc: ':::tip block' },
   { id: 'callout-danger', label: 'Danger Callout', icon: '\u2715', desc: ':::danger block' },
+  { id: 'mermaid', label: 'Mermaid Diagram', icon: '\u25C7', desc: 'Insert mermaid chart' },
+  { id: 'math', label: 'Math Formula', icon: '\u03A3', desc: 'KaTeX math block' },
+  { id: 'drawio', label: 'Draw.io Diagram', icon: '\u25A1', desc: 'Insert Draw.io embed' },
 ]
 
-function executeSlashCommand(ctx, id, view) {
+function executeSlashCommand(ctx, id, view, drawioHandlerRef) {
   const commands = ctx.get(commandsCtx)
   commands.call(clearTextInCurrentBlockCommand.key)
 
@@ -38,6 +42,27 @@ function executeSlashCommand(ctx, id, view) {
       const text = `\n:::${type}\n\n:::\n`
       dispatch(state.tr.insertText(text, from))
     }
+    return
+  }
+
+  if (id === 'mermaid' && view) {
+    const { state, dispatch } = view
+    const { from } = state.selection
+    const text = '\n```mermaid\ngraph TD\n    A[Start] --> B[End]\n```\n'
+    dispatch(state.tr.insertText(text, from))
+    return
+  }
+
+  if (id === 'math' && view) {
+    const { state, dispatch } = view
+    const { from } = state.selection
+    const text = '\n$$\nE = mc^2\n$$\n'
+    dispatch(state.tr.insertText(text, from))
+    return
+  }
+
+  if (id === 'drawio') {
+    if (drawioHandlerRef?.current) drawioHandlerRef.current()
     return
   }
 
@@ -70,11 +95,15 @@ function executeSlashCommand(ctx, id, view) {
 }
 
 class SlashMenuView {
-  constructor(ctx, view) {
+  constructor(ctx, view, drawioHandlerRef, editorViewRef) {
     this.ctx = ctx
     this.view = view
+    this.drawioHandlerRef = drawioHandlerRef
+    this.editorViewRef = editorViewRef
+    editorViewRef.current = view
     this.selectedIndex = 0
     this.filteredItems = [...SLASH_ITEMS]
+    this.isVisible = false
 
     this.content = document.createElement('div')
     this.content.className = 'slash-menu'
@@ -83,30 +112,6 @@ class SlashMenuView {
     this.content.dataset.show = 'false'
 
     this.renderItems()
-
-    this.handleKeyDown = (e) => {
-      if (this.content.dataset.show !== 'true') return
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        this.selectedIndex = Math.min(this.selectedIndex + 1, this.filteredItems.length - 1)
-        this.renderItems()
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        this.selectedIndex = Math.max(this.selectedIndex - 1, 0)
-        this.renderItems()
-      } else if (e.key === 'Enter') {
-        e.preventDefault()
-        const item = this.filteredItems[this.selectedIndex]
-        if (item) {
-          executeSlashCommand(this.ctx, item.id, this.view)
-          this.provider.hide()
-        }
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        this.provider.hide()
-      }
-    }
-    document.addEventListener('keydown', this.handleKeyDown, true)
 
     this.provider = new SlashProvider({
       content: this.content,
@@ -133,8 +138,38 @@ class SlashMenuView {
       },
       offset: 10,
     })
+    this.provider.onShow = () => { this.isVisible = true }
+    this.provider.onHide = () => { this.isVisible = false }
 
     this.update(view)
+  }
+
+  handleKey(event) {
+    if (!this.isVisible) return false
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      this.selectedIndex = Math.min(this.selectedIndex + 1, this.filteredItems.length - 1)
+      this.updateActiveItem()
+      return true
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      this.selectedIndex = Math.max(this.selectedIndex - 1, 0)
+      this.updateActiveItem()
+      return true
+    } else if (event.key === 'Enter') {
+      event.preventDefault()
+      const item = this.filteredItems[this.selectedIndex]
+      if (item) {
+        executeSlashCommand(this.ctx, item.id, this.view, this.drawioHandlerRef)
+        this.provider.hide()
+      }
+      return true
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      this.provider.hide()
+      return true
+    }
+    return false
   }
 
   renderItems() {
@@ -151,40 +186,247 @@ class SlashMenuView {
       `
       el.addEventListener('mouseenter', () => {
         this.selectedIndex = i
-        this.renderItems()
+        this.updateActiveItem()
       })
       el.addEventListener('mousedown', (e) => {
         e.preventDefault()
-        executeSlashCommand(this.ctx, item.id, this.view)
+        e.stopPropagation()
+        executeSlashCommand(this.ctx, item.id, this.view, this.drawioHandlerRef)
         this.provider.hide()
       })
       this.content.appendChild(el)
     })
   }
 
+  updateActiveItem() {
+    const items = this.content.querySelectorAll('.slash-menu-item')
+    items.forEach((el, i) => {
+      el.classList.toggle('active', i === this.selectedIndex)
+    })
+    // Scroll selected item into view
+    items[this.selectedIndex]?.scrollIntoView({ block: 'nearest' })
+  }
+
   update(view) {
     this.view = view
+    this.editorViewRef.current = view
     this.provider.update(view)
   }
 
   destroy() {
     this.provider.destroy()
     this.content.remove()
-    document.removeEventListener('keydown', this.handleKeyDown, true)
   }
 }
 
-export default function Editor({ defaultValue = '', onChange }) {
+// ── Wikilink [[ autocomplete ──
+
+class WikilinkMenu {
+  constructor() {
+    this.el = document.createElement('div')
+    this.el.className = 'wikilink-menu'
+    this.el.style.display = 'none'
+    document.body.appendChild(this.el)
+
+    this.pages = []
+    this.filtered = []
+    this.selectedIndex = 0
+    this.active = false
+    this.triggerPos = null  // doc position where [[ starts
+
+    // Cache pages list
+    this.loadPages()
+  }
+
+  async loadPages() {
+    try {
+      const res = await api.get('/pages')
+      this.pages = (res.data.pages || res.data || []).map((p) => ({
+        slug: p.slug,
+        title: p.title,
+      }))
+    } catch { /* ignore */ }
+  }
+
+  show(view, from, query) {
+    this.active = true
+    this.triggerPos = from
+    this.filter(query)
+
+    // Position near cursor
+    const coords = view.coordsAtPos(view.state.selection.head)
+    this.el.style.position = 'fixed'
+    this.el.style.left = coords.left + 'px'
+    this.el.style.top = (coords.bottom + 4) + 'px'
+    this.el.style.display = ''
+    this.el.style.zIndex = '200'
+  }
+
+  hide() {
+    this.active = false
+    this.el.style.display = 'none'
+    this.triggerPos = null
+  }
+
+  filter(query) {
+    const q = query.toLowerCase()
+    this.filtered = this.pages.filter(
+      (p) => p.title.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q)
+    ).slice(0, 8)
+    this.selectedIndex = 0
+    this.render()
+  }
+
+  render() {
+    this.el.innerHTML = ''
+    if (this.filtered.length === 0) {
+      const empty = document.createElement('div')
+      empty.className = 'wikilink-menu-empty'
+      empty.textContent = 'No pages found'
+      this.el.appendChild(empty)
+      return
+    }
+    this.filtered.forEach((page, i) => {
+      const item = document.createElement('div')
+      item.className = 'wikilink-menu-item' + (i === this.selectedIndex ? ' active' : '')
+      item.innerHTML = `
+        <span class="wikilink-menu-title">${page.title}</span>
+        <span class="wikilink-menu-slug">/${page.slug}</span>
+      `
+      item.addEventListener('mouseenter', () => {
+        this.selectedIndex = i
+        this.render()
+      })
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        this.select(page)
+      })
+      this.el.appendChild(item)
+    })
+  }
+
+  select(page) {
+    if (!this._view || this.triggerPos == null) return
+    const { state, dispatch } = this._view
+    // Replace from triggerPos (the first [) to current cursor with [[slug|title]]
+    const to = state.selection.head
+    const text = `[[${page.slug}|${page.title}]]`
+    dispatch(state.tr.replaceWith(this.triggerPos, to, state.schema.text(text)))
+    this.hide()
+  }
+
+  handleKeyDown(view, event) {
+    if (!this.active) return false
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      this.selectedIndex = Math.min(this.selectedIndex + 1, this.filtered.length - 1)
+      this.render()
+      return true
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      this.selectedIndex = Math.max(this.selectedIndex - 1, 0)
+      this.render()
+      return true
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault()
+      const page = this.filtered[this.selectedIndex]
+      if (page) this.select(page)
+      return true
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      this.hide()
+      return true
+    }
+    return false
+  }
+
+  destroy() {
+    this.el.remove()
+  }
+}
+
+const wikilinkPluginKey = new PluginKey('wikilink-autocomplete')
+
+const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawioOpen }, ref) {
   const editorRef = useRef(null)
   const containerRef = useRef(null)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  const drawioHandlerRef = useRef(onDrawioOpen)
+  const editorViewRef = useRef(null)
+
+  useEffect(() => {
+    drawioHandlerRef.current = onDrawioOpen || null
+  }, [onDrawioOpen])
+
+  useImperativeHandle(ref, () => ({
+    insertText(text) {
+      const view = editorViewRef.current
+      if (!view) return
+      const { state, dispatch } = view
+      const pos = state.selection.from
+      dispatch(state.tr.insertText(text, pos))
+    }
+  }), [])
 
   useEffect(() => {
     if (!containerRef.current) return
 
     let cancelled = false
     const slash = slashFactory('slash-menu')
+
+    // Create wikilink plugin per editor instance to avoid stale DOM references
+    const wikilinkMenu = new WikilinkMenu()
+    const wikilinkPlugin = $prose(() => {
+      return new Plugin({
+        key: wikilinkPluginKey,
+        props: {
+          handleKeyDown(view, event) {
+            return wikilinkMenu.handleKeyDown(view, event)
+          },
+        },
+        view(editorView) {
+          wikilinkMenu._view = editorView
+          return {
+            update(view) {
+              wikilinkMenu._view = view
+              const { state } = view
+              const { selection } = state
+              if (!(selection instanceof TextSelection)) {
+                wikilinkMenu.hide()
+                return
+              }
+
+              const { $head } = selection
+              const textBefore = $head.parent.textContent.slice(0, $head.parentOffset)
+
+              const lastOpen = textBefore.lastIndexOf('[[')
+              if (lastOpen === -1) {
+                wikilinkMenu.hide()
+                return
+              }
+              const afterOpen = textBefore.slice(lastOpen + 2)
+              if (afterOpen.includes(']]')) {
+                wikilinkMenu.hide()
+                return
+              }
+
+              const query = afterOpen.split('|')[0]
+              const blockStart = $head.pos - $head.parentOffset
+              const triggerPos = blockStart + lastOpen
+
+              wikilinkMenu.show(view, triggerPos, query)
+            },
+            destroy() {
+              wikilinkMenu.destroy()
+            },
+          }
+        },
+      })
+    })
 
     const init = async () => {
       const editor = await MilkdownEditor.make()
@@ -194,8 +436,17 @@ export default function Editor({ defaultValue = '', onChange }) {
           ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
             onChangeRef.current?.(markdown)
           })
+          let slashMenuView = null
           ctx.set(slash.key, {
-            view: (view) => new SlashMenuView(ctx, view),
+            view: (editorView) => {
+              slashMenuView = new SlashMenuView(ctx, editorView, drawioHandlerRef, editorViewRef)
+              return slashMenuView
+            },
+            props: {
+              handleKeyDown(view, event) {
+                return slashMenuView?.handleKey(event) ?? false
+              },
+            },
           })
         })
         .use(commonmark)
@@ -204,6 +455,7 @@ export default function Editor({ defaultValue = '', onChange }) {
         .use(clipboard)
         .use(history)
         .use(slash)
+        .use(wikilinkPlugin)
         .create()
 
       // StrictMode: if cleanup ran while we were awaiting, destroy immediately
@@ -222,6 +474,7 @@ export default function Editor({ defaultValue = '', onChange }) {
         editorRef.current.destroy()
         editorRef.current = null
       }
+      editorViewRef.current = null
       // Clear leftover DOM from any editor
       if (containerRef.current) {
         containerRef.current.innerHTML = ''
@@ -270,4 +523,6 @@ export default function Editor({ defaultValue = '', onChange }) {
   return (
     <div className="milkdown" ref={containerRef} />
   )
-}
+})
+
+export default Editor

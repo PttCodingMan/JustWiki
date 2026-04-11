@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import usePages from '../store/usePages'
 import api from '../api/client'
 import Editor from '../components/Editor/Editor'
+import DrawioModal from '../components/DrawioModal'
 import useUnsavedWarning from '../hooks/useUnsavedWarning'
 
 export default function NewPage() {
@@ -17,7 +18,37 @@ export default function NewPage() {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
   const [editorKey, setEditorKey] = useState(0)
+  const editorRef = useRef(null)
   const dirty = !saved && !showTemplates && (title.trim() !== '' || content.trim() !== '')
+
+  // Draw.io state
+  const [drawioOpen, setDrawioOpen] = useState(false)
+
+  const handleDrawioOpen = useCallback(() => {
+    setDrawioOpen(true)
+  }, [])
+
+  const handleDrawioSave = useCallback(async ({ xml, svg }) => {
+    try {
+      const res = await api.post('/diagrams', {
+        name: `Diagram ${Date.now()}`,
+        xml_data: xml,
+      })
+      const newId = res.data.id
+      await api.put(`/diagrams/${newId}`, { svg_cache: svg })
+      const directive = `\n::drawio[${newId}]\n`
+      if (editorRef.current) {
+        editorRef.current.insertText(directive)
+      }
+    } catch (err) {
+      console.error('Failed to save diagram:', err)
+    }
+    setDrawioOpen(false)
+  }, [])
+
+  const handleDrawioClose = useCallback(() => {
+    setDrawioOpen(false)
+  }, [])
 
   useUnsavedWarning(dirty)
 
@@ -158,8 +189,15 @@ export default function NewPage() {
         </div>
       )}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 min-h-[500px]">
-        <Editor key={editorKey} defaultValue={content} onChange={setContent} />
+        <Editor key={editorKey} ref={editorRef} defaultValue={content} onChange={setContent} onDrawioOpen={handleDrawioOpen} />
       </div>
+
+      <DrawioModal
+        open={drawioOpen}
+        xml=""
+        onSave={handleDrawioSave}
+        onClose={handleDrawioClose}
+      />
     </div>
   )
 }

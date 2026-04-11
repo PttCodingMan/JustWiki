@@ -1,8 +1,12 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import DOMPurify from 'dompurify'
 import usePages from '../store/usePages'
 import Editor from '../components/Editor/Editor'
+import MarkdownViewer from '../components/Viewer/MarkdownViewer'
+import DrawioModal from '../components/DrawioModal'
 import useUnsavedWarning from '../hooks/useUnsavedWarning'
+import api from '../api/client'
 
 export default function PageEdit() {
   const { slug } = useParams()
@@ -15,6 +19,15 @@ export default function PageEdit() {
   const [error, setError] = useState('')
   const [dirty, setDirty] = useState(false)
   const originalRef = useRef({ title: '', content: '' })
+  const editorRef = useRef(null)
+
+  // Draw.io state
+  const [showPreview, setShowPreview] = useState(false)
+
+  // Draw.io state
+  const [drawioOpen, setDrawioOpen] = useState(false)
+  const [editingDiagram, setEditingDiagram] = useState(null) // { id, xml } or null for new
+  const [diagrams, setDiagrams] = useState({}) // id -> diagram data
 
   useUnsavedWarning(dirty)
 
@@ -24,6 +37,8 @@ export default function PageEdit() {
       setTitle(p.title)
       setContent(p.content_md)
       originalRef.current = { title: p.title, content: p.content_md }
+    }).catch(() => {
+      navigate('/')
     })
   }, [slug])
 
@@ -33,6 +48,84 @@ export default function PageEdit() {
     setDirty(title !== origTitle || content !== origContent)
   }, [title, content, page])
 
+  // Extract diagram IDs from content and fetch their data
+  const diagramIds = useMemo(() => {
+    const ids = []
+    const re = /::drawio\\?\[(\d+)\\?\]/g
+    let m
+    while ((m = re.exec(content)) !== null) {
+      ids.push(parseInt(m[1]))
+    }
+    return ids
+  }, [content])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    for (const id of diagramIds) {
+      if (!diagrams[id]) {
+        api.get(`/diagrams/${id}`, { signal: controller.signal }).then(res => {
+          setDiagrams(prev => ({ ...prev, [id]: res.data }))
+        }).catch(() => {})
+      }
+    }
+    return () => controller.abort()
+  }, [diagramIds])
+
+  // Draw.io handlers
+  const handleDrawioOpen = useCallback(() => {
+    setEditingDiagram(null)
+    setDrawioOpen(true)
+  }, [])
+
+  const handleDiagramEdit = useCallback((diagramId) => {
+    const diagram = diagrams[diagramId]
+    if (diagram) {
+      setEditingDiagram({ id: diagramId, xml: diagram.xml_data })
+      setDrawioOpen(true)
+    }
+  }, [diagrams])
+
+  const handleDrawioSave = useCallback(async ({ xml, svg }) => {
+    try {
+      if (editingDiagram) {
+        // Update existing diagram
+        await api.put(`/diagrams/${editingDiagram.id}`, {
+          xml_data: xml,
+          svg_cache: svg,
+        })
+        setDiagrams(prev => ({
+          ...prev,
+          [editingDiagram.id]: { ...prev[editingDiagram.id], xml_data: xml, svg_cache: svg }
+        }))
+      } else {
+        // Create new diagram
+        const res = await api.post('/diagrams', {
+          name: `Diagram ${Date.now()}`,
+          xml_data: xml,
+          page_id: page?.id,
+        })
+        const newId = res.data.id
+        // Save SVG cache
+        await api.put(`/diagrams/${newId}`, { svg_cache: svg })
+        // Insert directive into editor at cursor position
+        const directive = `\n::drawio[${newId}]\n`
+        if (editorRef.current) {
+          editorRef.current.insertText(directive)
+        }
+        setDiagrams(prev => ({ ...prev, [newId]: { ...res.data, svg_cache: svg } }))
+      }
+    } catch (err) {
+      console.error('Failed to save diagram:', err)
+    }
+    setDrawioOpen(false)
+    setEditingDiagram(null)
+  }, [editingDiagram, page])
+
+  const handleDrawioClose = useCallback(() => {
+    setDrawioOpen(false)
+    setEditingDiagram(null)
+  }, [])
+
   const handleSave = useCallback(async () => {
     if (saving) return
     setSaving(true)
@@ -41,13 +134,14 @@ export default function PageEdit() {
       await updatePage(slug, { title, content_md: content })
       await fetchTree()
       setDirty(false)
+      setSaving(false)
       navigate(`/page/${slug}`)
     } catch (err) {
       console.error('Save failed:', err)
       setError(err?.response?.data?.detail || err.message || 'Save failed')
       setSaving(false)
     }
-  }, [slug, title, content, saving])
+  }, [slug, title, content, saving, navigate, fetchTree, updatePage])
 
   // Ctrl+S handler
   useEffect(() => {
@@ -64,40 +158,112 @@ export default function PageEdit() {
   if (!page) return <div className="text-gray-500">Loading...</div>
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
+    <div className={showPreview ? 'edit-split-root' : 'max-w-4xl mx-auto'}>
+      <div className="mb-4">
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="text-2xl font-bold text-gray-800 bg-transparent border-none outline-none flex-1 mr-4"
+          className="text-2xl font-bold text-gray-800 bg-transparent border-none outline-none w-full"
           placeholder="Page title"
         />
-        <div className="flex gap-2">
-          <button
-            onClick={() => navigate(`/page/${slug}`)}
-            className="px-3 py-1.5 text-sm text-gray-600 rounded-lg hover:bg-gray-100"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
       </div>
       {error && (
         <div className="mb-3 px-3 py-2 bg-red-50 text-red-600 text-sm rounded-lg border border-red-200">
           {error}
         </div>
       )}
-      <div className="text-xs text-gray-400 mb-3">Press Ctrl+S to save</div>
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 min-h-[500px]">
-        <Editor defaultValue={content} onChange={setContent} />
+      <div className="text-xs text-gray-400 mb-3">Press Ctrl+S to save &middot; Type / for commands</div>
+
+      <div className={showPreview ? 'edit-split-panels' : ''}>
+        {/* Editor panel */}
+        <div className={showPreview ? 'edit-split-editor' : ''}>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 min-h-[500px]">
+            <Editor
+              ref={editorRef}
+              defaultValue={content}
+              onChange={setContent}
+              onDrawioOpen={handleDrawioOpen}
+            />
+          </div>
+
+          {/* Diagram previews */}
+          {diagramIds.length > 0 && (
+            <div className="mt-4">
+              <div className="text-sm font-medium text-gray-500 mb-2">
+                Diagrams in this page (click to edit)
+              </div>
+              <div className="space-y-3">
+                {diagramIds.map(id => (
+                  <div
+                    key={id}
+                    className="diagram-edit-preview"
+                    onClick={() => handleDiagramEdit(id)}
+                  >
+                    {diagrams[id]?.svg_cache ? (
+                      <div
+                        className="diagram-edit-preview-svg"
+                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(diagrams[id].svg_cache, { USE_PROFILES: { svg: true, svgFilters: true } }) }}
+                      />
+                    ) : (
+                      <div className="diagram-edit-preview-placeholder">
+                        Loading diagram #{id}...
+                      </div>
+                    )}
+                    <div className="diagram-edit-preview-overlay">
+                      <span>Click to edit in Draw.io</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Live preview panel */}
+        {showPreview && (
+          <div className="edit-split-preview">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 min-h-[500px] p-6 overflow-auto">
+              <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-4 pb-2 border-b border-gray-100">Preview</div>
+              <MarkdownViewer content={content} />
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Floating action bar */}
+      <div className="floating-action-bar">
+        <button
+          onClick={() => setShowPreview(v => !v)}
+          className={`fab-btn ${showPreview ? 'fab-btn-active' : 'fab-btn-secondary'}`}
+          title={showPreview ? 'Hide preview' : 'Show preview'}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="1" y="2" width="6" height="12" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+            <rect x="9" y="2" width="6" height="12" rx="1" stroke="currentColor" strokeWidth="1.5" fill={showPreview ? 'currentColor' : 'none'} fillOpacity="0.15"/>
+          </svg>
+        </button>
+        <button
+          onClick={() => navigate(`/page/${slug}`)}
+          className="fab-btn fab-btn-secondary"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="fab-btn fab-btn-primary"
+        >
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+
+      <DrawioModal
+        open={drawioOpen}
+        xml={editingDiagram?.xml || ''}
+        onSave={handleDrawioSave}
+        onClose={handleDrawioClose}
+      />
     </div>
   )
 }
