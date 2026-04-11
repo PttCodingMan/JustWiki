@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS users (
     username      TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     role          TEXT NOT NULL DEFAULT 'editor',
+    display_name  TEXT DEFAULT '',
+    email         TEXT DEFAULT '',
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -297,6 +299,15 @@ async def init_db():
         statement = statement.strip()
         if statement:
             await db.execute(statement)
+    await db.commit()
+
+    # Migrate: add new user columns if missing
+    cols = await db.execute_fetchall("PRAGMA table_info(users)")
+    col_names = {c["name"] for c in cols}
+    if "display_name" not in col_names:
+        await db.execute("ALTER TABLE users ADD COLUMN display_name TEXT DEFAULT ''")
+    if "email" not in col_names:
+        await db.execute("ALTER TABLE users ADD COLUMN email TEXT DEFAULT ''")
     await db.commit()
 
     # Rebuild search index for existing pages

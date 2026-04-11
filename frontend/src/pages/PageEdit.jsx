@@ -21,7 +21,7 @@ export default function PageEdit() {
   const originalRef = useRef({ title: '', content: '' })
   const editorRef = useRef(null)
 
-  // Draw.io state
+  // Preview state
   const [showPreview, setShowPreview] = useState(false)
 
   // Draw.io state
@@ -164,7 +164,7 @@ export default function PageEdit() {
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="text-2xl font-bold text-gray-800 bg-transparent border-none outline-none w-full"
+          className="text-2xl font-bold text-gray-800 dark:text-gray-100 bg-transparent border-none outline-none w-full"
           placeholder="Page title"
         />
       </div>
@@ -178,7 +178,7 @@ export default function PageEdit() {
       <div className={showPreview ? 'edit-split-panels' : ''}>
         {/* Editor panel */}
         <div className={showPreview ? 'edit-split-editor' : ''}>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 min-h-[500px]">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 min-h-[500px]">
             <Editor
               ref={editorRef}
               defaultValue={content}
@@ -223,8 +223,8 @@ export default function PageEdit() {
         {/* Live preview panel */}
         {showPreview && (
           <div className="edit-split-preview">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 min-h-[500px] p-6 overflow-auto">
-              <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-4 pb-2 border-b border-gray-100">Preview</div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 min-h-[500px] p-6 overflow-auto">
+              <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-4 pb-2 border-b border-gray-100 dark:border-gray-700">Preview</div>
               <MarkdownViewer content={content} />
             </div>
           </div>

@@ -20,7 +20,7 @@ export default function Home() {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">All Pages</h1>
+        <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">All Pages</h1>
       </div>
 
       {/* Tag filter bar */}
@@ -52,16 +52,16 @@ export default function Home() {
         </div>
       ) : (
         <>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
             {pages.map((p, i) => (
               <Link
                 key={p.id}
                 to={`/page/${p.slug}`}
-                className={`block px-5 py-4 hover:bg-gray-50 transition-colors ${
-                  i > 0 ? 'border-t border-gray-100' : ''
+                className={`block px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                  i > 0 ? 'border-t border-gray-100 dark:border-gray-700' : ''
                 }`}
               >
-                <div className="font-medium text-gray-800">{p.title}</div>
+                <div className="font-medium text-gray-800 dark:text-gray-100">{p.title}</div>
                 <div className="text-sm text-gray-400 mt-1">
                   /{p.slug} &middot; {new Date(p.updated_at).toLocaleDateString()} &middot; {p.view_count} views
                 </div>

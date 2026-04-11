@@ -6,6 +6,15 @@ from app.database import get_db
 router = APIRouter(prefix="/api/diagrams", tags=["diagrams"])
 
 
+@router.get("/page/{page_id}")
+async def list_page_diagrams(page_id: int, user=Depends(get_current_user)):
+    db = await get_db()
+    rows = await db.execute_fetchall(
+        "SELECT * FROM diagrams WHERE page_id = ? ORDER BY created_at", (page_id,)
+    )
+    return [dict(r) for r in rows]
+
+
 @router.post("", response_model=DiagramResponse, status_code=201)
 async def create_diagram(
     body: DiagramCreate,
@@ -95,4 +104,11 @@ async def get_diagram_svg(diagram_id: int, user=Depends(get_current_user)):
     if not svg:
         raise HTTPException(status_code=404, detail="No SVG cache available")
     from fastapi.responses import Response
-    return Response(content=svg, media_type="image/svg+xml")
+    return Response(
+        content=svg,
+        media_type="image/svg+xml",
+        headers={
+            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )

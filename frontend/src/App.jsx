@@ -11,6 +11,8 @@ import SearchResults from './pages/SearchResults'
 import Activity from './pages/Activity'
 import PageVersions from './pages/PageVersions'
 import GraphView from './pages/GraphView'
+import Admin from './pages/Admin'
+import Profile from './pages/Profile'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -39,6 +41,8 @@ export default function App() {
                 <Route path="/search" element={<SearchResults />} />
                 <Route path="/activity" element={<Activity />} />
                 <Route path="/graph" element={<GraphView />} />
+                <Route path="/admin" element={<Admin />} />
+                <Route path="/profile" element={<Profile />} />
                 <Route path="/page/:slug" element={<PageView />} />
                 <Route path="/page/:slug/edit" element={<PageEdit />} />
                 <Route path="/page/:slug/versions" element={<PageVersions />} />

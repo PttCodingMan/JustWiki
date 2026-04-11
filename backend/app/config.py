@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     MEDIA_DIR: str = "./data/media"
 
     VITE_API_URL: str = "http://localhost:8000"
+    COOKIE_SECURE: bool = False  # Set to True in production with HTTPS
 
     AI_ENABLED: bool = False
     GEMINI_API_KEY: str = ""

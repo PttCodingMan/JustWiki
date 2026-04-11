@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-primary: #2563eb;
   --color-primary-dark: #1d4ed8;
@@ -488,6 +490,24 @@ mark {
   }
 }
 
+/* ── RWD Mobile ── */
+@media (max-width: 640px) {
+  .floating-action-bar {
+    left: 1rem;
+    right: 1rem;
+    bottom: 1rem;
+    justify-content: center;
+  }
+  .fab-btn {
+    padding: 0.5rem 0.65rem;
+    font-size: 0.75rem;
+  }
+  .markdown-viewer h1 { font-size: 1.5em; }
+  .markdown-viewer h2 { font-size: 1.25em; }
+  .markdown-viewer pre { font-size: 0.8em; }
+  .markdown-viewer table { font-size: 0.85em; }
+}
+
 /* Wikilinks */
 .markdown-viewer a.wikilink {
   color: #2563eb;
@@ -584,3 +604,86 @@ mark {
 .fab-btn-active:hover {
   background: #dbeafe;
 }
+
+/* ── Dark Mode ── */
+
+/* Body */
+.dark body { background: #0f172a; color: #e2e8f0; }
+
+/* Sidebar */
+.dark aside { background: #1e293b; border-color: #334155; }
+.dark .sidebar-link, .dark aside a { color: #94a3b8; }
+.dark aside a:hover { background: #334155; }
+
+/* Milkdown editor */
+.dark .milkdown .editor { color: #e2e8f0; }
+.dark .milkdown .editor code { background: #334155; color: #e2e8f0; }
+.dark .milkdown .editor pre { background: #0f172a; }
+.dark .milkdown .editor blockquote { border-color: #475569; color: #94a3b8; }
+.dark .milkdown .editor a { color: #60a5fa; }
+.dark .milkdown .editor th { background: #1e293b; }
+.dark .milkdown .editor th, .dark .milkdown .editor td { border-color: #475569; }
+.dark .milkdown .editor hr { border-color: #475569; }
+
+/* Markdown viewer */
+.dark .markdown-viewer h1, .dark .markdown-viewer h2 { border-color: #475569; color: #f1f5f9; }
+.dark .markdown-viewer h3, .dark .markdown-viewer h4, .dark .markdown-viewer h5, .dark .markdown-viewer h6 { color: #f1f5f9; }
+.dark .markdown-viewer p { color: #cbd5e1; }
+.dark .markdown-viewer code { background: #334155; color: #e2e8f0; }
+.dark .markdown-viewer pre { background: #0f172a; }
+.dark .markdown-viewer blockquote { border-color: #475569; color: #94a3b8; }
+.dark .markdown-viewer a { color: #60a5fa; }
+.dark .markdown-viewer a.wikilink { color: #60a5fa; border-color: #3b82f6; }
+.dark .markdown-viewer th { background: #1e293b; color: #e2e8f0; }
+.dark .markdown-viewer th, .dark .markdown-viewer td { border-color: #475569; color: #cbd5e1; }
+.dark .markdown-viewer hr { border-color: #475569; }
+.dark .markdown-viewer li { color: #cbd5e1; }
+
+/* Callouts dark */
+.dark .callout-info { border-color: #1e40af; background: #172554; }
+.dark .callout-warning { border-color: #92400e; background: #451a03; }
+.dark .callout-tip { border-color: #065f46; background: #022c22; }
+.dark .callout-danger { border-color: #991b1b; background: #450a0a; }
+.dark .callout-body { color: #cbd5e1; }
+
+/* Menus */
+.dark .slash-menu { background: #1e293b; border-color: #475569; }
+.dark .slash-menu-item:hover, .dark .slash-menu-item.active { background: #334155; }
+.dark .slash-menu-icon { background: #334155; color: #94a3b8; }
+.dark .slash-menu-label { color: #e2e8f0; }
+.dark .wikilink-menu { background: #1e293b; border-color: #475569; }
+.dark .wikilink-menu-item:hover, .dark .wikilink-menu-item.active { background: #334155; }
+.dark .wikilink-menu-title { color: #e2e8f0; }
+
+/* Search highlight */
+.dark mark { background: #854d0e; color: #fef08a; }
+
+/* Draw.io */
+.dark .drawio-embed { border-color: #475569; }
+.dark .drawio-placeholder { background: #1e293b; color: #64748b; }
+.dark .drawio-svg { background: transparent; }
+.dark .drawio-svg svg { filter: invert(1) hue-rotate(180deg); }
+.dark .drawio-lightbox-content { background: #1e293b; }
+.dark .drawio-lightbox-content svg { filter: invert(1) hue-rotate(180deg); }
+
+/* Diagram previews */
+.dark .diagram-edit-preview { border-color: #475569; background: #1e293b; }
+.dark .diagram-edit-preview:hover { border-color: #3b82f6; }
+.dark .diagram-edit-preview-svg { background: transparent; }
+.dark .diagram-edit-preview-svg svg { filter: invert(1) hue-rotate(180deg); }
+
+/* Mermaid */
+.dark .mermaid-loading { background: #1e293b; border-color: #475569; color: #64748b; }
+.dark .mermaid-error { background: #450a0a; border-color: #991b1b; color: #fca5a5; }
+
+/* Transclusion */
+.dark .transclusion { border-color: #475569; }
+.dark .transclusion-header { background: #1e293b; border-color: #475569; }
+.dark .transclusion-content { color: #cbd5e1; }
+
+/* Floating action bar */
+.dark .floating-action-bar { background: #1e293b; box-shadow: 0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05); }
+.dark .fab-btn-primary { background: #2563eb; }
+.dark .fab-btn-secondary { background: #334155; color: #94a3b8; }
+.dark .fab-btn-secondary:hover { background: #475569; color: #e2e8f0; }
+.dark .fab-btn-active { background: #1e3a5f; color: #60a5fa; box-shadow: inset 0 0 0 1px #1e40af; }

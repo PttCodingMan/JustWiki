@@ -140,7 +140,13 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
 @router.get("/{slug}", response_model=PageResponse)
 async def get_page(slug: str, user=Depends(get_current_user)):
     db = await get_db()
-    rows = await db.execute_fetchall("SELECT * FROM pages WHERE slug = ?", (slug,))
+    rows = await db.execute_fetchall(
+        """SELECT p.*, CASE WHEN u.display_name IS NOT NULL AND u.display_name != '' THEN u.display_name ELSE u.username END AS author_name
+           FROM pages p
+           LEFT JOIN users u ON u.id = p.created_by
+           WHERE p.slug = ?""",
+        (slug,),
+    )
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
 
@@ -249,9 +255,13 @@ async def move_page(slug: str, body: PageMoveRequest, user=Depends(get_current_u
 @router.delete("/{slug}")
 async def delete_page(slug: str, user=Depends(get_current_user)):
     db = await get_db()
-    rows = await db.execute_fetchall("SELECT id, title FROM pages WHERE slug = ?", (slug,))
+    rows = await db.execute_fetchall("SELECT id, title, created_by FROM pages WHERE slug = ?", (slug,))
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
+
+    # Only admin or page creator can delete
+    if user["role"] != "admin" and rows[0]["created_by"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Only the page creator or an admin can delete this page")
 
     page_id = rows[0]["id"]
     page_title = rows[0]["title"]

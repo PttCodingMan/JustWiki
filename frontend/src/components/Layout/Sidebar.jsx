@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import usePages from '../../store/usePages'
 import useBookmarks from '../../store/useBookmarks'
+import useAuth from '../../store/useAuth'
 
 function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
   const location = useLocation()
@@ -140,6 +141,7 @@ function isChildActive(node, pathname) {
 export default function Sidebar() {
   const { tree } = usePages()
   const { bookmarks } = useBookmarks()
+  const { user } = useAuth()
 
   return (
     <aside className="w-60 min-w-60 bg-white border-r border-gray-200 overflow-y-auto">
@@ -167,6 +169,18 @@ export default function Sidebar() {
             </svg>
             Graph View
           </Link>
+          {user?.role === 'admin' && (
+            <Link
+              to="/admin"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              Admin
+            </Link>
+          )}
         </div>
 
         {/* Bookmarks */}

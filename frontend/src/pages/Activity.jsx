@@ -80,7 +80,7 @@ export default function Activity() {
                   {label.text}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium text-gray-700">{a.username || 'system'}</span>
+                  <span className="text-sm font-medium text-gray-700">{a.display_name || a.username || 'system'}</span>
                   <span className="text-sm text-gray-500">
                     {' '}{label.text}{' '}
                     {meta.slug && a.action !== 'deleted' ? (

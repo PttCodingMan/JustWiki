@@ -30,7 +30,7 @@ async def list_activity(
 
     rows = await db.execute_fetchall(
         """SELECT a.id, a.user_id, a.action, a.target_type, a.target_id, a.metadata, a.created_at,
-                  u.username
+                  u.username, u.display_name
            FROM activity_log a
            LEFT JOIN users u ON u.id = a.user_id
            ORDER BY a.created_at DESC, a.id DESC

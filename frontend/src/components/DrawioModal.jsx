@@ -1,9 +1,11 @@
 import { useEffect, useRef, useCallback } from 'react'
+import useTheme from '../store/useTheme'
 
-const DRAWIO_URL = 'https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=atlas&saveAndExit=1&noSaveBtn=1&configure=1'
+const DRAWIO_BASE = 'https://embed.diagrams.net/?embed=1&proto=json&spin=1&saveAndExit=1&noSaveBtn=1&configure=1'
 const DRAWIO_ORIGIN = 'https://embed.diagrams.net'
 
 export default function DrawioModal({ open, xml, onSave, onClose }) {
+  const dark = useTheme((s) => s.dark)
   const iframeRef = useRef(null)
   const xmlRef = useRef(null)
 
@@ -75,7 +77,7 @@ export default function DrawioModal({ open, xml, onSave, onClose }) {
     <div className="drawio-modal-overlay">
       <iframe
         ref={iframeRef}
-        src={DRAWIO_URL}
+        src={`${DRAWIO_BASE}&ui=${dark ? 'dark' : 'atlas'}`}
         className="drawio-modal-iframe"
         title="Draw.io Editor"
       />

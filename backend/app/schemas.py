@@ -13,6 +13,8 @@ class UserResponse(BaseModel):
     id: int
     username: str
     role: str
+    display_name: Optional[str] = ""
+    email: Optional[str] = ""
     created_at: Optional[str] = None
 
 
@@ -47,6 +49,7 @@ class PageResponse(BaseModel):
     sort_order: int = 0
     view_count: int = 0
     created_by: Optional[int] = None
+    author_name: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

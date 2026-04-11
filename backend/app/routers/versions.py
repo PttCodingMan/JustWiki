@@ -44,7 +44,7 @@ async def list_versions(
     total = count_row[0]["cnt"]
 
     versions = await db.execute_fetchall(
-        """SELECT v.id, v.version_num, v.title, v.edited_by, v.edited_at, u.username
+        """SELECT v.id, v.version_num, v.title, v.edited_by, v.edited_at, u.username, u.display_name
            FROM page_versions v
            LEFT JOIN users u ON u.id = v.edited_by
            WHERE v.page_id = ?
@@ -69,7 +69,7 @@ async def get_version(slug: str, num: int, user=Depends(get_current_user)):
     page_id = rows[0]["id"]
 
     version = await db.execute_fetchall(
-        """SELECT v.*, u.username FROM page_versions v
+        """SELECT v.*, u.username, u.display_name FROM page_versions v
            LEFT JOIN users u ON u.id = v.edited_by
            WHERE v.page_id = ? AND v.version_num = ?""",
         (page_id, num),

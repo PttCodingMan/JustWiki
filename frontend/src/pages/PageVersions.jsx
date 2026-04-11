@@ -216,7 +216,7 @@ export default function PageVersions() {
                   </button>
                 </div>
                 <div className="text-xs text-gray-400 mt-1">
-                  {v.username || 'unknown'} &middot; {new Date(v.edited_at).toLocaleString()}
+                  {v.display_name || v.username || 'unknown'} &middot; {new Date(v.edited_at).toLocaleString()}
                 </div>
                 <div className="text-xs text-gray-500 mt-0.5 truncate">{v.title}</div>
               </div>

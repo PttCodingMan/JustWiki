@@ -1,6 +1,6 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { Editor as MilkdownEditor, rootCtx, defaultValueCtx, commandsCtx } from '@milkdown/kit/core'
-import { commonmark, headingSchema, blockquoteSchema, hrSchema, bulletListSchema, orderedListSchema, codeBlockSchema, paragraphSchema } from '@milkdown/kit/preset/commonmark'
+import { commonmark, headingSchema, blockquoteSchema, hrSchema, bulletListSchema, orderedListSchema, codeBlockSchema, paragraphSchema, imageSchema, insertImageCommand } from '@milkdown/kit/preset/commonmark'
 import { clearTextInCurrentBlockCommand, setBlockTypeCommand, wrapInBlockTypeCommand, addBlockTypeCommand } from '@milkdown/kit/preset/commonmark'
 import { gfm } from '@milkdown/kit/preset/gfm'
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener'
@@ -505,9 +505,10 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
             const url = res.data.url
             const editor = editorRef.current
             if (editor) {
-              const md = getMarkdown()(editor.ctx)
-              const newMd = md + `\n![image](${url})\n`
-              onChangeRef.current?.(newMd)
+              editor.action((ctx) => {
+                const commands = ctx.get(commandsCtx)
+                commands.call(insertImageCommand.key, { src: url, alt: 'image' })
+              })
             }
           } catch (err) {
             console.error('Image upload failed:', err)

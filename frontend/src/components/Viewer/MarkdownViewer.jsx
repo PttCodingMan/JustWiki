@@ -8,8 +8,8 @@ import api from '../../api/client'
 
 mermaid.initialize({
   startOnLoad: false,
-  theme: 'default',
-  securityLevel: 'loose',
+  theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
+  securityLevel: 'strict',
 })
 
 function renderKatex(text, displayMode = false) {
@@ -26,6 +26,14 @@ function escapeHtml(text) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+}
+
+function sanitizeUrl(url) {
+  const decoded = decodeURIComponent(url).replace(/\s/g, '').toLowerCase()
+  if (decoded.startsWith('javascript:') || decoded.startsWith('data:text/html') || decoded.startsWith('vbscript:')) {
+    return 'about:blank'
+  }
+  return url
 }
 
 function parseCallouts(html) {
@@ -260,10 +268,10 @@ function simpleMarkdown(text) {
   html = parseWikilinks(html)
 
   // Images (before links, so ![alt](url) is not consumed by the link regex)
-  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" />')
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => `<img src="${sanitizeUrl(url)}" alt="${alt}" />`)
 
   // Links
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => `<a href="${sanitizeUrl(url)}">${text}</a>`)
 
   // Blockquotes
   html = html.replace(/^&gt;\s+(.+)$/gm, '<blockquote>$1</blockquote>')
@@ -289,7 +297,11 @@ function simpleMarkdown(text) {
 }
 
 export default function MarkdownViewer({ content, onDiagramClick }) {
-  const html = useMemo(() => simpleMarkdown(content || ''), [content])
+  const html = useMemo(() => DOMPurify.sanitize(simpleMarkdown(content || ''), {
+    ADD_TAGS: ['div', 'input'],
+    ADD_ATTR: ['data-mermaid', 'data-transclude', 'data-diagram-id', 'class', 'checked', 'disabled', 'type'],
+    ALLOW_DATA_ATTR: true,
+  }), [content])
   const containerRef = useRef(null)
   const navigate = useNavigate()
   const [lightboxSvg, setLightboxSvg] = useState(null)
@@ -337,6 +349,13 @@ export default function MarkdownViewer({ content, onDiagramClick }) {
   useEffect(() => {
     if (!containerRef.current) return
     const blocks = containerRef.current.querySelectorAll('[data-mermaid]')
+    if (blocks.length === 0) return
+    const isDark = document.documentElement.classList.contains('dark')
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: isDark ? 'dark' : 'default',
+      securityLevel: 'strict',
+    })
     blocks.forEach(async (el, i) => {
       const code = decodeURIComponent(el.dataset.mermaid)
       try {
