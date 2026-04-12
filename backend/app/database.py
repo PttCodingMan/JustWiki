@@ -883,16 +883,43 @@ async def rebuild_all_backlinks(db):
 
 async def seed_welcome_page(db):
     """Create a welcome/guide page on first launch when no pages exist."""
+    # Ensure logo.png exists in media directory (independent of whether pages exist)
+    import shutil
+    import os
+
+    # 1. Determine base directories
+    # In Docker: /app/app/database.py -> app_dir is /app
+    # In Local: backend/app/database.py -> app_dir is .../backend
+    app_dir = Path(__file__).resolve().parent.parent
+    project_root = app_dir.parent if app_dir.name == "backend" else app_dir
+
+    # 2. Try multiple possible source locations for the logo
+    possible_sources = [
+        app_dir / "docs" / "images" / "logo.png",
+        project_root / "docs" / "images" / "logo.png",
+        Path("/app/docs/images/logo.png"),
+        Path("/app/backend/docs/images/logo.png"),
+    ]
+    
+    logo_src = next((s for s in possible_sources if s.exists()), None)
+    
+    # 3. Destination (Ensure absolute path)
+    media_dir = Path(settings.MEDIA_DIR).resolve()
+    media_dir.mkdir(parents=True, exist_ok=True)
+    logo_dst = media_dir / "logo.png"
+
+    if logo_src and not logo_dst.exists():
+        try:
+            shutil.copy2(logo_src, logo_dst)
+            # Make sure it's readable
+            os.chmod(logo_dst, 0o644)
+            print(f"Successfully seeded logo from {logo_src} to {logo_dst}")
+        except Exception as e:
+            print(f"Error seeding logo: {e}")
+
     rows = await db.execute_fetchall("SELECT COUNT(*) as cnt FROM pages")
     if rows[0]["cnt"] > 0:
         return  # Pages already exist
-
-    # Copy logo to media directory
-    import shutil
-    logo_src = Path(__file__).resolve().parent.parent.parent / "docs" / "images" / "logo.png"
-    logo_dst = Path(settings.MEDIA_DIR) / "logo.png"
-    if logo_src.exists() and not logo_dst.exists():
-        shutil.copy2(logo_src, logo_dst)
 
     # Get admin user id for created_by
     admin_rows = await db.execute_fetchall(
