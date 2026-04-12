@@ -29,19 +29,11 @@ A lightweight, self-hosted wiki for small teams. Just clone, run, and write.
 
 Nine curated palettes ship out of the box — **Light, Dark, Lavender, Forest, Rose, Ocean, Sand, Sunset, Nord**. Switch any time from the top-right theme picker; your choice is remembered per browser.
 
-## Tech Stack
+## Deployment
 
-| Layer    | Stack                                          |
-| -------- | ---------------------------------------------- |
-| Backend  | Python, FastAPI, aiosqlite, Pydantic           |
-| Frontend | React 19, Vite, Tailwind CSS 4, Zustand        |
-| Editor   | Milkdown (ProseMirror)                         |
-| Database | SQLite (single file)                           |
-| Deploy   | Docker Compose                                 |
+### Docker (Recommended)
 
-## Quick Start
-
-### Docker (recommended)
+The fastest way to get JustWiki running is with Docker Compose.
 
 ```bash
 cp .env.example .env
@@ -49,18 +41,9 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-Open http://localhost:3000
+Open http://localhost:3000 to start writing.
 
-### Local Development
-
-```bash
-make setup   # install backend & frontend dependencies, create .env
-make dev     # start backend (port 8000) + frontend (port 3000)
-```
-
-Requires: Python 3.11+, Node.js 20+, [uv](https://docs.astral.sh/uv/)
-
-## Configuration
+### Configuration
 
 All settings live in a single `.env` file. See [.env.example](.env.example) for available options.
 
@@ -75,21 +58,9 @@ Key variables:
 | `AI_ENABLED`    | Enable Gemini AI Q&A               | `false`              |
 | `GEMINI_API_KEY`| Gemini API key (when AI enabled)   |                      |
 
-## Makefile Commands
+## Usage
 
-```bash
-make dev            # Start backend + frontend in dev mode
-make dev-backend    # Start backend only
-make dev-frontend   # Start frontend only
-make build          # Build frontend for production
-make backup         # Backup SQLite database with timestamp
-make clean          # Remove database, media, and frontend dist
-make docker-up      # docker-compose up -d
-make docker-down    # docker-compose down
-make setup          # First-time setup (install deps, create .env)
-```
-
-## Slash Commands
+### Slash Commands
 
 <p align="center">
   <img src="docs/images/slash-commands.png" alt="Type / in the editor to open the slash command menu" width="80%">
@@ -115,7 +86,48 @@ In the editor, type `/` to open the slash menu. You can filter by typing after t
 | `/math` | Math Formula — KaTeX math block |
 | `/drawio` | Draw.io Diagram — insert Draw.io embed |
 
-## Project Structure
+---
+
+## Development Guide
+
+### Tech Stack
+
+| Layer    | Stack                                          |
+| -------- | ---------------------------------------------- |
+| Backend  | Python, FastAPI, aiosqlite, Pydantic           |
+| Frontend | React 19, Vite, Tailwind CSS 4, Zustand        |
+| Editor   | Milkdown (ProseMirror)                         |
+| Database | SQLite (single file)                           |
+| Deploy   | Docker Compose                                 |
+
+### Local Development
+
+1. **Setup**: Install backend & frontend dependencies and create `.env`
+   ```bash
+   make setup
+   ```
+   *Requires: Python 3.11+, Node.js 20+, [uv](https://docs.astral.sh/uv/)*
+
+2. **Run**: Start backend (port 8000) and frontend (port 3000)
+   ```bash
+   make dev
+   ```
+
+### Makefile Commands
+
+| Command | Description |
+| ------- | ----------- |
+| `make dev` | Start backend + frontend in dev mode |
+| `make dev-backend` | Start backend only |
+| `make dev-frontend` | Start frontend only |
+| `make build` | Build frontend for production |
+| `make backup` | Backup SQLite database with timestamp |
+| `make clean` | Remove database, media, and frontend dist |
+| `make docker-up` | `docker-compose up -d` |
+| `make docker-down` | `docker-compose down` |
+| `make setup` | First-time setup (install deps, create .env) |
+
+### Project Structure
 
 ```
 just-wiki/

@@ -29,19 +29,11 @@
 
 內建 9 款精選配色 — **Light、Dark、Lavender、Forest、Rose、Ocean、Sand、Sunset、Nord**。隨時可以從右上角的主題選單切換，選擇會依瀏覽器記住。
 
-## 技術堆疊
+## 部署方式
 
-| 層級     | 技術                                           |
-| -------- | ---------------------------------------------- |
-| 後端     | Python、FastAPI、aiosqlite、Pydantic           |
-| 前端     | React 19、Vite、Tailwind CSS 4、Zustand        |
-| 編輯器   | Milkdown（ProseMirror）                        |
-| 資料庫   | SQLite（單一檔案）                             |
-| 部署     | Docker Compose                                 |
+### Docker (推薦)
 
-## 快速開始
-
-### Docker（推薦）
+使用 Docker Compose 是啟動 JustWiki 最快的方式。
 
 ```bash
 cp .env.example .env
@@ -49,18 +41,9 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-開啟 http://localhost:3000
+開啟 http://localhost:3000 即可開始使用。
 
-### 本地開發
-
-```bash
-make setup   # 安裝後端與前端依賴、建立 .env
-make dev     # 啟動後端（port 8000）與前端（port 3000）
-```
-
-需求環境：Python 3.11+、Node.js 20+、[uv](https://docs.astral.sh/uv/)
-
-## 設定
+### 設定
 
 所有設定都集中在單一 `.env` 檔案。完整選項請參考 [.env.example](.env.example)。
 
@@ -75,21 +58,9 @@ make dev     # 啟動後端（port 8000）與前端（port 3000）
 | `AI_ENABLED`      | 啟用 Gemini AI 問答           | `false`               |
 | `GEMINI_API_KEY`  | Gemini API key（啟用 AI 時）  |                       |
 
-## Makefile 指令
+## 使用指南
 
-```bash
-make dev            # 以開發模式啟動後端與前端
-make dev-backend    # 只啟動後端
-make dev-frontend   # 只啟動前端
-make build          # 建置前端 production 版本
-make backup         # 依時間戳備份 SQLite 資料庫
-make clean          # 清除資料庫、媒體檔與前端 dist
-make docker-up      # docker-compose up -d
-make docker-down    # docker-compose down
-make setup          # 首次設定（安裝依賴、建立 .env）
-```
-
-## Slash 指令
+### Slash 指令
 
 <p align="center">
   <img src="docs/images/slash-commands.png" alt="在編輯器輸入 / 即可開啟 slash 指令選單" width="80%">
@@ -115,7 +86,48 @@ make setup          # 首次設定（安裝依賴、建立 .env）
 | `/math` | KaTeX 數學公式 |
 | `/drawio` | Draw.io 圖表 |
 
-## 專案結構
+---
+
+## 開發者指南
+
+### 技術堆疊
+
+| 層級     | 技術                                           |
+| -------- | ---------------------------------------------- |
+| 後端     | Python、FastAPI、aiosqlite、Pydantic           |
+| 前端     | React 19、Vite、Tailwind CSS 4、Zustand        |
+| 編輯器   | Milkdown（ProseMirror）                        |
+| 資料庫   | SQLite（單一檔案）                             |
+| 部署     | Docker Compose                                 |
+
+### 本地開發
+
+1. **環境設定**: 安裝後端與前端依賴、建立 `.env`
+   ```bash
+   make setup
+   ```
+   *需求環境：Python 3.11+、Node.js 20+、[uv](https://docs.astral.sh/uv/)*
+
+2. **啟動開發伺服器**: 同時啟動後端（port 8000）與前端（port 3000）
+   ```bash
+   make dev
+   ```
+
+### Makefile 指令
+
+| 指令 | 說明 |
+| ---- | ---- |
+| `make dev` | 以開發模式啟動後端與前端 |
+| `make dev-backend` | 只啟動後端 |
+| `make dev-frontend` | 只啟動前端 |
+| `make build` | 建置前端 production 版本 |
+| `make backup` | 依時間戳備份 SQLite 資料庫 |
+| `make clean` | 清除資料庫、媒體檔與前端 dist |
+| `make docker-up` | 執行 `docker-compose up -d` |
+| `make docker-down` | 執行 `docker-compose down` |
+| `make setup` | 首次設定（安裝依賴、建立 .env） |
+
+### 專案結構
 
 ```
 just-wiki/
