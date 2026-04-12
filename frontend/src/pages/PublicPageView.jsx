@@ -56,6 +56,15 @@ export default function PublicPageView({ notFound }) {
       })
   }, [slug])
 
+  useEffect(() => {
+    if (state.page?.title) {
+      document.title = `${state.page.title} - JustWiki`
+    } else {
+      document.title = 'JustWiki'
+    }
+    return () => { document.title = 'JustWiki' }
+  }, [state.page?.title])
+
   // Until the fetch for the current slug resolves, show a loading screen.
   // state.slug tracks which slug the current data belongs to so a stale
   // render of a different slug doesn't leak across navigations.

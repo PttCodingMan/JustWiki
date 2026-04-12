@@ -167,6 +167,15 @@ export default function PageView() {
     setPublicConfirmOpen(false)
   }
 
+  useEffect(() => {
+    if (page?.title) {
+      document.title = `${page.title} - JustWiki`
+    } else {
+      document.title = 'JustWiki'
+    }
+    return () => { document.title = 'JustWiki' }
+  }, [page?.title])
+
   if (loading) return <div className="text-text-secondary">Loading...</div>
   if (!page) return null
 
