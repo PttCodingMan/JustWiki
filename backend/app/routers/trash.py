@@ -10,6 +10,7 @@ from app.auth import get_current_user, require_admin
 from app.database import get_db
 from app.routers.activity import log_activity
 from app.services.search import rebuild_search_index
+from app.services.wikilink import parse_and_update_backlinks
 
 router = APIRouter(prefix="/api/trash", tags=["trash"])
 
@@ -71,8 +72,11 @@ async def restore_page(slug: str, user=Depends(get_current_user)):
     await db.execute(
         "UPDATE pages SET deleted_at = NULL WHERE id = ?", (page["id"],)
     )
-    # Re-add to search index
+    # Re-add to search index and regenerate outgoing backlinks — they were not
+    # deleted from the backlinks table on soft-delete, but any links to pages
+    # that moved/were renamed while this one was in the trash would be stale.
     await rebuild_search_index(db, page["id"], page["title"], page["content_md"])
+    await parse_and_update_backlinks(db, page["id"], page["content_md"])
     await log_activity(
         db, user["id"], "restored", "page", page["id"],
         {"title": page["title"], "slug": slug},

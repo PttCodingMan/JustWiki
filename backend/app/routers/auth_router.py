@@ -124,8 +124,8 @@ class ChangePasswordRequest(BaseModel):
 
 @router.put("/password")
 async def change_password(body: ChangePasswordRequest, user=Depends(get_current_user)):
-    if len(body.new_password) < 4:
-        raise HTTPException(status_code=400, detail="New password must be at least 4 characters")
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
 
     db = await get_db()
     rows = await db.execute_fetchall(

@@ -60,11 +60,13 @@ async def update_diagram(
 
     updates = []
     values = []
+    # Use model_fields_set so an explicit null page_id clears the association —
+    # `is not None` would silently drop it.
+    set_fields = body.model_fields_set
     for field in ("name", "xml_data", "svg_cache", "page_id"):
-        val = getattr(body, field, None)
-        if val is not None:
+        if field in set_fields:
             updates.append(f"{field} = ?")
-            values.append(val)
+            values.append(getattr(body, field))
 
     if updates:
         updates.append("updated_at = CURRENT_TIMESTAMP")

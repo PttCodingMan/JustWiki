@@ -95,7 +95,13 @@ export default function MarkdownViewer({
           if (id) onDiagramClick(id)
         } else {
           const svgEl = diagram.querySelector('.drawio-svg')
-          if (svgEl) setLightboxSvg(svgEl.innerHTML)
+          if (svgEl) {
+            setLightboxSvg(
+              DOMPurify.sanitize(svgEl.innerHTML, {
+                USE_PROFILES: { svg: true, svgFilters: true },
+              }),
+            )
+          }
         }
       }
     },

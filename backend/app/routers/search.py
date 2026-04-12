@@ -1,3 +1,4 @@
+import html
 import re
 from fastapi import APIRouter, Depends, Query
 from app.auth import get_current_user
@@ -32,10 +33,11 @@ def make_snippet(text: str, query: str, max_len: int = 200) -> str:
     if end < len(text):
         snippet = snippet + "..."
 
-    # Highlight matches
+    # Escape first so the snippet is safe to render as HTML, then highlight.
+    snippet = html.escape(snippet)
     for w in query_words:
         if w:
-            pattern = re.compile(re.escape(w), re.IGNORECASE)
+            pattern = re.compile(re.escape(html.escape(w)), re.IGNORECASE)
             snippet = pattern.sub(lambda m: f"<mark>{m.group()}</mark>", snippet)
 
     return snippet
@@ -65,7 +67,7 @@ async def search_pages(
             JOIN pages p ON CAST(search_index.page_id AS INTEGER) = p.id
             JOIN page_tags pt ON pt.page_id = p.id
             JOIN tags t ON t.id = pt.tag_id
-            WHERE search_index MATCH ? AND t.name = ?
+            WHERE search_index MATCH ? AND t.name = ? AND p.deleted_at IS NULL
         """
         count_rows = await db.execute_fetchall(count_sql, (fts_query, tag))
         total = count_rows[0]["cnt"]
@@ -77,7 +79,7 @@ async def search_pages(
             JOIN pages p ON CAST(search_index.page_id AS INTEGER) = p.id
             JOIN page_tags pt ON pt.page_id = p.id
             JOIN tags t ON t.id = pt.tag_id
-            WHERE search_index MATCH ? AND t.name = ?
+            WHERE search_index MATCH ? AND t.name = ? AND p.deleted_at IS NULL
             ORDER BY search_index.rank
             LIMIT ? OFFSET ?
         """
@@ -87,7 +89,7 @@ async def search_pages(
             SELECT COUNT(*) as cnt
             FROM search_index
             JOIN pages p ON CAST(search_index.page_id AS INTEGER) = p.id
-            WHERE search_index MATCH ?
+            WHERE search_index MATCH ? AND p.deleted_at IS NULL
         """
         count_rows = await db.execute_fetchall(count_sql, (fts_query,))
         total = count_rows[0]["cnt"]
@@ -97,7 +99,7 @@ async def search_pages(
                    search_index.rank
             FROM search_index
             JOIN pages p ON CAST(search_index.page_id AS INTEGER) = p.id
-            WHERE search_index MATCH ?
+            WHERE search_index MATCH ? AND p.deleted_at IS NULL
             ORDER BY search_index.rank
             LIMIT ? OFFSET ?
         """

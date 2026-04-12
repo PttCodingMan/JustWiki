@@ -32,7 +32,9 @@ async def list_versions(
     user=Depends(get_current_user),
 ):
     db = await get_db()
-    rows = await db.execute_fetchall("SELECT id FROM pages WHERE slug = ?", (slug,))
+    rows = await db.execute_fetchall(
+        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    )
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = rows[0]["id"]
@@ -63,7 +65,9 @@ async def list_versions(
 @router.get("/{slug}/versions/{num}")
 async def get_version(slug: str, num: int, user=Depends(get_current_user)):
     db = await get_db()
-    rows = await db.execute_fetchall("SELECT id FROM pages WHERE slug = ?", (slug,))
+    rows = await db.execute_fetchall(
+        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    )
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = rows[0]["id"]
@@ -87,7 +91,9 @@ async def diff_versions(
     user=Depends(get_current_user),
 ):
     db = await get_db()
-    rows = await db.execute_fetchall("SELECT id FROM pages WHERE slug = ?", (slug,))
+    rows = await db.execute_fetchall(
+        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    )
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = rows[0]["id"]

@@ -9,9 +9,10 @@ router = APIRouter(prefix="/api", tags=["tags"])
 async def list_tags(user=Depends(get_current_user)):
     db = await get_db()
     rows = await db.execute_fetchall(
-        """SELECT t.id, t.name, COUNT(pt.page_id) as page_count
+        """SELECT t.id, t.name, COUNT(p.id) as page_count
            FROM tags t
            LEFT JOIN page_tags pt ON pt.tag_id = t.id
+           LEFT JOIN pages p ON p.id = pt.page_id AND p.deleted_at IS NULL
            GROUP BY t.id, t.name
            ORDER BY t.name"""
     )
@@ -21,7 +22,9 @@ async def list_tags(user=Depends(get_current_user)):
 @router.get("/pages/{slug}/tags")
 async def get_page_tags(slug: str, user=Depends(get_current_user)):
     db = await get_db()
-    page = await db.execute_fetchall("SELECT id FROM pages WHERE slug = ?", (slug,))
+    page = await db.execute_fetchall(
+        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    )
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = page[0]["id"]
@@ -39,7 +42,9 @@ async def get_page_tags(slug: str, user=Depends(get_current_user)):
 @router.post("/pages/{slug}/tags")
 async def add_tag_to_page(slug: str, body: dict, user=Depends(get_current_user)):
     db = await get_db()
-    page = await db.execute_fetchall("SELECT id FROM pages WHERE slug = ?", (slug,))
+    page = await db.execute_fetchall(
+        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    )
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = page[0]["id"]
@@ -69,7 +74,9 @@ async def add_tag_to_page(slug: str, body: dict, user=Depends(get_current_user))
 @router.delete("/pages/{slug}/tags/{tag_name}")
 async def remove_tag_from_page(slug: str, tag_name: str, user=Depends(get_current_user)):
     db = await get_db()
-    page = await db.execute_fetchall("SELECT id FROM pages WHERE slug = ?", (slug,))
+    page = await db.execute_fetchall(
+        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    )
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = page[0]["id"]

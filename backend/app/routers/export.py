@@ -101,13 +101,6 @@ def md_to_simple_html(text):
     for i, b in enumerate(blocks):
         html = html.replace(f"%%BLOCK_{i}%%", b)
 
-    # Callouts
-    html = re.sub(
-        r":::[ \t]*(info|warning|tip|danger)\s*\n([\s\S]*?):::",
-        lambda m: f'<div class="callout callout-{m.group(1)}">{md_to_simple_html(m.group(2).strip())}</div>',
-        html,
-    )
-
     # Headers
     for i in range(6, 0, -1):
         html = re.sub(rf"^{'#' * i}\s+(.+)$", rf"<h{i}>\1</h{i}>", html, flags=re.MULTILINE)
@@ -166,6 +159,16 @@ def md_to_simple_html(text):
 
     html = re.sub(r"(\|.+\|\n)+", parse_table, html)
 
+    # Callouts — run after inline transforms so the body already has <strong>,
+    # <em>, wikilinks etc., but before paragraph wrapping so the `:::` markers
+    # haven't been swallowed into <p> blocks. Non-recursive: the body is taken
+    # verbatim, which avoids the double HTML-escape bug of the earlier design.
+    html = re.sub(
+        r":::[ \t]*(info|warning|tip|danger)\s*\n([\s\S]*?):::",
+        lambda m: f'<div class="callout callout-{m.group(1)}">{m.group(2).strip()}</div>',
+        html,
+    )
+
     # Paragraphs
     html = re.sub(r"^(?!<[a-z/])((?!\s*$).+)$", r"<p>\1</p>", html, flags=re.MULTILINE)
 
@@ -180,7 +183,8 @@ async def export_page(
 ):
     db = await get_db()
     rows = await db.execute_fetchall(
-        "SELECT id, slug, title, content_md FROM pages WHERE slug = ?", (slug,)
+        "SELECT id, slug, title, content_md FROM pages WHERE slug = ? AND deleted_at IS NULL",
+        (slug,),
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
@@ -218,7 +222,7 @@ async def export_site(
     """Export all pages as a static HTML site in a .zip file."""
     db = await get_db()
     pages = await db.execute_fetchall(
-        "SELECT id, slug, title, content_md FROM pages ORDER BY title"
+        "SELECT id, slug, title, content_md FROM pages WHERE deleted_at IS NULL ORDER BY title"
     )
 
     buf = io.BytesIO()
