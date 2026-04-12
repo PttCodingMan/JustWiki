@@ -90,7 +90,13 @@ function UsersSection() {
     } catch { /* ignore */ }
   }
 
-  useEffect(() => { loadUsers() }, [])
+  useEffect(() => {
+    let cancelled = false
+    api.get('/users')
+      .then((res) => { if (!cancelled) setUsers(res.data.users || []) })
+      .catch(() => { /* ignore */ })
+    return () => { cancelled = true }
+  }, [])
 
   const handleCreate = async (e) => {
     e.preventDefault()

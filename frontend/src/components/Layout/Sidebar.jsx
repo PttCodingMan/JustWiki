@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useState, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import usePages from '../../store/usePages'
 import useBookmarks from '../../store/useBookmarks'
@@ -9,16 +9,20 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
   const { movePage } = usePages()
   const isActive = location.pathname === `/page/${node.slug}`
   const hasChildren = node.children?.length > 0
-  const [expanded, setExpanded] = useState(isActive || depth < 1)
+  const [expanded, setExpanded] = useState(
+    () => isActive || depth < 1 || (hasChildren && isChildActive(node, location.pathname))
+  )
+  const [trackedPath, setTrackedPath] = useState(location.pathname)
   const [dropPosition, setDropPosition] = useState(null) // 'before' | 'inside' | 'after'
   const rowRef = useRef(null)
 
-  // Auto-expand if a child is active
-  useEffect(() => {
+  // Auto-expand when navigation lands on a descendant (adjusting state during render).
+  if (trackedPath !== location.pathname) {
+    setTrackedPath(location.pathname)
     if (hasChildren && isChildActive(node, location.pathname)) {
       setExpanded(true)
     }
-  }, [location.pathname])
+  }
 
   const handleDragStart = (e) => {
     e.dataTransfer.setData('application/json', JSON.stringify({

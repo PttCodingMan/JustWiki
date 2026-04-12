@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest'
 import api from './client'
-import axios from 'axios'
 
 describe('API Client', () => {
   const originalLocation = window.location
@@ -33,14 +32,11 @@ describe('API Client', () => {
       }
     }
 
-    // Try to trigger the error interceptor
     try {
-      // Accessing the private interceptors array might be brittle, 
-      // but it's a way to test it without making real calls.
       const interceptor = api.interceptors.response.handlers[0].rejected
       await interceptor(error401)
-    } catch (e) {
-      // Expected to reject
+    } catch {
+      // expected: interceptor rejects after redirect
     }
 
     expect(window.location.href).toBe('/login')
@@ -59,7 +55,9 @@ describe('API Client', () => {
     try {
       const interceptor = api.interceptors.response.handlers[0].rejected
       await interceptor(error401)
-    } catch (e) {}
+    } catch {
+      // expected: interceptor rejects without redirect
+    }
 
     expect(window.location.href).toBe('/login')
   })
@@ -79,7 +77,9 @@ describe('API Client', () => {
     try {
       const interceptor = api.interceptors.response.handlers[0].rejected
       await interceptor(error401)
-    } catch (e) {}
+    } catch {
+      // expected: interceptor rejects without redirect
+    }
 
     // href must stay at the public URL — no hard redirect to /login
     expect(window.location.href).toBe(pathname)

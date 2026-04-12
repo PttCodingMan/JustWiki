@@ -18,10 +18,11 @@ export default function PageEdit() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [conflict, setConflict] = useState(null)  // { currentVersion } on 409
-  const [dirty, setDirty] = useState(false)
-  const originalRef = useRef({ title: '', content: '' })
+  const [original, setOriginal] = useState({ title: '', content: '' })
   const baseVersionRef = useRef(null)
   const editorRef = useRef(null)
+
+  const dirty = !!page && (title !== original.title || content !== original.content)
 
   // Preview state
   const [showPreview, setShowPreview] = useState(false)
@@ -38,18 +39,12 @@ export default function PageEdit() {
       setPage(p)
       setTitle(p.title)
       setContent(p.content_md)
-      originalRef.current = { title: p.title, content: p.content_md }
+      setOriginal({ title: p.title, content: p.content_md })
       baseVersionRef.current = p.version
     }).catch(() => {
       navigate('/')
     })
   }, [slug])
-
-  useEffect(() => {
-    if (!page) return
-    const { title: origTitle, content: origContent } = originalRef.current
-    setDirty(title !== origTitle || content !== origContent)
-  }, [title, content, page])
 
   // Extract diagram IDs from content and fetch their data
   const diagramIds = useMemo(() => {
@@ -142,7 +137,7 @@ export default function PageEdit() {
       })
       baseVersionRef.current = updated.version
       await fetchTree()
-      setDirty(false)
+      setOriginal({ title, content })
       setSaving(false)
       navigate(`/page/${slug}`)
     } catch (err) {
@@ -171,10 +166,9 @@ export default function PageEdit() {
       if (confirm('Discard your changes and load the latest version?')) {
         setTitle(latest.title)
         setContent(latest.content_md)
-        originalRef.current = { title: latest.title, content: latest.content_md }
+        setOriginal({ title: latest.title, content: latest.content_md })
         baseVersionRef.current = latest.version
         setConflict(null)
-        setDirty(false)
       }
     } catch (e) {
       console.error('Failed to reload:', e)

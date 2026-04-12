@@ -1,12 +1,11 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { Editor as MilkdownEditor, rootCtx, defaultValueCtx, commandsCtx } from '@milkdown/kit/core'
-import { commonmark, headingSchema, blockquoteSchema, hrSchema, bulletListSchema, orderedListSchema, codeBlockSchema, paragraphSchema, imageSchema, insertImageCommand } from '@milkdown/kit/preset/commonmark'
+import { commonmark, headingSchema, blockquoteSchema, hrSchema, bulletListSchema, orderedListSchema, codeBlockSchema, insertImageCommand } from '@milkdown/kit/preset/commonmark'
 import { clearTextInCurrentBlockCommand, setBlockTypeCommand, wrapInBlockTypeCommand, addBlockTypeCommand } from '@milkdown/kit/preset/commonmark'
 import { gfm } from '@milkdown/kit/preset/gfm'
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener'
 import { clipboard } from '@milkdown/kit/plugin/clipboard'
 import { history } from '@milkdown/kit/plugin/history'
-import { getMarkdown } from '@milkdown/kit/utils'
 import { slashFactory, SlashProvider } from '@milkdown/kit/plugin/slash'
 import { TextSelection, Plugin, PluginKey } from '@milkdown/kit/prose/state'
 import { $prose } from '@milkdown/kit/utils'
@@ -354,9 +353,12 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
   const editorRef = useRef(null)
   const containerRef = useRef(null)
   const onChangeRef = useRef(onChange)
-  onChangeRef.current = onChange
   const drawioHandlerRef = useRef(onDrawioOpen)
   const editorViewRef = useRef(null)
+
+  useEffect(() => {
+    onChangeRef.current = onChange
+  })
 
   useEffect(() => {
     drawioHandlerRef.current = onDrawioOpen || null

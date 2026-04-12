@@ -92,7 +92,7 @@ export default function NewPage() {
       setError(err?.response?.data?.detail || err.message || 'Create failed')
       setSaving(false)
     }
-  }, [title, content, saving, selectedTemplate])
+  }, [title, content, saving, selectedTemplate, createPage, fetchTree, navigate])
 
   // Ctrl+S
   useEffect(() => {

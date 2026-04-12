@@ -1,29 +1,37 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useSearch from '../../store/useSearch'
 
 export default function SearchModal({ isOpen, onClose }) {
   const [query, setQuery] = useState('')
   const [selectedIdx, setSelectedIdx] = useState(0)
+  const [wasOpen, setWasOpen] = useState(isOpen)
   const inputRef = useRef(null)
   const navigate = useNavigate()
   const { results, loading, search, clearSearch } = useSearch()
 
-  useEffect(() => {
+  // Reset form each time the modal transitions closed → open (adjusting state during render).
+  if (wasOpen !== isOpen) {
+    setWasOpen(isOpen)
     if (isOpen) {
       setQuery('')
       clearSearch()
       setSelectedIdx(0)
-      setTimeout(() => inputRef.current?.focus(), 50)
     }
+  }
+
+  useEffect(() => {
+    if (!isOpen) return
+    const t = setTimeout(() => inputRef.current?.focus(), 50)
+    return () => clearTimeout(t)
   }, [isOpen])
 
-  const doSearch = useCallback(
-    debounce((q) => {
+  const doSearch = useMemo(
+    () => debounce((q) => {
       if (q.trim()) search(q.trim())
       else clearSearch()
     }, 300),
-    []
+    [search, clearSearch]
   )
 
   const handleInput = (e) => {

@@ -61,8 +61,15 @@ export default function Comments({ slug }) {
   const [comments, setComments] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [loadedSlug, setLoadedSlug] = useState(slug)
   const [newComment, setNewComment] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  // Reset loading when the slug changes (adjusting state during render).
+  if (loadedSlug !== slug) {
+    setLoadedSlug(slug)
+    setLoading(true)
+  }
 
   const loadComments = async () => {
     try {
@@ -70,12 +77,19 @@ export default function Comments({ slug }) {
       setComments(res.data.comments || [])
       setTotal(res.data.total || 0)
     } catch { /* ignore */ }
-    setLoading(false)
   }
 
   useEffect(() => {
-    setLoading(true)
-    loadComments()
+    let cancelled = false
+    api.get(`/pages/${slug}/comments`)
+      .then((res) => {
+        if (cancelled) return
+        setComments(res.data.comments || [])
+        setTotal(res.data.total || 0)
+        setLoading(false)
+      })
+      .catch(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [slug])
 
   const handleSubmit = async (e) => {
