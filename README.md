@@ -130,7 +130,7 @@ In the editor, type `/` to open the slash menu. You can filter by typing after t
 ### Project Structure
 
 ```
-just-wiki/
+justwiki/
 ├── backend/          # FastAPI REST API
 │   └── app/
 │       ├── main.py

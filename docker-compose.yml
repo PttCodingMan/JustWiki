@@ -1,6 +1,6 @@
 services:
   backend:
-    image: ghcr.io/pttcodingman/just-wiki/backend:main
+    image: ghcr.io/pttcodingman/justwiki/backend:main
     build: ./backend
     ports:
       - "8000:8000"
@@ -10,7 +10,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: ghcr.io/pttcodingman/just-wiki/frontend:main
+    image: ghcr.io/pttcodingman/justwiki/frontend:main
     build: ./frontend
     ports:
       - "3000:3000"

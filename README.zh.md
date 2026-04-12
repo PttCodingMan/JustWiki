@@ -130,7 +130,7 @@ docker-compose up -d
 ### 專案結構
 
 ```
-just-wiki/
+justwiki/
 ├── backend/          # FastAPI REST API
 │   └── app/
 │       ├── main.py
