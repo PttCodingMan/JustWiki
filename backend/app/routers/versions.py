@@ -117,7 +117,9 @@ async def diff_versions(
 @router.post("/{slug}/revert/{num}")
 async def revert_to_version(slug: str, num: int, user=Depends(get_current_user)):
     db = await get_db()
-    rows = await db.execute_fetchall("SELECT * FROM pages WHERE slug = ?", (slug,))
+    rows = await db.execute_fetchall(
+        "SELECT * FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    )
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
     current = dict(rows[0])
@@ -132,11 +134,12 @@ async def revert_to_version(slug: str, num: int, user=Depends(get_current_user))
     # Save current state as a new version before reverting
     await save_version(db, current["id"], current["title"], current["content_md"], user["id"])
 
-    # Revert
+    # Revert — bump the optimistic lock version so concurrent editors get a 409
+    new_version = current["version"] + 1
     await db.execute(
-        """UPDATE pages SET title = ?, content_md = ?, updated_at = CURRENT_TIMESTAMP
-           WHERE slug = ?""",
-        (version[0]["title"], version[0]["content_md"], slug),
+        """UPDATE pages SET title = ?, content_md = ?, version = ?,
+           updated_at = CURRENT_TIMESTAMP WHERE slug = ?""",
+        (version[0]["title"], version[0]["content_md"], new_version, slug),
     )
     await rebuild_search_index(db, current["id"], version[0]["title"], version[0]["content_md"])
     await parse_and_update_backlinks(db, current["id"], version[0]["content_md"])

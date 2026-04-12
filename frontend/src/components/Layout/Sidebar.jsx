@@ -172,6 +172,15 @@ export default function Sidebar() {
             </svg>
             Graph View
           </Link>
+          <Link
+            to="/trash"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover rounded-lg"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" />
+            </svg>
+            Trash
+          </Link>
           {user?.role === 'admin' && (
             <Link
               to="/admin"

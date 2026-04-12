@@ -134,7 +134,7 @@ describe('usePages Store', () => {
     api.get.mockResolvedValueOnce({ data: mockTree })
 
     const { result } = renderHook(() => usePages())
-    
+
     await act(async () => {
       await result.current.movePage('page-1', 1, 0)
     })
@@ -142,5 +142,63 @@ describe('usePages Store', () => {
     expect(api.patch).toHaveBeenCalledWith('/pages/page-1/move', { parent_id: 1, sort_order: 0 })
     expect(api.get).toHaveBeenCalledWith('/pages/tree')
     expect(result.current.tree).toEqual(mockTree)
+  })
+
+  it('should forward base_version on update for optimistic lock', async () => {
+    api.put.mockResolvedValueOnce({ data: { id: 1, version: 3 } })
+    const { result } = renderHook(() => usePages())
+
+    await act(async () => {
+      await result.current.updatePage('page-1', {
+        title: 'x',
+        content_md: 'y',
+        base_version: 2,
+      })
+    })
+
+    expect(api.put).toHaveBeenCalledWith('/pages/page-1', {
+      title: 'x',
+      content_md: 'y',
+      base_version: 2,
+    })
+  })
+
+  it('should restore a page from trash', async () => {
+    const mockPage = { id: 1, slug: 'foo' }
+    api.post.mockResolvedValueOnce({ data: mockPage })
+    const { result } = renderHook(() => usePages())
+
+    let res
+    await act(async () => {
+      res = await result.current.restorePage('foo')
+    })
+
+    expect(api.post).toHaveBeenCalledWith('/trash/foo/restore')
+    expect(res).toEqual(mockPage)
+  })
+
+  it('should purge a page from trash', async () => {
+    api.delete.mockResolvedValueOnce({})
+    const { result } = renderHook(() => usePages())
+
+    await act(async () => {
+      await result.current.purgePage('foo')
+    })
+
+    expect(api.delete).toHaveBeenCalledWith('/trash/foo')
+  })
+
+  it('should fetch trash items', async () => {
+    const mockTrash = { items: [{ id: 1, slug: 'foo' }] }
+    api.get.mockResolvedValueOnce({ data: mockTrash })
+    const { result } = renderHook(() => usePages())
+
+    let res
+    await act(async () => {
+      res = await result.current.fetchTrash()
+    })
+
+    expect(api.get).toHaveBeenCalledWith('/trash')
+    expect(res).toEqual(mockTrash)
   })
 })

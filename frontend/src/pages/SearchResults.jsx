@@ -13,11 +13,11 @@ export default function SearchResults() {
 
   useEffect(() => {
     fetchAllTags()
-  }, [])
+  }, [fetchAllTags])
 
   useEffect(() => {
     if (q) search(q, selectedTag || null)
-  }, [q, selectedTag])
+  }, [q, selectedTag, search])
 
   return (
     <div className="max-w-4xl mx-auto">

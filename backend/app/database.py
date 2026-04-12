@@ -33,12 +33,18 @@ CREATE TABLE IF NOT EXISTS pages (
     parent_id   INTEGER REFERENCES pages(id) ON DELETE SET NULL,
     sort_order  INTEGER DEFAULT 0,
     view_count  INTEGER DEFAULT 0,
+    version     INTEGER NOT NULL DEFAULT 1,
+    is_public   INTEGER NOT NULL DEFAULT 0,
+    deleted_at  TIMESTAMP,
     created_by  INTEGER REFERENCES users(id),
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_pages_parent ON pages(parent_id);
+-- idx_pages_public is created by the migration block in init_db() — if it
+-- were here, an upgrade from a DB lacking the is_public column would fail
+-- on the first statement (column does not exist yet).
 
 CREATE TABLE IF NOT EXISTS page_versions (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,6 +129,29 @@ CREATE TABLE IF NOT EXISTS webhooks (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS page_watchers (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    page_id    INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, page_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_page_watchers_page ON page_watchers(page_id);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    event      TEXT NOT NULL,
+    page_id    INTEGER REFERENCES pages(id) ON DELETE CASCADE,
+    actor_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    metadata   TEXT,
+    read_at    TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread
+    ON notifications(user_id, read_at, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS activity_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER REFERENCES users(id),
@@ -141,7 +170,288 @@ CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
 );
 """
 
-WELCOME_PAGE_CONTENT = r"""# 歡迎使用 JustWiki
+WELCOME_PAGE_CONTENT_EN = r"""# Welcome to JustWiki
+
+> 🌐 **Language:** English · [[welcome-zh|中文]]
+
+![JustWiki](/api/media/logo.png)
+
+JustWiki is a lightweight, self-hosted knowledge base for small teams. Built around Markdown and backed by a single SQLite file, it needs no external database — you can be up and running in minutes.
+
+This page walks you through every feature. Feel free to edit or delete it at any time.
+
+---
+
+## Quick Start
+
+1. Click **＋ New Page** in the left sidebar or press `Ctrl+N`
+2. Enter a title and content (Markdown is supported)
+3. Save, and the page will appear in the sidebar tree
+
+:::tip
+When creating a page you can also pick a **template** (meeting notes, tech spec, ADR, troubleshooting, etc.). Several common templates are built in.
+:::
+
+---
+
+## Markdown Syntax
+
+JustWiki fully supports GitHub Flavored Markdown (GFM). Here are the most common examples:
+
+### Headings
+
+```
+# Heading 1
+## Heading 2
+### Heading 3
+```
+
+### Text Formatting
+
+| Syntax | Result |
+|--------|--------|
+| `**bold**` | **bold** |
+| `*italic*` | *italic* |
+| `` `inline code` `` | `inline code` |
+| `~~strikethrough~~` | ~~strikethrough~~ |
+
+### Lists
+
+```
+- Unordered item
+- Another item
+  - Nested item
+
+1. Ordered list
+2. Second item
+
+- [x] Completed task
+- [ ] Pending task
+```
+
+Rendered:
+
+- [x] Completed task
+- [ ] Pending task
+
+### Tables
+
+```
+| Column A | Column B | Column C |
+|----------|----------|----------|
+| Data 1   | Data 2   | Data 3   |
+```
+
+### Code Blocks
+
+Syntax highlighting is enabled — just label the language after the opening fence:
+
+```python
+def hello():
+    print("Hello, JustWiki!")
+```
+
+```javascript
+const greet = () => console.log("Hello!");
+```
+
+### Blockquotes
+
+> This is a blockquote.
+> It can span multiple lines.
+
+### Images and Links
+
+```
+[Link text](https://example.com)
+![Alt text](image-url)
+```
+
+---
+
+## Wikilinks (Page Cross-Links)
+
+Use double square brackets to link between pages:
+
+```
+Link to another page: [[page-slug]]
+Custom display text:  [[page-slug|Display Text]]
+```
+
+- Typing `[[` inside the editor opens a page autocomplete popup
+- Backlinks are tracked automatically and shown at the bottom of each page
+
+---
+
+## Callout Blocks
+
+Use the `:::` syntax to create highlighted callouts:
+
+:::info
+This is an **info** callout — great for supplementary notes.
+:::
+
+:::warning
+This is a **warning** callout — flag things that need attention.
+:::
+
+:::tip
+This is a **tip** callout — share small tricks and shortcuts.
+:::
+
+:::danger
+This is a **danger** callout — mark risky or destructive operations.
+:::
+
+Syntax:
+
+```
+:::info
+Callout content. **Markdown** is supported inside.
+:::
+```
+
+---
+
+## Mermaid Diagrams
+
+Draw flowcharts, sequence diagrams and more right in the page using Mermaid:
+
+```mermaid
+graph LR
+    A[Write content] --> B[Save page]
+    B --> C[Index automatically]
+    C --> D[Search & explore]
+```
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Wiki
+    participant Database
+    User->>Wiki: Edit page
+    Wiki->>Database: Save content
+    Database-->>Wiki: OK
+    Wiki-->>User: Saved
+```
+
+Supported diagram types include flowchart, sequence, class, state, gantt, pie and more.
+
+---
+
+## Math (KaTeX)
+
+Wrap content in double dollar signs to render math:
+
+Inline: $E = mc^2$
+
+Block:
+
+$$
+\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
+$$
+
+$$
+\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}
+$$
+
+---
+
+## Page Management
+
+### Page Tree
+
+Pages can have a **parent page**, forming a hierarchy. The left sidebar displays everything as a tree.
+
+### Version History
+
+Every save creates a new version. You can:
+- Browse all past versions of a page
+- Diff any two versions side by side
+- Revert to any previous version
+
+### Tags
+
+Attach tags to pages for easy categorisation and filtering. The home page lists every tag for quick browsing.
+
+---
+
+## Search
+
+Press `Ctrl+K` to open the search panel. It supports:
+- Full-text search (powered by SQLite FTS5)
+- CJK tokenisation for Chinese / Japanese / Korean
+- Filter by tag
+
+---
+
+## Media Uploads
+
+- **Paste images** directly into the editor to auto-upload
+- **Drag and drop** files onto the editor
+- Maximum file size: 20 MB
+
+---
+
+## Graph View
+
+Click **Graph** in the sidebar to see all pages and their relationships as an interactive force-directed graph. Every wikilink becomes an edge, making it easy to explore how your knowledge is connected.
+
+---
+
+## Bookmarks and Comments
+
+- **Bookmarks** — click the bookmark icon on any page to pin it for quick access
+- **Comments** — every page has a comments section for team discussion
+
+---
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+N` | New page |
+| `Ctrl+K` | Open search |
+| `Ctrl+E` | Toggle edit / view mode |
+
+---
+
+## Themes
+
+JustWiki ships with multiple built-in themes (Light, Dark, Lavender, Forest, and more). Switch from the theme picker — your choice is remembered per browser.
+
+---
+
+## Admin Features
+
+Admins can:
+- Manage users (create, change role, deactivate)
+- Back up the database
+- Export all pages
+
+---
+
+## Deployment
+
+JustWiki runs on Docker Compose with two services:
+- **Backend** — FastAPI + uvicorn (port 8000)
+- **Frontend** — React + nginx (port 3000)
+- Both share the `./data` directory for the SQLite database and uploaded media
+
+All configuration lives in a single `.env` file.
+
+---
+
+:::info
+This very page was written with JustWiki's own Markdown features. Click the edit button in the top right to peek at the source — and feel free to edit or delete this page at any time.
+:::
+
+Happy writing!
+"""
+
+WELCOME_PAGE_CONTENT_ZH = r"""# 歡迎使用 JustWiki
+
+> 🌐 **語言：** [[welcome|English]] · 中文
 
 ![JustWiki](/api/media/logo.png)
 
@@ -590,27 +900,32 @@ async def seed_welcome_page(db):
     )
     admin_id = admin_rows[0]["id"] if admin_rows else None
 
-    slug = "welcome"
-    title = "歡迎使用 JustWiki"
-    content = WELCOME_PAGE_CONTENT
-
-    cursor = await db.execute(
-        """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, created_by)
-           VALUES (?, ?, ?, NULL, 0, ?)""",
-        (slug, title, content, admin_id),
-    )
-    page_id = cursor.lastrowid
-
-    # Save initial version
-    await db.execute(
-        """INSERT INTO page_versions (page_id, title, content_md, edited_by, version_num)
-           VALUES (?, ?, ?, ?, 1)""",
-        (page_id, title, content, admin_id),
-    )
-
-    # Update search index
     from app.services.search import rebuild_search_index
-    await rebuild_search_index(db, page_id, title, content)
+
+    # Seed two welcome pages so users can switch between languages.
+    # English is the default (sort_order=0); Chinese is the companion (sort_order=1).
+    welcome_pages = [
+        ("welcome", "Welcome to JustWiki", WELCOME_PAGE_CONTENT_EN, 0),
+        ("welcome-zh", "歡迎使用 JustWiki", WELCOME_PAGE_CONTENT_ZH, 1),
+    ]
+
+    for slug, title, content, sort_order in welcome_pages:
+        cursor = await db.execute(
+            """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, created_by)
+               VALUES (?, ?, ?, NULL, ?, ?)""",
+            (slug, title, content, sort_order, admin_id),
+        )
+        page_id = cursor.lastrowid
+
+        # Save initial version
+        await db.execute(
+            """INSERT INTO page_versions (page_id, title, content_md, edited_by, version_num)
+               VALUES (?, ?, ?, ?, 1)""",
+            (page_id, title, content, admin_id),
+        )
+
+        # Update search index
+        await rebuild_search_index(db, page_id, title, content)
 
     await db.commit()
 
@@ -631,6 +946,24 @@ async def init_db():
         await db.execute("ALTER TABLE users ADD COLUMN display_name TEXT DEFAULT ''")
     if "email" not in col_names:
         await db.execute("ALTER TABLE users ADD COLUMN email TEXT DEFAULT ''")
+    await db.commit()
+
+    # Migrate: add new page columns if missing
+    page_cols = await db.execute_fetchall("PRAGMA table_info(pages)")
+    page_col_names = {c["name"] for c in page_cols}
+    if "version" not in page_col_names:
+        await db.execute("ALTER TABLE pages ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+    if "deleted_at" not in page_col_names:
+        await db.execute("ALTER TABLE pages ADD COLUMN deleted_at TIMESTAMP")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_pages_deleted ON pages(deleted_at)")
+    if "is_public" not in page_col_names:
+        await db.execute("ALTER TABLE pages ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0")
+    # Create the partial index regardless — fresh DBs also need it, and
+    # we can't put it in SCHEMA_SQL because upgrading DBs run SCHEMA_SQL
+    # before the ALTER TABLE above.
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pages_public ON pages(slug) WHERE is_public = 1"
+    )
     await db.commit()
 
     # Rebuild search index for existing pages

@@ -17,8 +17,10 @@ export default function PageEdit() {
   const [content, setContent] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [conflict, setConflict] = useState(null)  // { currentVersion } on 409
   const [dirty, setDirty] = useState(false)
   const originalRef = useRef({ title: '', content: '' })
+  const baseVersionRef = useRef(null)
   const editorRef = useRef(null)
 
   // Preview state
@@ -37,6 +39,7 @@ export default function PageEdit() {
       setTitle(p.title)
       setContent(p.content_md)
       originalRef.current = { title: p.title, content: p.content_md }
+      baseVersionRef.current = p.version
     }).catch(() => {
       navigate('/')
     })
@@ -130,18 +133,67 @@ export default function PageEdit() {
     if (saving) return
     setSaving(true)
     setError('')
+    setConflict(null)
     try {
-      await updatePage(slug, { title, content_md: content })
+      const updated = await updatePage(slug, {
+        title,
+        content_md: content,
+        base_version: baseVersionRef.current,
+      })
+      baseVersionRef.current = updated.version
       await fetchTree()
       setDirty(false)
       setSaving(false)
       navigate(`/page/${slug}`)
     } catch (err) {
       console.error('Save failed:', err)
-      setError(err?.response?.data?.detail || err.message || 'Save failed')
+      if (err?.response?.status === 409) {
+        const detail = err.response.data?.detail
+        // Keep user's edits locally; surface a banner so they can decide.
+        setConflict({
+          currentVersion: detail?.current_version,
+          yourVersion: detail?.your_version,
+          message: detail?.message || 'This page was modified by someone else.',
+        })
+        setError('')
+      } else {
+        const detail = err?.response?.data?.detail
+        const msg = typeof detail === 'string' ? detail : detail?.message || err.message || 'Save failed'
+        setError(msg)
+      }
       setSaving(false)
     }
   }, [slug, title, content, saving, navigate, fetchTree, updatePage])
+
+  const handleReloadLatest = useCallback(async () => {
+    try {
+      const latest = await getPage(slug)
+      if (confirm('Discard your changes and load the latest version?')) {
+        setTitle(latest.title)
+        setContent(latest.content_md)
+        originalRef.current = { title: latest.title, content: latest.content_md }
+        baseVersionRef.current = latest.version
+        setConflict(null)
+        setDirty(false)
+      }
+    } catch (e) {
+      console.error('Failed to reload:', e)
+    }
+  }, [getPage, slug])
+
+  const handleOverwrite = useCallback(async () => {
+    if (!confirm('Overwrite the newer server version with your changes?')) return
+    // Fetch to get latest version number, then retry save with it.
+    try {
+      const latest = await getPage(slug)
+      baseVersionRef.current = latest.version
+      setConflict(null)
+      // Defer to next tick so baseVersionRef has settled before save.
+      setTimeout(() => handleSave(), 0)
+    } catch (e) {
+      console.error('Failed to overwrite:', e)
+    }
+  }, [getPage, slug, handleSave])
 
   // Ctrl+S handler
   useEffect(() => {
@@ -168,9 +220,40 @@ export default function PageEdit() {
           placeholder="Page title"
         />
       </div>
+      {page?.is_public && (
+        <div className="mb-3 px-3 py-2 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200 rounded-lg text-sm flex items-center gap-2">
+          <span role="img" aria-hidden="true">⚠</span>
+          <span>This page is publicly accessible. Any edit will be visible to the world.</span>
+        </div>
+      )}
       {error && (
         <div className="mb-3 px-3 py-2 bg-red-50 text-red-600 text-sm rounded-lg border border-red-200">
           {error}
+        </div>
+      )}
+      {conflict && (
+        <div className="mb-3 px-3 py-3 bg-amber-50 text-amber-900 text-sm rounded-lg border border-amber-300">
+          <div className="font-semibold mb-1">⚠ Edit conflict</div>
+          <div className="mb-2">
+            {conflict.message} (server version {conflict.currentVersion}, your version {conflict.yourVersion}).
+            Your changes are still here — choose an action:
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleReloadLatest}
+              className="px-3 py-1 bg-white border border-amber-400 text-amber-900 rounded hover:bg-amber-100"
+            >
+              Discard mine & load latest
+            </button>
+            <button
+              type="button"
+              onClick={handleOverwrite}
+              className="px-3 py-1 bg-amber-600 text-white rounded hover:bg-amber-700"
+            >
+              Overwrite with mine
+            </button>
+          </div>
         </div>
       )}
       <div className="text-xs text-text-secondary mb-3">Press Ctrl+S to save &middot; Type / for commands</div>

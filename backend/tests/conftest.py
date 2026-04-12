@@ -54,14 +54,20 @@ async def auth_user(db):
         user = {"id": user_id, "username": "testuser", "role": "user"}
     else:
         user = dict(rows[0])
-    
+
     token = create_token(user["id"], user["username"], user["role"])
     return {"user": user, "token": token}
 
 @pytest.fixture
-async def auth_client(client, auth_user):
-    client.headers.update({"Authorization": f"Bearer {auth_user['token']}"})
-    return client
+async def auth_client(auth_user):
+    # Each client fixture gets its own httpx session so Authorization headers
+    # don't collide when a test uses both auth_client and admin_client.
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"Authorization": f"Bearer {auth_user['token']}"},
+    ) as ac:
+        yield ac
 
 @pytest.fixture
 async def admin_user(db):
@@ -77,11 +83,15 @@ async def admin_user(db):
         user = {"id": user_id, "username": "admin", "role": "admin"}
     else:
         user = dict(rows[0])
-    
+
     token = create_token(user["id"], user["username"], user["role"])
     return {"user": user, "token": token}
 
 @pytest.fixture
-async def admin_client(client, admin_user):
-    client.headers.update({"Authorization": f"Bearer {admin_user['token']}"})
-    return client
+async def admin_client(admin_user):
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"Authorization": f"Bearer {admin_user['token']}"},
+    ) as ac:
+        yield ac

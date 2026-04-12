@@ -2,6 +2,10 @@
   <img src="docs/images/logo.png" alt="JustWiki Logo" width="480">
 </p>
 
+<p align="center">
+  <strong>English</strong> · <a href="README.zh.md">中文</a>
+</p>
+
 # JustWiki
 
 A lightweight, self-hosted wiki for small teams. Just clone, run, and write.

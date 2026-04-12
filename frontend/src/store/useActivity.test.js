@@ -14,7 +14,7 @@ import api from '../api/client'
 describe('useActivity Store', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    const { result } = renderHook(() => useActivity())
+    renderHook(() => useActivity())
     act(() => {
       // Reset state
       useActivity.setState({

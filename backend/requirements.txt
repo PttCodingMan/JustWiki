@@ -7,3 +7,4 @@ python-multipart>=0.0.9
 bcrypt>=4.1
 python-jose[cryptography]>=3.3
 pypinyin>=0.53
+httpx>=0.27

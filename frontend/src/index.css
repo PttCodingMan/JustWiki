@@ -3,22 +3,22 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-primary-soft: #eff6ff;
+  --color-primary: #7ea7d8;
+  --color-primary-hover: #6691c4;
+  --color-primary-soft: #eef4fb;
   --color-primary-text: #ffffff;
-  --color-accent: #3b82f6;
-  --color-sidebar: #f8fafc;
+  --color-accent: #a8c5e4;
+  --color-sidebar: #f6f8fc;
   --color-sidebar-dark: #1e293b;
-  --color-sidebar-hover: #f1f5f9;
-  --color-sidebar-active: #eff6ff;
-  --color-sidebar-active-text: #1d4ed8;
-  --color-bg: #f8fafc;
+  --color-sidebar-hover: #eef2f8;
+  --color-sidebar-active: #e6edf7;
+  --color-sidebar-active-text: #4d73a8;
+  --color-bg: #fafbfd;
   --color-surface: #ffffff;
-  --color-surface-hover: #f1f5f9;
-  --color-text: #1e293b;
-  --color-text-secondary: #64748b;
-  --color-border: #e2e8f0;
+  --color-surface-hover: #f2f6fa;
+  --color-text: #3e4b5e;
+  --color-text-secondary: #7a8798;
+  --color-border: #e6ecf4;
 }
 
 /* ── Theme Overrides ── */
@@ -279,10 +279,10 @@ body {
   padding: 0.75em 1em;
   margin: 1em 0;
 }
-.callout-info { border-color: #bfdbfe; background: #f0f7ff; }
-.callout-warning { border-color: #fde68a; background: #fffdf5; }
-.callout-tip { border-color: #a7f3d0; background: #f0fdf8; }
-.callout-danger { border-color: #fecaca; background: #fff5f5; }
+.callout-info { border-color: #d1e2f3; background: #f4f8fd; }
+.callout-warning { border-color: #f0dcb3; background: #fdf8eb; }
+.callout-tip { border-color: #c9e8d8; background: #f1faf5; }
+.callout-danger { border-color: #f0d0d0; background: #fdf4f4; }
 
 .callout-title {
   display: flex;
@@ -302,10 +302,10 @@ body {
 .callout-icon svg { width: 100%; height: 100%; }
 .callout-body { font-size: 0.92em; color: var(--color-text); }
 .callout-body p { margin: 0; }
-.callout-info .callout-title { color: #3b82f6; }
-.callout-warning .callout-title { color: #d97706; }
-.callout-tip .callout-title { color: #059669; }
-.callout-danger .callout-title { color: #dc2626; }
+.callout-info .callout-title { color: #6691c4; }
+.callout-warning .callout-title { color: #b88838; }
+.callout-tip .callout-title { color: #5c9478; }
+.callout-danger .callout-title { color: #b86a6a; }
 
 /* Slash command menu */
 .slash-menu {
@@ -407,7 +407,7 @@ body {
 
 /* Search highlights */
 mark {
-  background: #fef08a;
+  background: #fbefb8;
   color: inherit;
   padding: 0 2px;
   border-radius: 2px;
@@ -451,20 +451,20 @@ mark {
   height: auto;
 }
 .mermaid-loading {
-  color: #94a3b8;
+  color: #7a8798;
   font-style: italic;
   padding: 2em;
   text-align: center;
-  background: #f8fafc;
+  background: #f4f7fb;
   border-radius: 8px;
-  border: 1px dashed #e2e8f0;
+  border: 1px dashed #e6ecf4;
 }
 .mermaid-error {
-  color: #dc2626;
-  background: #fef2f2;
+  color: #b86a6a;
+  background: #fdf5f5;
   padding: 1em;
   border-radius: 8px;
-  border: 1px solid #fecaca;
+  border: 1px solid #f0d0d0;
   font-size: 0.85em;
 }
 
@@ -479,8 +479,8 @@ mark {
   display: inline;
 }
 .katex-error {
-  color: #dc2626;
-  background: #fef2f2;
+  color: #b86a6a;
+  background: #fdf5f5;
   padding: 0.15em 0.4em;
   border-radius: 3px;
   font-size: 0.85em;
@@ -489,7 +489,7 @@ mark {
 /* Draw.io embeds */
 .drawio-embed {
   margin: 1em 0;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e6ecf4;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -504,20 +504,20 @@ mark {
 .drawio-placeholder {
   padding: 2em;
   text-align: center;
-  color: #94a3b8;
+  color: #7a8798;
   font-style: italic;
-  background: #f8fafc;
+  background: #f4f7fb;
 }
 .drawio-error {
-  color: #dc2626;
-  background: #fef2f2;
+  color: #b86a6a;
+  background: #fdf5f5;
 }
 .drawio-clickable {
   cursor: pointer;
   transition: box-shadow 0.15s;
 }
 .drawio-clickable:hover {
-  box-shadow: 0 0 0 2px #3b82f6;
+  box-shadow: 0 0 0 2px #7ea7d8;
   border-radius: 8px;
 }
 
@@ -566,15 +566,15 @@ mark {
 .diagram-edit-preview {
   position: relative;
   background: white;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e6ecf4;
   border-radius: 8px;
   overflow: hidden;
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .diagram-edit-preview:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 1px #3b82f6;
+  border-color: #7ea7d8;
+  box-shadow: 0 0 0 1px #7ea7d8;
 }
 .diagram-edit-preview-svg {
   padding: 1em;
@@ -587,7 +587,7 @@ mark {
 .diagram-edit-preview-placeholder {
   padding: 2em;
   text-align: center;
-  color: #94a3b8;
+  color: #7a8798;
   font-style: italic;
 }
 .diagram-edit-preview-overlay {
@@ -596,7 +596,7 @@ mark {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(59, 130, 246, 0.08);
+  background: rgba(126, 167, 216, 0.12);
   opacity: 0;
   transition: opacity 0.15s;
 }
@@ -704,7 +704,7 @@ mark {
   border-bottom: none !important;
 }
 .transclusion-link:hover {
-  color: #2563eb !important;
+  color: #6691c4 !important;
 }
 .transclusion-content {
   padding: 1em;

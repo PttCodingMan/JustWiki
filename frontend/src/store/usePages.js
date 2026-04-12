@@ -31,12 +31,28 @@ const usePages = create((set) => ({
   },
 
   updatePage: async (slug, data) => {
+    // `data` may contain `base_version` for optimistic locking; the backend
+    // returns 409 if the server has a newer version than what the client holds.
     const res = await api.put(`/pages/${slug}`, data)
     return res.data
   },
 
   deletePage: async (slug) => {
     await api.delete(`/pages/${slug}`)
+  },
+
+  restorePage: async (slug) => {
+    const res = await api.post(`/trash/${slug}/restore`)
+    return res.data
+  },
+
+  purgePage: async (slug) => {
+    await api.delete(`/trash/${slug}`)
+  },
+
+  fetchTrash: async () => {
+    const res = await api.get('/trash')
+    return res.data
   },
 
   movePage: async (slug, parentId, sortOrder) => {

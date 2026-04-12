@@ -56,10 +56,10 @@ async def list_pages(
     db = await get_db()
     offset = (page - 1) * per_page
 
-    where = ""
+    where = "WHERE deleted_at IS NULL"
     params: list = []
     if parent_id is not None:
-        where = "WHERE parent_id = ?"
+        where += " AND parent_id = ?"
         params.append(parent_id)
 
     count_row = await db.execute_fetchall(
@@ -79,7 +79,7 @@ async def list_pages(
 async def page_tree(user=Depends(get_current_user)):
     db = await get_db()
     rows = await db.execute_fetchall(
-        "SELECT id, slug, title, parent_id, sort_order FROM pages ORDER BY sort_order, title"
+        "SELECT id, slug, title, parent_id, sort_order FROM pages WHERE deleted_at IS NULL ORDER BY sort_order, title"
     )
     all_pages = [dict(r) for r in rows]
 
@@ -95,11 +95,19 @@ async def page_tree(user=Depends(get_current_user)):
 @router.get("/graph")
 async def page_graph(user=Depends(get_current_user)):
     db = await get_db()
-    pages = await db.execute_fetchall("SELECT id, slug, title FROM pages")
+    pages = await db.execute_fetchall(
+        "SELECT id, slug, title FROM pages WHERE deleted_at IS NULL"
+    )
     nodes = [{"id": p["id"], "slug": p["slug"], "title": p["title"]} for p in pages]
 
+    # Only show links between live pages
+    live_ids = {p["id"] for p in pages}
     backlinks = await db.execute_fetchall("SELECT source_page_id, target_page_id FROM backlinks")
-    links = [{"source": b["source_page_id"], "target": b["target_page_id"]} for b in backlinks]
+    links = [
+        {"source": b["source_page_id"], "target": b["target_page_id"]}
+        for b in backlinks
+        if b["source_page_id"] in live_ids and b["target_page_id"] in live_ids
+    ]
 
     return {"nodes": nodes, "links": links}
 
@@ -119,8 +127,8 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
     slug = await unique_slug(db, slugify(body.title, body.slug))
 
     cursor = await db.execute(
-        """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, created_by)
-           VALUES (?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, version, created_by)
+           VALUES (?, ?, ?, ?, ?, 1, ?)""",
         (slug, body.title, content, body.parent_id, body.sort_order, user["id"]),
     )
     page_id = cursor.lastrowid
@@ -134,7 +142,13 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
     await db.commit()
 
     rows = await db.execute_fetchall("SELECT * FROM pages WHERE id = ?", (page_id,))
-    return dict(rows[0])
+    new_page = dict(rows[0])
+
+    # Fire notification
+    from app.services.notifications import notify_page_created
+    await notify_page_created(db, new_page, user)
+
+    return new_page
 
 
 @router.get("/{slug}", response_model=PageResponse)
@@ -144,13 +158,13 @@ async def get_page(slug: str, user=Depends(get_current_user)):
         """SELECT p.*, CASE WHEN u.display_name IS NOT NULL AND u.display_name != '' THEN u.display_name ELSE u.username END AS author_name
            FROM pages p
            LEFT JOIN users u ON u.id = p.created_by
-           WHERE p.slug = ?""",
+           WHERE p.slug = ? AND p.deleted_at IS NULL""",
         (slug,),
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
 
-    # Increment view count
+    # Increment view count (does not bump the content version)
     await db.execute(
         "UPDATE pages SET view_count = view_count + 1 WHERE slug = ?", (slug,)
     )
@@ -164,23 +178,50 @@ async def get_page(slug: str, user=Depends(get_current_user)):
 @router.put("/{slug}", response_model=PageResponse)
 async def update_page(slug: str, body: PageUpdate, user=Depends(get_current_user)):
     db = await get_db()
-    rows = await db.execute_fetchall("SELECT * FROM pages WHERE slug = ?", (slug,))
+    rows = await db.execute_fetchall(
+        "SELECT * FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    )
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
 
     current = dict(rows[0])
+
+    # Optimistic lock: if the client sent a base_version, it must match.
+    # Missing base_version is allowed for legacy API clients, but logged.
+    if body.base_version is not None and body.base_version != current["version"]:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "conflict",
+                "message": "This page was modified by someone else. Reload to see the latest version.",
+                "current_version": current["version"],
+                "your_version": body.base_version,
+            },
+        )
+
     title = body.title if body.title is not None else current["title"]
     content = body.content_md if body.content_md is not None else current["content_md"]
     parent_id = body.parent_id if "parent_id" in body.model_fields_set else current["parent_id"]
     sort_order = body.sort_order if body.sort_order is not None else current["sort_order"]
+    current_is_public = bool(current.get("is_public", 0))
+    is_public = body.is_public if body.is_public is not None else current_is_public
 
-    # Save current state as a version before updating
-    await save_version(db, current["id"], current["title"], current["content_md"], user["id"])
+    content_changed = body.content_md is not None and body.content_md != current["content_md"]
+    title_changed = body.title is not None and body.title != current["title"]
+    public_changed = body.is_public is not None and bool(body.is_public) != current_is_public
+
+    # Save current state as a version before updating (only if content/title actually changed).
+    # Publicity toggles are metadata, not content, so they don't create a version.
+    if content_changed or title_changed:
+        await save_version(db, current["id"], current["title"], current["content_md"], user["id"])
+
+    # is_public changes do NOT bump version (metadata, not content)
+    new_version = current["version"] + 1 if (content_changed or title_changed) else current["version"]
 
     await db.execute(
         """UPDATE pages SET title = ?, content_md = ?, parent_id = ?, sort_order = ?,
-           updated_at = CURRENT_TIMESTAMP WHERE slug = ?""",
-        (title, content, parent_id, sort_order, slug),
+           is_public = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?""",
+        (title, content, parent_id, sort_order, 1 if is_public else 0, new_version, slug),
     )
 
     # Update search index
@@ -188,22 +229,35 @@ async def update_page(slug: str, body: PageUpdate, user=Depends(get_current_user
     # Parse wikilinks → update backlinks
     await parse_and_update_backlinks(db, current["id"], content)
     # Log activity
-    await log_activity(db, user["id"], "updated", "page", current["id"], {"title": title, "slug": slug})
+    if content_changed or title_changed:
+        await log_activity(db, user["id"], "updated", "page", current["id"], {"title": title, "slug": slug})
+    if public_changed:
+        action = "made_public" if is_public else "made_private"
+        await log_activity(db, user["id"], action, "page", current["id"], {"title": title, "slug": slug})
     await db.commit()
 
     rows = await db.execute_fetchall("SELECT * FROM pages WHERE slug = ?", (slug,))
-    return dict(rows[0])
+    updated = dict(rows[0])
+
+    # Fire notifications if content/title actually changed
+    if content_changed or title_changed:
+        from app.services.notifications import notify_page_updated
+        await notify_page_updated(db, updated, user, {"title_changed": title_changed, "content_changed": content_changed})
+
+    return updated
 
 
 @router.get("/{slug}/children")
 async def get_children(slug: str, user=Depends(get_current_user)):
     db = await get_db()
-    rows = await db.execute_fetchall("SELECT id FROM pages WHERE slug = ?", (slug,))
+    rows = await db.execute_fetchall(
+        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    )
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = rows[0]["id"]
     children = await db.execute_fetchall(
-        "SELECT * FROM pages WHERE parent_id = ? ORDER BY sort_order, title",
+        "SELECT * FROM pages WHERE parent_id = ? AND deleted_at IS NULL ORDER BY sort_order, title",
         (page_id,),
     )
     return [dict(c) for c in children]
@@ -212,7 +266,9 @@ async def get_children(slug: str, user=Depends(get_current_user)):
 @router.get("/{slug}/backlinks")
 async def get_backlinks(slug: str, user=Depends(get_current_user)):
     db = await get_db()
-    rows = await db.execute_fetchall("SELECT id FROM pages WHERE slug = ?", (slug,))
+    rows = await db.execute_fetchall(
+        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    )
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = rows[0]["id"]
@@ -220,7 +276,7 @@ async def get_backlinks(slug: str, user=Depends(get_current_user)):
         """SELECT p.id, p.slug, p.title
            FROM backlinks b
            JOIN pages p ON p.id = b.source_page_id
-           WHERE b.target_page_id = ?
+           WHERE b.target_page_id = ? AND p.deleted_at IS NULL
            ORDER BY p.title""",
         (page_id,),
     )
@@ -230,7 +286,9 @@ async def get_backlinks(slug: str, user=Depends(get_current_user)):
 @router.patch("/{slug}/move")
 async def move_page(slug: str, body: PageMoveRequest, user=Depends(get_current_user)):
     db = await get_db()
-    rows = await db.execute_fetchall("SELECT id FROM pages WHERE slug = ?", (slug,))
+    rows = await db.execute_fetchall(
+        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    )
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
 
@@ -254,8 +312,15 @@ async def move_page(slug: str, body: PageMoveRequest, user=Depends(get_current_u
 
 @router.delete("/{slug}")
 async def delete_page(slug: str, user=Depends(get_current_user)):
+    """Soft-delete a page. Moves it to the trash; it can be restored from there.
+
+    Hard-deleting (purging) happens via DELETE /api/trash/{slug}, admin only.
+    """
     db = await get_db()
-    rows = await db.execute_fetchall("SELECT id, title, created_by FROM pages WHERE slug = ?", (slug,))
+    rows = await db.execute_fetchall(
+        "SELECT id, title, created_by FROM pages WHERE slug = ? AND deleted_at IS NULL",
+        (slug,),
+    )
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
 
@@ -266,11 +331,19 @@ async def delete_page(slug: str, user=Depends(get_current_user)):
     page_id = rows[0]["id"]
     page_title = rows[0]["title"]
 
-    # Remove from search index
+    # Soft delete: mark as deleted but keep the row, versions, and backlinks intact.
+    await db.execute(
+        "UPDATE pages SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?", (page_id,)
+    )
+    # Remove from search index so deleted pages don't appear in search
     await remove_from_search_index(db, page_id)
     # Log activity
     await log_activity(db, user["id"], "deleted", "page", page_id, {"title": page_title, "slug": slug})
 
-    await db.execute("DELETE FROM pages WHERE slug = ?", (slug,))
     await db.commit()
+
+    # Fire notification
+    from app.services.notifications import notify_page_deleted
+    await notify_page_deleted(db, {"id": page_id, "title": page_title, "slug": slug}, user)
+
     return {"ok": True}

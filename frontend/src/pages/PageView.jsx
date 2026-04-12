@@ -5,6 +5,7 @@ import useTags from '../store/useTags'
 import useBookmarks from '../store/useBookmarks'
 import MarkdownViewer from '../components/Viewer/MarkdownViewer'
 import Comments from '../components/Comments'
+import ConfirmDialog from '../components/ConfirmDialog'
 import api from '../api/client'
 
 export default function PageView() {
@@ -16,11 +17,36 @@ export default function PageView() {
   const [page, setPage] = useState(null)
   const [loading, setLoading] = useState(true)
   const [bookmarked, setBookmarked] = useState(false)
+  const [watching, setWatching] = useState(false)
+  const [watcherCount, setWatcherCount] = useState(0)
   const [newTag, setNewTag] = useState('')
   const [showTagInput, setShowTagInput] = useState(false)
   const [backlinks, setBacklinks] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
+  const [publicMenuOpen, setPublicMenuOpen] = useState(false)
+  const publicMenuRef = useRef(null)
+  const [publicConfirmOpen, setPublicConfirmOpen] = useState(false)
+  const [toast, setToast] = useState('')
+
+  // Close public menu on outside click
+  useEffect(() => {
+    if (!publicMenuOpen) return
+    const handleClick = (e) => {
+      if (publicMenuRef.current && !publicMenuRef.current.contains(e.target)) {
+        setPublicMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [publicMenuOpen])
+
+  // Auto-dismiss toast after 2.5s
+  useEffect(() => {
+    if (!toast) return
+    const id = setTimeout(() => setToast(''), 2500)
+    return () => clearTimeout(id)
+  }, [toast])
 
   // Close menu on outside click
   useEffect(() => {
@@ -35,27 +61,47 @@ export default function PageView() {
   useEffect(() => {
     let cancelled = false
     const load = async () => {
+      setLoading(true)
       try {
-        const [pageData, , isBookmarked, backlinksRes] = await Promise.all([
+        const [pageData, , isBookmarked, backlinksRes, watchRes] = await Promise.all([
           getPage(slug),
           fetchPageTags(slug),
           checkBookmark(slug),
           api.get(`/pages/${slug}/backlinks`).catch(() => ({ data: [] })),
+          api.get(`/pages/${slug}/watch`).catch(() => ({ data: { watching: false, watcher_count: 0 } })),
         ])
         if (!cancelled) {
           setPage(pageData)
           setBookmarked(isBookmarked)
+          setWatching(watchRes.data.watching)
+          setWatcherCount(watchRes.data.watcher_count || 0)
           setBacklinks(Array.isArray(backlinksRes.data) ? backlinksRes.data : (backlinksRes.data?.items || []))
-          setLoading(false)
         }
       } catch {
         if (!cancelled) navigate('/')
+      } finally {
+        if (!cancelled) setLoading(false)
       }
     }
-    setLoading(true)
     load()
     return () => { cancelled = true }
-  }, [slug])
+  }, [slug, getPage, fetchPageTags, checkBookmark, navigate])
+
+  const handleToggleWatch = async () => {
+    try {
+      if (watching) {
+        await api.delete(`/pages/${slug}/watch`)
+        setWatching(false)
+        setWatcherCount((c) => Math.max(0, c - 1))
+      } else {
+        await api.post(`/pages/${slug}/watch`)
+        setWatching(true)
+        setWatcherCount((c) => c + 1)
+      }
+    } catch (err) {
+      console.error('Toggle watch failed:', err)
+    }
+  }
 
   const handleDelete = async () => {
     if (!confirm(`Delete "${page.title}"?`)) return
@@ -86,19 +132,100 @@ export default function PageView() {
     await removeTag(slug, tagName)
   }
 
+  const handleCopyPublicLink = async () => {
+    const link = `${window.location.origin}/page/${slug}`
+    try {
+      await navigator.clipboard.writeText(link)
+      setToast('Public link copied')
+    } catch {
+      setToast(link)
+    }
+    setPublicMenuOpen(false)
+  }
+
+  const handleMakePrivate = async () => {
+    try {
+      await api.put(`/pages/${slug}`, { is_public: false })
+      setPage((p) => ({ ...p, is_public: false }))
+      setToast('Page is now private')
+    } catch (err) {
+      console.error('Failed to make private:', err)
+      setToast('Failed to update visibility')
+    }
+    setPublicMenuOpen(false)
+  }
+
+  const handleMakePublic = async () => {
+    try {
+      await api.put(`/pages/${slug}`, { is_public: true })
+      setPage((p) => ({ ...p, is_public: true }))
+      setToast('Page is now public')
+    } catch (err) {
+      console.error('Failed to make public:', err)
+      setToast('Failed to update visibility')
+    }
+    setPublicConfirmOpen(false)
+  }
+
   if (loading) return <div className="text-text-secondary">Loading...</div>
   if (!page) return null
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
         <h1 className="text-2xl font-bold text-text">{page.title}</h1>
+        {page.is_public && (
+          <div className="relative" ref={publicMenuRef}>
+            <button
+              onClick={() => setPublicMenuOpen((v) => !v)}
+              className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700 rounded-full hover:brightness-95"
+              title="This page is public — click for options"
+            >
+              <span role="img" aria-hidden="true">🌐</span> Public
+              <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+            {publicMenuOpen && (
+              <div className="absolute left-0 top-full mt-1 w-48 bg-surface border border-border rounded-lg shadow-lg py-1 z-50">
+                <button
+                  onClick={handleCopyPublicLink}
+                  className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover"
+                >
+                  Copy public link
+                </button>
+                <button
+                  onClick={handleMakePrivate}
+                  className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover"
+                >
+                  Make private
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         <button
           onClick={handleToggleBookmark}
           className={`text-xl transition-colors ${bookmarked ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-400'}`}
           title={bookmarked ? 'Remove bookmark' : 'Add bookmark'}
         >
           {bookmarked ? '\u2605' : '\u2606'}
+        </button>
+        <button
+          onClick={handleToggleWatch}
+          className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-colors ${
+            watching
+              ? 'bg-primary-soft text-primary border-primary/40'
+              : 'text-text-secondary border-border hover:border-text-secondary'
+          }`}
+          title={watching ? 'Unwatch this page' : 'Watch this page for changes'}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          {watching ? 'Watching' : 'Watch'}
+          {watcherCount > 0 && <span className="text-text-secondary">({watcherCount})</span>}
         </button>
       </div>
 
@@ -204,6 +331,18 @@ export default function PageView() {
                 </svg>
                 History
               </button>
+              {!page.is_public && (
+                <button
+                  onClick={() => { setMenuOpen(false); setPublicConfirmOpen(true) }}
+                  className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20" />
+                  </svg>
+                  Make public
+                </button>
+              )}
               <div className="border-t border-border my-1" />
               <button
                 onClick={() => {
@@ -243,6 +382,27 @@ export default function PageView() {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={publicConfirmOpen}
+        title="Make this page public?"
+        description={
+          <>
+            <div className="font-medium text-text mb-1">&quot;{page.title}&quot;</div>
+            <div>You can switch it back to private at any time.</div>
+          </>
+        }
+        confirmLabel="Make public"
+        cancelLabel="Cancel"
+        onConfirm={handleMakePublic}
+        onCancel={() => setPublicConfirmOpen(false)}
+      />
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-surface border border-border text-text text-sm px-4 py-2 rounded-lg shadow-lg z-[90]">
+          {toast}
+        </div>
+      )}
     </div>
   )
 }

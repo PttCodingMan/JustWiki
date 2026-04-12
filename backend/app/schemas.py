@@ -33,6 +33,8 @@ class PageUpdate(BaseModel):
     content_md: Optional[str] = None
     parent_id: Optional[int] = None
     sort_order: Optional[int] = None
+    is_public: Optional[bool] = None
+    base_version: Optional[int] = None  # for optimistic locking
 
 
 class PageMoveRequest(BaseModel):
@@ -48,10 +50,21 @@ class PageResponse(BaseModel):
     parent_id: Optional[int] = None
     sort_order: int = 0
     view_count: int = 0
+    version: int = 1
+    is_public: bool = False
     created_by: Optional[int] = None
     author_name: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+
+class PublicPageResponse(BaseModel):
+    slug: str
+    title: str
+    content_md: str
+    updated_at: Optional[str] = None
+    author_name: Optional[str] = None
+    diagrams: dict[str, str] = {}
 
 
 class PageListResponse(BaseModel):

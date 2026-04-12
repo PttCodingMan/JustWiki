@@ -3,7 +3,7 @@ import useAuth from '../store/useAuth'
 import api from '../api/client'
 
 export default function Profile() {
-  const { user, checkAuth } = useAuth()
+  const { checkAuth } = useAuth()
   const [profile, setProfile] = useState(null)
   const [form, setForm] = useState({ display_name: '', email: '' })
   const [saving, setSaving] = useState(false)

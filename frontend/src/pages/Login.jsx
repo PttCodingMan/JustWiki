@@ -1,6 +1,15 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import useAuth from '../store/useAuth'
+
+// Only same-origin paths are allowed as a post-login destination. Refuse
+// protocol-relative ("//evil.com") or absolute URLs so a crafted link can't
+// redirect the user off-site after login.
+function safeRedirect(raw) {
+  if (!raw || typeof raw !== 'string') return '/'
+  if (!raw.startsWith('/') || raw.startsWith('//')) return '/'
+  return raw
+}
 
 export default function Login() {
   const [username, setUsername] = useState('')
@@ -8,13 +17,14 @@ export default function Login() {
   const [error, setError] = useState('')
   const { login } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     try {
       await login(username, password)
-      navigate('/')
+      navigate(safeRedirect(searchParams.get('redirect')))
     } catch {
       setError('Invalid username or password')
     }
