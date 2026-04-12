@@ -24,13 +24,22 @@ jobs:
         run: |
           cd backend
           uv venv
-          uv pip install -r requirements.txt -r requirements-dev.txt
+          uv pip install -r requirements.txt -r requirements-dev.txt pytest-cov
           
-      - name: Run tests
+      - name: Run tests with coverage
         run: |
           cd backend
           source .venv/bin/activate
-          pytest
+          export PYTHONPATH=$PYTHONPATH:.
+          pytest --cov=app --cov-report=xml
+          
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./backend/coverage.xml
+          flags: backend
+          token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
 
   frontend-tests:
     runs-on: ubuntu-latest
@@ -48,14 +57,21 @@ jobs:
         run: |
           cd frontend
           npm ci
-          npm install -D vitest jsdom @testing-library/react @testing-library/jest-dom @testing-library/dom
           
       - name: Lint
         run: |
           cd frontend
           npm run lint
           
-      - name: Run tests
+      - name: Run tests with coverage
         run: |
           cd frontend
-          npm test
+          npm test -- --coverage
+          
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./frontend/coverage/clover.xml
+          flags: frontend
+          token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
