@@ -8,3 +8,6 @@ dist/
 .env
 *.egg-info/
 .DS_Store
+.venv*
+*.coverage
+.claude

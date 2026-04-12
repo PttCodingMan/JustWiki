@@ -229,9 +229,6 @@ function simpleMarkdown(text) {
   // Restore <br/> tags
   html = html.replace(/&lt;br\s*\/?\s*&gt;/g, '<br />')
 
-  // Restore code blocks from placeholders
-  html = html.replace(/%%CODEBLOCK_(\d+)%%/g, (_, i) => codeBlocks[parseInt(i)])
-
   // Callouts before other processing
   html = parseCallouts(html)
 
@@ -288,7 +285,10 @@ function simpleMarkdown(text) {
   )
 
   // Paragraphs — wrap remaining text lines
-  html = html.replace(/^(?!<[a-z/])((?!^\s*$).+)$/gm, '<p>$1</p>')
+  html = html.replace(/^(?!<[a-z/])(?!%%CODEBLOCK)((?!^\s*$).+)$/gm, '<p>$1</p>')
+
+  // Restore code blocks from placeholders (after all markdown processing)
+  html = html.replace(/%%CODEBLOCK_(\d+)%%/g, (_, i) => codeBlocks[parseInt(i)])
 
   // Clean up empty lines
   html = html.replace(/\n{3,}/g, '\n\n')

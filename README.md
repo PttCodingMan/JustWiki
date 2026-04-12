@@ -13,9 +13,17 @@ A lightweight, self-hosted wiki for small teams. Just clone, run, and write.
 - **Full-text search** — FTS5 powered, with optional AI Q&A (Gemini)
 - **Version history** — page revisions with diff view
 - **Draw.io integration** — embedded diagram editor
-- **Themes** — multiple built-in themes
+- **Themes** — 9 built-in color palettes ([preview](#themes))
 - **PWA ready** — installable on mobile and desktop
 - **Docker support** — `docker-compose up` and done
+
+## Themes
+
+<p align="center">
+  <img src="docs/images/themes.png" alt="9 built-in themes: Light, Dark, Lavender, Forest, Rose, Ocean, Sand, Sunset, Nord" width="100%">
+</p>
+
+Nine curated palettes ship out of the box — **Light, Dark, Lavender, Forest, Rose, Ocean, Sand, Sunset, Nord**. Switch any time from the top-right theme picker; your choice is remembered per browser.
 
 ## Tech Stack
 
@@ -76,6 +84,32 @@ make docker-up      # docker-compose up -d
 make docker-down    # docker-compose down
 make setup          # First-time setup (install deps, create .env)
 ```
+
+## Slash Commands
+
+<p align="center">
+  <img src="docs/images/slash-commands.png" alt="Type / in the editor to open the slash command menu" width="80%">
+</p>
+
+In the editor, type `/` to open the slash menu. You can filter by typing after the slash.
+
+| Command | Description |
+| ------- | ----------- |
+| `/h1` | Heading 1 — big section heading |
+| `/h2` | Heading 2 — medium section heading |
+| `/h3` | Heading 3 — small section heading |
+| `/bullet` | Bullet List — unordered list |
+| `/ordered` | Ordered List — numbered list |
+| `/quote` | Blockquote — quote block |
+| `/code` | Code Block — code snippet |
+| `/hr` | Divider — horizontal rule |
+| `/callout-info` | Info Callout — `:::info` block |
+| `/callout-warning` | Warning Callout — `:::warning` block |
+| `/callout-tip` | Tip Callout — `:::tip` block |
+| `/callout-danger` | Danger Callout — `:::danger` block |
+| `/mermaid` | Mermaid Diagram — insert mermaid chart |
+| `/math` | Math Formula — KaTeX math block |
+| `/drawio` | Draw.io Diagram — insert Draw.io embed |
 
 ## Project Structure
 

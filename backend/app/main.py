@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import init_db, close_db
+from app.database import init_db, close_db, seed_welcome_page, get_db
 from app.auth import ensure_admin_exists
 from app.routers import auth_router, pages, media, templates, search, tags, activity, bookmarks, versions, diagrams, users, comments, backup, export
 
@@ -41,6 +41,8 @@ async def lifespan(app: FastAPI):
     _check_security()
     await init_db()
     await ensure_admin_exists()
+    db = await get_db()
+    await seed_welcome_page(db)
     yield
     await close_db()
 
