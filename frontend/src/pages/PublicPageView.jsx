@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import publicApi from '../api/publicClient'
 import MarkdownViewer from '../components/Viewer/MarkdownViewer'
 import ThemeSwitcher from '../components/ThemeSwitcher'
@@ -17,6 +17,8 @@ import ThemeSwitcher from '../components/ThemeSwitcher'
  */
 export default function PublicPageView({ notFound }) {
   const { slug } = useParams()
+  const location = useLocation()
+  const loginHref = `/login?redirect=${encodeURIComponent(location.pathname + location.search)}`
   const [state, setState] = useState({ status: 'loading', slug: null, page: null })
   const reqIdRef = useRef(0)
 
@@ -83,7 +85,15 @@ export default function PublicPageView({ notFound }) {
     <div className="min-h-screen bg-bg text-text flex flex-col">
       <header className="flex justify-between items-center px-6 py-3 border-b border-border">
         <div className="text-sm font-semibold text-text">JustWiki</div>
-        <ThemeSwitcher />
+        <div className="flex items-center gap-3">
+          <ThemeSwitcher />
+          <Link
+            to={loginHref}
+            className="text-sm px-3 py-1.5 rounded-md bg-primary text-primary-text hover:bg-primary-hover transition-colors"
+          >
+            Login
+          </Link>
+        </div>
       </header>
       <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-8 py-8">
         <h1 className="text-3xl font-bold text-text mb-2">{page.title}</h1>

@@ -61,7 +61,7 @@ Schema auto-migrates on startup in `database.py`.
 
 ### Wikilinks
 
-Format: `[[slug]]` or `[[slug|display text]]`. Parsed on both backend (backlink tracking in `backlinks` table via `services/wikilink.py`) and frontend (navigation in viewer). Slug generation uses `pypinyin` for Chinese characters.
+Format: `[[slug]]` or `[[slug|display text]]`. Parsed on both backend (backlink tracking in `backlinks` table via `services/wikilink.py`) and frontend (navigation in viewer). Auto-generated slugs preserve CJK characters (Python 3 `\w` matches Unicode letters), so Chinese/Japanese/Korean titles appear in URLs as-is.
 
 ## API Structure
 

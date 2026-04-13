@@ -3,9 +3,10 @@ from app.routers.pages import slugify
 
 def test_slugify():
     assert slugify("Hello World") == "hello-world"
-    assert slugify("測試標題") == "ce-shi-biao-ti"
-    assert slugify("Mixed Title 測試") == "mixed-title-ce-shi"
+    assert slugify("測試標題") == "測試標題"
+    assert slugify("Mixed Title 測試") == "mixed-title-測試"
     assert slugify("!@#$%^&*()") == "untitled"
+    assert slugify("中文 標題！with 英文") == "中文-標題with-英文"
 
 @pytest.mark.asyncio
 async def test_unique_slug_collision(auth_client):

@@ -13,20 +13,15 @@ router = APIRouter(prefix="/api/pages", tags=["pages"])
 
 
 def slugify(title: str, existing_slug: str | None = None) -> str:
-    """Generate a URL-friendly slug from title. Supports Chinese via pypinyin."""
+    """Generate a URL-friendly slug from title. Preserves CJK characters so
+    Chinese/Japanese/Korean titles show up in the URL as-is rather than pinyin."""
     if existing_slug:
         return existing_slug
 
-    try:
-        from pypinyin import lazy_pinyin
-
-        parts = lazy_pinyin(title)
-        text = "-".join(parts)
-    except ImportError:
-        text = title
-
-    text = unicodedata.normalize("NFKD", text)
-    text = text.lower().strip()
+    text = unicodedata.normalize("NFKC", title)
+    text = text.strip().lower()
+    # In Python 3 str regex, \w matches Unicode word characters including CJK,
+    # so this strips punctuation while keeping letters from any script.
     text = re.sub(r"[^\w\s-]", "", text)
     text = re.sub(r"[-\s]+", "-", text)
     text = text.strip("-")
