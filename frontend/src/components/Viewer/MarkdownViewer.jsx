@@ -28,6 +28,7 @@ export default function MarkdownViewer({
   onDiagramClick,
   publicMode = false,
   diagrams = EMPTY_DIAGRAMS,
+  onHeadings,
 }) {
   const html = useMemo(
     () =>
@@ -75,6 +76,18 @@ export default function MarkdownViewer({
   useLayoutEffect(() => {
     if (containerRef.current) containerRef.current.innerHTML = html
   }, [html])
+
+  // Extract h1-h3 headings for the TOC. Runs after DOM is populated.
+  useEffect(() => {
+    if (!onHeadings || !containerRef.current) return
+    const nodes = containerRef.current.querySelectorAll('h1[id], h2[id], h3[id]')
+    const items = Array.from(nodes).map((el) => ({
+      id: el.id,
+      level: Number(el.tagName.slice(1)),
+      text: el.textContent || '',
+    }))
+    onHeadings(items)
+  }, [html, onHeadings])
 
   const handleClick = useCallback(
     (e) => {

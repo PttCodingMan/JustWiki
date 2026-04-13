@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import usePages from '../store/usePages'
 import api from '../api/client'
 import Editor from '../components/Editor/Editor'
+import MediaPickerModal from '../components/Editor/MediaPickerModal'
 import DrawioModal from '../components/DrawioModal'
 import useUnsavedWarning from '../hooks/useUnsavedWarning'
 
@@ -26,6 +27,16 @@ export default function NewPage() {
 
   const handleDrawioOpen = useCallback(() => {
     setDrawioOpen(true)
+  }, [])
+
+  // Media picker state
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false)
+  const handleMediaPickerOpen = useCallback(() => setMediaPickerOpen(true), [])
+  const handleMediaPickerClose = useCallback(() => setMediaPickerOpen(false), [])
+  const handleMediaInsert = useCallback((snippet) => {
+    if (editorRef.current) {
+      editorRef.current.insertText(`\n${snippet}\n`)
+    }
   }, [])
 
   const handleDrawioSave = useCallback(async ({ xml, svg }) => {
@@ -189,7 +200,14 @@ export default function NewPage() {
         </div>
       )}
       <div className="bg-surface rounded-xl shadow-sm border border-border min-h-[500px]">
-        <Editor key={editorKey} ref={editorRef} defaultValue={content} onChange={setContent} onDrawioOpen={handleDrawioOpen} />
+        <Editor
+          key={editorKey}
+          ref={editorRef}
+          defaultValue={content}
+          onChange={setContent}
+          onDrawioOpen={handleDrawioOpen}
+          onMediaPickerOpen={handleMediaPickerOpen}
+        />
       </div>
 
       <DrawioModal
@@ -197,6 +215,12 @@ export default function NewPage() {
         xml=""
         onSave={handleDrawioSave}
         onClose={handleDrawioClose}
+      />
+
+      <MediaPickerModal
+        open={mediaPickerOpen}
+        onClose={handleMediaPickerClose}
+        onInsert={handleMediaInsert}
       />
     </div>
   )

@@ -195,6 +195,37 @@ function drawioRule(state, silent) {
   return true
 }
 
+// CJK-safe slugify — preserves Unicode letters (so Chinese/Japanese/Korean
+// headings get readable anchor ids). Spaces collapse to `-`, punctuation
+// drops. Intentionally not lowercased because CJK has no case.
+function slugifyHeading(text) {
+  return text
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\p{L}\p{N}\-_]/gu, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase()
+}
+
+// ── Core rule: inject unique id attrs on heading_open tokens so the TOC
+// can jump to them via anchor scrolling.
+function headingIdsRule(state) {
+  const used = new Set()
+  for (let i = 0; i < state.tokens.length; i++) {
+    const tok = state.tokens[i]
+    if (tok.type !== 'heading_open') continue
+    const inline = state.tokens[i + 1]
+    if (!inline || inline.type !== 'inline') continue
+    const base = slugifyHeading(inline.content) || 'section'
+    let slug = base
+    let n = 1
+    while (used.has(slug)) slug = `${base}-${n++}`
+    used.add(slug)
+    tok.attrSet('id', slug)
+  }
+}
+
 // ── Core rule: promote `- [ ]` / `- [x]` paragraphs inside list items
 // to rendered checkboxes. Runs after inline tokenization.
 //
@@ -310,6 +341,9 @@ export function createMarkdown() {
 
   // Task lists — core rule that runs once the full token list exists
   md.core.ruler.after('inline', 'task_lists', taskListRule)
+
+  // Heading ids — after inline so inline.content is populated
+  md.core.ruler.after('inline', 'heading_ids', headingIdsRule)
 
   // Open external links in a new tab (relative/wiki links kept as-is)
   const defaultLinkOpen =

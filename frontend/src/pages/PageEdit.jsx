@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import DOMPurify from 'dompurify'
 import usePages from '../store/usePages'
 import Editor from '../components/Editor/Editor'
+import MediaPickerModal from '../components/Editor/MediaPickerModal'
 import MarkdownViewer from '../components/Viewer/MarkdownViewer'
 import DrawioModal from '../components/DrawioModal'
 import useUnsavedWarning from '../hooks/useUnsavedWarning'
@@ -31,6 +32,16 @@ export default function PageEdit() {
   const [drawioOpen, setDrawioOpen] = useState(false)
   const [editingDiagram, setEditingDiagram] = useState(null) // { id, xml } or null for new
   const [diagrams, setDiagrams] = useState({}) // id -> diagram data
+
+  // Media picker state
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false)
+  const handleMediaPickerOpen = useCallback(() => setMediaPickerOpen(true), [])
+  const handleMediaPickerClose = useCallback(() => setMediaPickerOpen(false), [])
+  const handleMediaInsert = useCallback((snippet) => {
+    if (editorRef.current) {
+      editorRef.current.insertText(`\n${snippet}\n`)
+    }
+  }, [])
 
   useUnsavedWarning(dirty)
 
@@ -261,6 +272,7 @@ export default function PageEdit() {
               defaultValue={content}
               onChange={setContent}
               onDrawioOpen={handleDrawioOpen}
+              onMediaPickerOpen={handleMediaPickerOpen}
             />
           </div>
 
@@ -340,6 +352,12 @@ export default function PageEdit() {
         xml={editingDiagram?.xml || ''}
         onSave={handleDrawioSave}
         onClose={handleDrawioClose}
+      />
+
+      <MediaPickerModal
+        open={mediaPickerOpen}
+        onClose={handleMediaPickerClose}
+        onInsert={handleMediaInsert}
       />
     </div>
   )

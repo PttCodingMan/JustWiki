@@ -1,6 +1,14 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
+import { Link } from 'react-router-dom'
 import useAuth from '../store/useAuth'
 import api from '../api/client'
+
+function formatBytes(bytes) {
+  if (!bytes && bytes !== 0) return '-'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
 
 function BackupSection() {
   const [restoring, setRestoring] = useState(false)
@@ -216,6 +224,190 @@ function UsersSection() {
   )
 }
 
+function MediaLibrarySection() {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [expanded, setExpanded] = useState(() => new Set())
+  const [copied, setCopied] = useState(null)
+
+  const loadMedia = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await api.get('/media')
+      setItems(Array.isArray(res.data) ? res.data : [])
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to load media')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadMedia()
+  }, [])
+
+  const handleDelete = async (item) => {
+    if (item.reference_count > 0) return
+    if (!confirm(`Delete "${item.original_name}"? This cannot be undone.`)) return
+    try {
+      await api.delete(`/media/${item.id}`)
+      setItems((prev) => prev.filter((m) => m.id !== item.id))
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Failed to delete media')
+    }
+  }
+
+  const toggleExpanded = (id) => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const copyMarkdown = async (item) => {
+    const snippet = item.mime_type?.startsWith('image/')
+      ? `![${item.original_name}](${item.url})`
+      : `[${item.original_name}](${item.url})`
+    try {
+      await navigator.clipboard.writeText(snippet)
+      setCopied(item.id)
+      setTimeout(() => setCopied((c) => (c === item.id ? null : c)), 1500)
+    } catch {
+      alert(`Copy failed. Markdown:\n${snippet}`)
+    }
+  }
+
+  const totalSize = items.reduce((sum, m) => sum + (m.size_bytes || 0), 0)
+  const unused = items.filter((m) => m.reference_count === 0).length
+
+  return (
+    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-text">Media Library</h2>
+        <button
+          onClick={loadMedia}
+          className="px-3 py-1.5 bg-surface-hover border border-border text-text rounded-lg text-sm hover:bg-surface-active"
+        >
+          Refresh
+        </button>
+      </div>
+
+      <p className="text-sm text-text-secondary mb-4">
+        {items.length} files · {formatBytes(totalSize)} total · {unused} unused
+      </p>
+
+      {loading && <p className="text-sm text-text-secondary">Loading...</p>}
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      {!loading && !error && items.length === 0 && (
+        <p className="text-sm text-text-secondary">No uploaded media yet.</p>
+      )}
+
+      {!loading && !error && items.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">Preview</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">File</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">Size</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">Used by</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">Uploaded</th>
+                <th className="text-right py-2 px-3 text-text-secondary font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => {
+                const isImage = item.mime_type?.startsWith('image/')
+                const isExpanded = expanded.has(item.id)
+                const hasRefs = item.reference_count > 0
+                return (
+                  <Fragment key={item.id}>
+                    <tr className="border-b border-border align-top">
+                      <td className="py-2 px-3">
+                        {isImage ? (
+                          <a href={item.url} target="_blank" rel="noreferrer">
+                            <img src={item.url} alt={item.original_name} className="h-10 w-10 object-cover rounded border border-border" />
+                          </a>
+                        ) : (
+                          <a href={item.url} target="_blank" rel="noreferrer" className="text-text-secondary text-xs">
+                            {item.mime_type || 'file'}
+                          </a>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 text-text">
+                        <div className="truncate max-w-[220px]" title={item.original_name}>{item.original_name}</div>
+                        <div className="text-xs text-text-secondary truncate max-w-[220px]" title={item.filename}>{item.filename}</div>
+                      </td>
+                      <td className="py-2 px-3 text-text-secondary">{formatBytes(item.size_bytes)}</td>
+                      <td className="py-2 px-3">
+                        {hasRefs ? (
+                          <button
+                            onClick={() => toggleExpanded(item.id)}
+                            className="text-primary hover:underline"
+                          >
+                            {item.reference_count} page{item.reference_count === 1 ? '' : 's'}
+                          </button>
+                        ) : (
+                          <span className="text-text-secondary">unused</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 text-text-secondary">
+                        <div>{item.uploaded_by_name || '-'}</div>
+                        <div className="text-xs">{item.uploaded_at ? new Date(item.uploaded_at).toLocaleDateString() : ''}</div>
+                      </td>
+                      <td className="py-2 px-3 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => copyMarkdown(item)}
+                          className="text-text-secondary hover:text-text text-sm mr-3"
+                          title="Copy markdown snippet to paste elsewhere"
+                        >
+                          {copied === item.id ? 'Copied!' : 'Copy'}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item)}
+                          disabled={hasRefs}
+                          className="text-red-500 hover:text-red-700 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                          title={hasRefs ? 'Cannot delete — media is referenced by a live page' : 'Delete media'}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                    {isExpanded && hasRefs && (
+                      <tr className="border-b border-border bg-surface-hover">
+                        <td colSpan={6} className="py-2 px-3">
+                          <div className="text-xs text-text-secondary mb-1">Referenced by:</div>
+                          <ul className="flex flex-wrap gap-2">
+                            {item.referenced_pages.map((p) => (
+                              <li key={p.id}>
+                                <Link
+                                  to={`/page/${p.slug}`}
+                                  className="text-primary hover:underline text-sm"
+                                >
+                                  {p.title}
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Admin() {
   const { user } = useAuth()
 
@@ -227,6 +419,7 @@ export default function Admin() {
     <div className="max-w-4xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-text">Admin</h1>
       <UsersSection />
+      <MediaLibrarySection />
       <BackupSection />
       <ExportSection />
     </div>

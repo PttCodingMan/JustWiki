@@ -6,6 +6,7 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.services.search import rebuild_search_index, remove_from_search_index
 from app.services.wikilink import parse_and_update_backlinks
+from app.services.media_ref import parse_and_update_media_refs
 from app.routers.activity import log_activity
 from app.routers.versions import save_version
 
@@ -132,6 +133,8 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
     await rebuild_search_index(db, page_id, body.title, content)
     # Parse wikilinks → update backlinks
     await parse_and_update_backlinks(db, page_id, content)
+    # Parse media URLs → update media_references
+    await parse_and_update_media_refs(db, page_id, content)
     # Log activity
     await log_activity(db, user["id"], "created", "page", page_id, {"title": body.title, "slug": slug})
     await db.commit()
@@ -223,6 +226,8 @@ async def update_page(slug: str, body: PageUpdate, user=Depends(get_current_user
     await rebuild_search_index(db, current["id"], title, content)
     # Parse wikilinks → update backlinks
     await parse_and_update_backlinks(db, current["id"], content)
+    # Parse media URLs → update media_references
+    await parse_and_update_media_refs(db, current["id"], content)
     # Log activity
     if content_changed or title_changed:
         await log_activity(db, user["id"], "updated", "page", current["id"], {"title": title, "slug": slug})

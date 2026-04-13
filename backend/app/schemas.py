@@ -109,6 +109,26 @@ class MediaResponse(BaseModel):
     url: str = ""
 
 
+class MediaReferencedPage(BaseModel):
+    id: int
+    slug: str
+    title: str
+
+
+class MediaListItem(BaseModel):
+    id: int
+    filename: str
+    original_name: str
+    mime_type: str
+    size_bytes: Optional[int] = None
+    uploaded_by: Optional[int] = None
+    uploaded_by_name: Optional[str] = None
+    uploaded_at: Optional[str] = None
+    url: str = ""
+    reference_count: int = 0
+    referenced_pages: list[MediaReferencedPage] = []
+
+
 # ── Diagrams ──
 class DiagramCreate(BaseModel):
     name: str

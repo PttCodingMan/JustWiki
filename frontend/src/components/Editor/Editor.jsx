@@ -27,9 +27,10 @@ const SLASH_ITEMS = [
   { id: 'mermaid', label: 'Mermaid Diagram', icon: '\u25C7', desc: 'Insert mermaid chart' },
   { id: 'math', label: 'Math Formula', icon: '\u03A3', desc: 'KaTeX math block' },
   { id: 'drawio', label: 'Draw.io Diagram', icon: '\u25A1', desc: 'Insert Draw.io embed' },
+  { id: 'media', label: 'Media Library', icon: '\u{1F5BC}', desc: 'Pick from uploaded files' },
 ]
 
-function executeSlashCommand(ctx, id, view, drawioHandlerRef) {
+function executeSlashCommand(ctx, id, view, drawioHandlerRef, mediaHandlerRef) {
   const commands = ctx.get(commandsCtx)
   commands.call(clearTextInCurrentBlockCommand.key)
 
@@ -65,6 +66,11 @@ function executeSlashCommand(ctx, id, view, drawioHandlerRef) {
     return
   }
 
+  if (id === 'media') {
+    if (mediaHandlerRef?.current) mediaHandlerRef.current()
+    return
+  }
+
   switch (id) {
     case 'h1':
       commands.call(setBlockTypeCommand.key, { nodeType: headingSchema.type(ctx), attrs: { level: 1 } })
@@ -94,10 +100,11 @@ function executeSlashCommand(ctx, id, view, drawioHandlerRef) {
 }
 
 class SlashMenuView {
-  constructor(ctx, view, drawioHandlerRef, editorViewRef) {
+  constructor(ctx, view, drawioHandlerRef, editorViewRef, mediaHandlerRef) {
     this.ctx = ctx
     this.view = view
     this.drawioHandlerRef = drawioHandlerRef
+    this.mediaHandlerRef = mediaHandlerRef
     this.editorViewRef = editorViewRef
     editorViewRef.current = view
     this.selectedIndex = 0
@@ -159,7 +166,7 @@ class SlashMenuView {
       event.preventDefault()
       const item = this.filteredItems[this.selectedIndex]
       if (item) {
-        executeSlashCommand(this.ctx, item.id, this.view, this.drawioHandlerRef)
+        executeSlashCommand(this.ctx, item.id, this.view, this.drawioHandlerRef, this.mediaHandlerRef)
         this.provider.hide()
       }
       return true
@@ -190,7 +197,7 @@ class SlashMenuView {
       el.addEventListener('mousedown', (e) => {
         e.preventDefault()
         e.stopPropagation()
-        executeSlashCommand(this.ctx, item.id, this.view, this.drawioHandlerRef)
+        executeSlashCommand(this.ctx, item.id, this.view, this.drawioHandlerRef, this.mediaHandlerRef)
         this.provider.hide()
       })
       this.content.appendChild(el)
@@ -349,11 +356,12 @@ class WikilinkMenu {
 
 const wikilinkPluginKey = new PluginKey('wikilink-autocomplete')
 
-const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawioOpen }, ref) {
+const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawioOpen, onMediaPickerOpen }, ref) {
   const editorRef = useRef(null)
   const containerRef = useRef(null)
   const onChangeRef = useRef(onChange)
   const drawioHandlerRef = useRef(onDrawioOpen)
+  const mediaHandlerRef = useRef(onMediaPickerOpen)
   const editorViewRef = useRef(null)
 
   useEffect(() => {
@@ -363,6 +371,10 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
   useEffect(() => {
     drawioHandlerRef.current = onDrawioOpen || null
   }, [onDrawioOpen])
+
+  useEffect(() => {
+    mediaHandlerRef.current = onMediaPickerOpen || null
+  }, [onMediaPickerOpen])
 
   useImperativeHandle(ref, () => ({
     insertText(text) {
@@ -441,7 +453,7 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
           let slashMenuView = null
           ctx.set(slash.key, {
             view: (editorView) => {
-              slashMenuView = new SlashMenuView(ctx, editorView, drawioHandlerRef, editorViewRef)
+              slashMenuView = new SlashMenuView(ctx, editorView, drawioHandlerRef, editorViewRef, mediaHandlerRef)
               return slashMenuView
             },
             props: {

@@ -93,6 +93,14 @@ CREATE TABLE IF NOT EXISTS media (
     uploaded_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS media_references (
+    page_id  INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    media_id INTEGER NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    PRIMARY KEY (page_id, media_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_refs_media ON media_references(media_id);
+
 CREATE TABLE IF NOT EXISTS diagrams (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     page_id    INTEGER REFERENCES pages(id) ON DELETE SET NULL,
@@ -881,6 +889,21 @@ async def rebuild_all_backlinks(db):
         await db.commit()
 
 
+async def rebuild_all_media_refs(db):
+    """Rebuild media_references for all existing pages (one-time backfill)."""
+    from app.services.media_ref import parse_and_update_media_refs
+
+    rows = await db.execute_fetchall("SELECT COUNT(*) as cnt FROM media_references")
+    if rows[0]["cnt"] > 0:
+        return  # Already populated
+
+    pages = await db.execute_fetchall("SELECT id, content_md FROM pages")
+    for p in pages:
+        await parse_and_update_media_refs(db, p["id"], p["content_md"])
+    if pages:
+        await db.commit()
+
+
 async def seed_welcome_page(db):
     """Create a welcome/guide page on first launch when no pages exist."""
     # Ensure logo.png exists in media directory (independent of whether pages exist)
@@ -998,6 +1021,9 @@ async def init_db():
 
     # Rebuild backlinks for existing pages
     await rebuild_all_backlinks(db)
+
+    # Rebuild media references for existing pages
+    await rebuild_all_media_refs(db)
 
     # Seed default templates
     for t in DEFAULT_TEMPLATES:

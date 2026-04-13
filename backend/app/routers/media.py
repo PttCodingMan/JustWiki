@@ -2,8 +2,8 @@ import uuid
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from fastapi.responses import FileResponse
-from app.schemas import MediaResponse
-from app.auth import get_current_user
+from app.schemas import MediaResponse, MediaListItem
+from app.auth import get_current_user, require_admin
 from app.config import settings
 from app.database import get_db
 
@@ -53,6 +53,80 @@ async def upload_media(
         "uploaded_by": user["id"],
         "url": f"/api/media/{filename}",
     }
+
+
+@router.get("", response_model=list[MediaListItem])
+async def list_media(user=Depends(get_current_user)):
+    """List all uploaded media with reference counts and linked pages.
+
+    Any authenticated user can browse the library (same permission level as
+    uploading), but only admins can delete entries.
+    """
+    db = await get_db()
+    rows = await db.execute_fetchall(
+        """SELECT m.id, m.filename, m.original_name, m.mime_type, m.size_bytes,
+                  m.uploaded_by, m.uploaded_at,
+                  CASE WHEN u.display_name IS NOT NULL AND u.display_name != ''
+                       THEN u.display_name ELSE u.username END AS uploaded_by_name,
+                  (SELECT COUNT(*) FROM media_references r
+                                    JOIN pages p ON p.id = r.page_id
+                                    WHERE r.media_id = m.id AND p.deleted_at IS NULL) AS reference_count
+           FROM media m
+           LEFT JOIN users u ON u.id = m.uploaded_by
+           ORDER BY m.uploaded_at DESC"""
+    )
+
+    items: list[dict] = []
+    for r in rows:
+        item = dict(r)
+        pages = await db.execute_fetchall(
+            """SELECT p.id, p.slug, p.title
+               FROM media_references mr
+               JOIN pages p ON p.id = mr.page_id
+               WHERE mr.media_id = ? AND p.deleted_at IS NULL
+               ORDER BY p.title""",
+            (item["id"],),
+        )
+        item["referenced_pages"] = [dict(p) for p in pages]
+        item["url"] = f"/api/media/{item['filename']}"
+        items.append(item)
+    return items
+
+
+@router.delete("/{media_id}", status_code=204)
+async def delete_media(media_id: int, user=Depends(require_admin)):
+    """Delete an uploaded media file. Refuses if any live page still references it."""
+    db = await get_db()
+    rows = await db.execute_fetchall(
+        "SELECT filename, filepath FROM media WHERE id = ?", (media_id,)
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    ref_rows = await db.execute_fetchall(
+        """SELECT COUNT(*) AS cnt
+           FROM media_references mr
+           JOIN pages p ON p.id = mr.page_id
+           WHERE mr.media_id = ? AND p.deleted_at IS NULL""",
+        (media_id,),
+    )
+    if ref_rows[0]["cnt"] > 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Media is referenced by one or more pages and cannot be deleted",
+        )
+
+    # Remove the file on disk. Guard against path traversal and missing files.
+    media_dir = Path(settings.MEDIA_DIR).resolve()
+    filepath = (media_dir / rows[0]["filename"]).resolve()
+    if str(filepath).startswith(str(media_dir) + "/") and filepath.exists():
+        try:
+            filepath.unlink()
+        except OSError:
+            pass  # Row deletion still proceeds; orphan file can be cleaned later.
+
+    await db.execute("DELETE FROM media WHERE id = ?", (media_id,))
+    await db.commit()
 
 
 @router.get("/{filename}")

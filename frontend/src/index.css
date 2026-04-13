@@ -710,7 +710,55 @@ mark {
   padding: 1em;
 }
 
-/* Floating action bar */
+/* Inline action row — sits under the title before scroll */
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Dock variant — stacked vertically inside the right rail, like a Mac Dock */
+.page-actions-dock {
+  flex-direction: column;
+  align-items: stretch;
+  background: var(--color-surface);
+  padding: 0.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  animation: page-actions-slide-in 180ms ease-out;
+}
+
+.page-actions-dock .fab-btn {
+  justify-content: center;
+}
+
+@keyframes page-actions-slide-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Dropdown menu positioning — inline opens above, dock opens to the left */
+.page-actions-menu {
+  position: absolute;
+  width: 11rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 0.25rem 0;
+  z-index: 50;
+}
+.page-actions-menu-inline {
+  right: 0;
+  top: calc(100% + 0.5rem);
+}
+.page-actions-menu-dock {
+  right: calc(100% + 0.5rem);
+  bottom: 0;
+}
+
+/* Legacy floating action bar (kept for PageEdit) */
 .floating-action-bar {
   position: fixed;
   bottom: 1.5rem;
@@ -723,6 +771,84 @@ mark {
   border-radius: 12px;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
   z-index: 100;
+}
+
+/* Right rail: sticky container for TOC + action dock */
+.page-right-rail {
+  position: sticky;
+  top: 1.5rem;
+  max-height: calc(100vh - 6rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.page-action-dock-wrap {
+  flex-shrink: 0;
+}
+
+/* Table of contents */
+.toc-rail {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 0.875rem 1rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  font-size: 0.8125rem;
+}
+.toc-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  margin: 0 0 0.625rem 0;
+}
+.toc-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-left: 1px solid var(--color-border);
+}
+.toc-item {
+  padding: 0;
+  margin: 0;
+}
+.toc-item a {
+  display: block;
+  padding: 0.25rem 0.75rem;
+  margin-left: -1px;
+  border-left: 2px solid transparent;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  line-height: 1.4;
+  transition: color 0.15s, border-color 0.15s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.toc-item a:hover {
+  color: var(--color-text);
+}
+.toc-level-2 a { padding-left: 1.5rem; }
+.toc-level-3 a { padding-left: 2.25rem; font-size: 0.75rem; }
+.toc-active > a {
+  color: var(--color-primary);
+  border-left-color: var(--color-primary);
+  font-weight: 500;
+}
+.toc-empty {
+  opacity: 0.6;
+}
+
+/* Headings should clear the navbar when scrolled-to via TOC */
+.markdown-viewer h1,
+.markdown-viewer h2,
+.markdown-viewer h3,
+.markdown-viewer h4 {
+  scroll-margin-top: 4rem;
 }
 
 .fab-btn {
@@ -846,7 +972,12 @@ mark {
 
 /* Floating action bar */
 .dark .floating-action-bar { background: var(--color-surface); box-shadow: 0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05); }
+.dark .page-actions-dock { background: var(--color-surface); box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+.dark .page-actions-menu { background: var(--color-surface); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
 .dark .fab-btn-primary { background: var(--color-primary); color: var(--color-primary-text); }
 .dark .fab-btn-secondary { background: var(--color-surface-hover); color: var(--color-text-secondary); }
 .dark .fab-btn-secondary:hover { background: var(--color-border); color: var(--color-text); }
 .dark .fab-btn-active { background: var(--color-primary-soft); color: var(--color-accent); box-shadow: inset 0 0 0 1px var(--color-primary); }
+
+/* TOC dark */
+.dark .toc-rail { background: var(--color-surface); border-color: var(--color-border); }

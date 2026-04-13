@@ -10,8 +10,16 @@ describe('renderMarkdown', () => {
 
   it('renders basic headings and paragraphs', () => {
     const html = renderMarkdown('# Title\n\nHello world')
-    expect(html).toContain('<h1>Title</h1>')
+    expect(html).toContain('<h1 id="title">Title</h1>')
     expect(html).toContain('<p>Hello world</p>')
+  })
+
+  it('injects unique heading ids for the TOC, including CJK', () => {
+    const html = renderMarkdown('# Hello World\n\n## 中文標題\n\n## Hello World')
+    expect(html).toContain('<h1 id="hello-world">Hello World</h1>')
+    expect(html).toContain('<h2 id="中文標題">中文標題</h2>')
+    // Duplicate slug gets a numeric suffix
+    expect(html).toContain('<h2 id="hello-world-1">Hello World</h2>')
   })
 
   it('renders GFM strikethrough and task lists', () => {
