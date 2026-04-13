@@ -51,11 +51,11 @@ export default function ThemeSwitcher() {
         title="Change theme"
         aria-label="Change theme"
       >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
-          <path d="M12 2c3 2.5 4.5 6 4.5 10s-1.5 7.5-4.5 10" />
-          <path d="M12 2c-3 2.5-4.5 6-4.5 10s1.5 7.5 4.5 10" />
-          <path d="M2 12h20" />
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+          <path d="M12 2a10 10 0 1 0 0 20 2 2 0 0 0 1.4-3.4 2 2 0 0 1 1.4-3.4H18a4 4 0 0 0 4-4 10 10 0 0 0-10-9.2z" />
+          <circle cx="7.5" cy="10.5" r="1" fill="currentColor" />
+          <circle cx="12" cy="7" r="1" fill="currentColor" />
+          <circle cx="16.5" cy="10.5" r="1" fill="currentColor" />
         </svg>
       </button>
       {open && (
