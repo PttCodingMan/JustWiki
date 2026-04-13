@@ -59,9 +59,8 @@ export default function MediaPickerModal({ open, onClose, onInsert }) {
 
   const buildMarkdown = (item) => {
     const isImage = item.mime_type?.startsWith('image/')
-    return isImage
-      ? `![${item.original_name}](${item.url})`
-      : `[${item.original_name}](${item.url})`
+    const label = (item.original_name || '').replace(/[[\]()]/g, '')
+    return isImage ? `![${label}](${item.url})` : `[${label}](${item.url})`
   }
 
   const q = query.trim().toLowerCase()

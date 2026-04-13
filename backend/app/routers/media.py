@@ -76,18 +76,24 @@ async def list_media(user=Depends(get_current_user)):
            ORDER BY m.uploaded_at DESC"""
     )
 
+    # Single grouped query for referenced pages across all media, keyed by media_id.
+    ref_rows = await db.execute_fetchall(
+        """SELECT mr.media_id, p.id, p.slug, p.title
+           FROM media_references mr
+           JOIN pages p ON p.id = mr.page_id
+           WHERE p.deleted_at IS NULL
+           ORDER BY p.title"""
+    )
+    refs_by_media: dict[int, list[dict]] = {}
+    for r in ref_rows:
+        refs_by_media.setdefault(r["media_id"], []).append(
+            {"id": r["id"], "slug": r["slug"], "title": r["title"]}
+        )
+
     items: list[dict] = []
     for r in rows:
         item = dict(r)
-        pages = await db.execute_fetchall(
-            """SELECT p.id, p.slug, p.title
-               FROM media_references mr
-               JOIN pages p ON p.id = mr.page_id
-               WHERE mr.media_id = ? AND p.deleted_at IS NULL
-               ORDER BY p.title""",
-            (item["id"],),
-        )
-        item["referenced_pages"] = [dict(p) for p in pages]
+        item["referenced_pages"] = refs_by_media.get(item["id"], [])
         item["url"] = f"/api/media/{item['filename']}"
         items.append(item)
     return items
@@ -119,7 +125,7 @@ async def delete_media(media_id: int, user=Depends(require_admin)):
     # Remove the file on disk. Guard against path traversal and missing files.
     media_dir = Path(settings.MEDIA_DIR).resolve()
     filepath = (media_dir / rows[0]["filename"]).resolve()
-    if str(filepath).startswith(str(media_dir) + "/") and filepath.exists():
+    if filepath.is_relative_to(media_dir) and filepath.exists():
         try:
             filepath.unlink()
         except OSError:
@@ -135,7 +141,7 @@ async def get_media(filename: str):
     filepath = (media_dir / filename).resolve()
 
     # Prevent path traversal: resolved path must be inside MEDIA_DIR
-    if not str(filepath).startswith(str(media_dir) + "/"):
+    if not filepath.is_relative_to(media_dir):
         raise HTTPException(status_code=400, detail="Invalid filename")
 
     if not filepath.exists():

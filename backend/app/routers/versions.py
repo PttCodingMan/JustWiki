@@ -4,6 +4,7 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.services.search import rebuild_search_index
 from app.services.wikilink import parse_and_update_backlinks
+from app.services.media_ref import parse_and_update_media_refs
 from app.routers.activity import log_activity
 
 router = APIRouter(prefix="/api/pages", tags=["versions"])
@@ -149,6 +150,7 @@ async def revert_to_version(slug: str, num: int, user=Depends(get_current_user))
     )
     await rebuild_search_index(db, current["id"], version[0]["title"], version[0]["content_md"])
     await parse_and_update_backlinks(db, current["id"], version[0]["content_md"])
+    await parse_and_update_media_refs(db, current["id"], version[0]["content_md"])
     await log_activity(
         db, user["id"], "reverted", "page", current["id"],
         {"title": version[0]["title"], "slug": slug, "to_version": num},

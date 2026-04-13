@@ -890,18 +890,24 @@ async def rebuild_all_backlinks(db):
 
 
 async def rebuild_all_media_refs(db):
-    """Rebuild media_references for all existing pages (one-time backfill)."""
+    """Rebuild media_references for all existing pages (one-time backfill).
+
+    Tracked via PRAGMA user_version bit 0x1. The previous COUNT(*)>0 guard
+    skipped the scan as soon as any row existed, which meant pages created
+    before the feature shipped never got their refs backfilled on a wiki
+    that had already added media after the first deploy.
+    """
     from app.services.media_ref import parse_and_update_media_refs
 
-    rows = await db.execute_fetchall("SELECT COUNT(*) as cnt FROM media_references")
-    if rows[0]["cnt"] > 0:
-        return  # Already populated
+    rows = await db.execute_fetchall("PRAGMA user_version")
+    current = rows[0]["user_version"] if rows else 0
+    if current & 0x1:
+        return
 
     pages = await db.execute_fetchall("SELECT id, content_md FROM pages")
     for p in pages:
         await parse_and_update_media_refs(db, p["id"], p["content_md"])
-    if pages:
-        await db.commit()
+    await db.execute(f"PRAGMA user_version = {current | 0x1}")
 
 
 async def seed_welcome_page(db):

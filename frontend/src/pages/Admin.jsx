@@ -269,9 +269,10 @@ function MediaLibrarySection() {
   }
 
   const copyMarkdown = async (item) => {
+    const label = (item.original_name || '').replace(/[[\]()]/g, '')
     const snippet = item.mime_type?.startsWith('image/')
-      ? `![${item.original_name}](${item.url})`
-      : `[${item.original_name}](${item.url})`
+      ? `![${label}](${item.url})`
+      : `[${label}](${item.url})`
     try {
       await navigator.clipboard.writeText(snippet)
       setCopied(item.id)
