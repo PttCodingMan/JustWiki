@@ -25,58 +25,12 @@ export default function PageView() {
   const [backlinks, setBacklinks] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
-  const [publicMenuOpen, setPublicMenuOpen] = useState(false)
-  const publicMenuRef = useRef(null)
   const [publicConfirmOpen, setPublicConfirmOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [toast, setToast] = useState('')
   const [headings, setHeadings] = useState([])
-  const [scrolledPastTitle, setScrolledPastTitle] = useState(false)
-  const [isDesktop, setIsDesktop] = useState(
-    typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : true,
-  )
-  const titleRef = useRef(null)
 
   const handleHeadings = useCallback((items) => setHeadings(items), [])
-
-  // Track breakpoint so we know when the right rail is available.
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)')
-    const update = () => setIsDesktop(mq.matches)
-    update()
-    mq.addEventListener('change', update)
-    return () => mq.removeEventListener('change', update)
-  }, [])
-
-  // Observe the title row; once it scrolls out of view, morph actions to the right rail dock.
-  useEffect(() => {
-    const el = titleRef.current
-    if (!el) return
-    const io = new IntersectionObserver(
-      ([entry]) => setScrolledPastTitle(!entry.isIntersecting),
-      { threshold: 0 },
-    )
-    io.observe(el)
-    return () => io.disconnect()
-  }, [page])
-
-  // Close the action menu when the actions morph between inline and dock,
-  // otherwise the outside-click listener chases a stale ref.
-  useEffect(() => {
-    setMenuOpen(false)
-  }, [scrolledPastTitle, isDesktop])
-
-  // Close public menu on outside click
-  useEffect(() => {
-    if (!publicMenuOpen) return
-    const handleClick = (e) => {
-      if (publicMenuRef.current && !publicMenuRef.current.contains(e.target)) {
-        setPublicMenuOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [publicMenuOpen])
 
   // Auto-dismiss toast after 2.5s
   useEffect(() => {
@@ -177,7 +131,7 @@ export default function PageView() {
     } catch {
       setToast(link)
     }
-    setPublicMenuOpen(false)
+    setMenuOpen(false)
   }
 
   const handleMakePrivate = async () => {
@@ -189,7 +143,7 @@ export default function PageView() {
       console.error('Failed to make private:', err)
       setToast('Failed to update visibility')
     }
-    setPublicMenuOpen(false)
+    setMenuOpen(false)
   }
 
   const handleMakePublic = async () => {
@@ -215,9 +169,6 @@ export default function PageView() {
 
   if (loading) return <div className="text-text-secondary">Loading...</div>
   if (!page) return null
-
-  const showInline = !isDesktop || !scrolledPastTitle
-  const showDock = isDesktop && scrolledPastTitle
 
   const renderActions = (variant) => (
     <div className={`page-actions page-actions-${variant}`}>
@@ -255,7 +206,41 @@ export default function PageView() {
               </svg>
               History
             </button>
-            {!page.is_public && (
+            <button
+              onClick={() => { setMenuOpen(false); handleToggleWatch() }}
+              className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
+            >
+              <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              {watching ? 'Stop watching' : 'Watch page'}
+            </button>
+            <div className="border-t border-border my-1" />
+            {page.is_public ? (
+              <>
+                <button
+                  onClick={handleCopyPublicLink}
+                  className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+                    <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+                  </svg>
+                  Copy public link
+                </button>
+                <button
+                  onClick={handleMakePrivate}
+                  className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0110 0v4" />
+                  </svg>
+                  Make private
+                </button>
+              </>
+            ) : (
               <button
                 onClick={() => { setMenuOpen(false); setPublicConfirmOpen(true) }}
                 className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
@@ -311,38 +296,8 @@ export default function PageView() {
   return (
     <div className="max-w-6xl mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_220px] lg:gap-8">
       <article>
-        <div ref={titleRef} className="flex items-center gap-3 mb-4 flex-wrap">
+        <div className="flex items-center gap-3 mb-4 flex-wrap">
           <h1 className="text-3xl font-bold text-text">{page.title}</h1>
-          {page.is_public && (
-            <div className="relative" ref={publicMenuRef}>
-              <button
-                onClick={() => setPublicMenuOpen((v) => !v)}
-                className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700 rounded-full hover:brightness-95"
-                title="This page is public — click for options"
-              >
-                <span role="img" aria-hidden="true">🌐</span> Public
-                <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path d="M6 9l6 6 6-6" />
-                </svg>
-              </button>
-              {publicMenuOpen && (
-                <div className="absolute left-0 top-full mt-1 w-48 bg-surface border border-border rounded-lg shadow-lg py-1 z-50">
-                  <button
-                    onClick={handleCopyPublicLink}
-                    className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover"
-                  >
-                    Copy public link
-                  </button>
-                  <button
-                    onClick={handleMakePrivate}
-                    className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover"
-                  >
-                    Make private
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
           <button
             onClick={handleToggleBookmark}
             className={`text-xl transition-colors ${bookmarked ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-400'}`}
@@ -350,30 +305,12 @@ export default function PageView() {
           >
             {bookmarked ? '\u2605' : '\u2606'}
           </button>
-          <button
-            onClick={handleToggleWatch}
-            className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-colors ${
-              watching
-                ? 'bg-primary-soft text-primary border-primary/40'
-                : 'text-text-secondary border-border hover:border-text-secondary'
-            }`}
-            title={watching ? 'Unwatch this page' : 'Watch this page for changes'}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-            {watching ? 'Watching' : 'Watch'}
-            {watcherCount > 0 && <span className="text-text-secondary">({watcherCount})</span>}
-          </button>
         </div>
 
-        {/* Inline action row — visible on mobile always, and on desktop until the title scrolls out */}
-        {showInline && (
-          <div className="mb-4">
-            {renderActions('inline')}
-          </div>
-        )}
+        {/* Mobile: inline actions under the title. Desktop uses the right-rail dock. */}
+        <div className="mb-4 lg:hidden">
+          {renderActions('inline')}
+        </div>
 
         {/* Tags */}
         <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -413,6 +350,8 @@ export default function PageView() {
         <div className="text-sm text-text-secondary mb-6">
           {page.author_name && <>{page.author_name} &middot; </>}
           /{page.slug} &middot; {page.view_count} views &middot; Updated {new Date(page.updated_at).toLocaleString()}
+          {page.is_public && <> &middot; <span title="This page is public">🌐 Public</span></>}
+          {watcherCount > 0 && <> &middot; {watcherCount} watching</>}
         </div>
         <div className="bg-surface rounded-xl shadow-sm border border-border p-8">
           <MarkdownViewer content={page.content_md} onHeadings={handleHeadings} />
@@ -442,15 +381,13 @@ export default function PageView() {
         <Comments slug={slug} />
       </article>
 
-      {/* Right rail: TOC + scroll-aware action dock */}
+      {/* Right rail: actions pinned above TOC so Edit has one consistent home */}
       <aside className="hidden lg:block">
         <div className="page-right-rail">
+          <div className="page-action-dock-wrap">
+            {renderActions('dock')}
+          </div>
           <TableOfContents headings={headings} />
-          {showDock && (
-            <div className="page-action-dock-wrap">
-              {renderActions('dock')}
-            </div>
-          )}
         </div>
       </aside>
 
