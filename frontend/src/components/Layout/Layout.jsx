@@ -49,7 +49,10 @@ export default function Layout({ children }) {
             <path d="M3 12h18M3 6h18M3 18h18" />
           </svg>
         </button>
-        <Link to="/" className="font-bold text-lg text-text mr-4">JustWiki</Link>
+        <Link to="/" className="flex items-center gap-1.5 font-bold text-lg text-text mr-4">
+          <img src="/favicon.png" alt="" className="h-7 w-7" />
+          JustWiki
+        </Link>
         <div className="flex-1" />
 
         {/* Search button */}
