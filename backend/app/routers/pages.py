@@ -42,6 +42,33 @@ async def unique_slug(db, slug: str) -> str:
         counter += 1
 
 
+async def _would_create_parent_cycle(db, page_id: int, new_parent_id: int | None) -> bool:
+    """True if setting page_id's parent to new_parent_id would create a cycle
+    in the parent chain. A page pointing at itself also counts as a cycle.
+    """
+    if new_parent_id is None:
+        return False
+    if new_parent_id == page_id:
+        return True
+    # Walk the chain upward from new_parent_id. If we hit page_id, a cycle
+    # would form; if we hit NULL or revisit a node, we're safe.
+    current = new_parent_id
+    seen: set[int] = set()
+    while current is not None:
+        if current == page_id:
+            return True
+        if current in seen:
+            return False
+        seen.add(current)
+        rows = await db.execute_fetchall(
+            "SELECT parent_id FROM pages WHERE id = ?", (current,)
+        )
+        if not rows:
+            return False
+        current = rows[0]["parent_id"]
+    return False
+
+
 @router.get("", response_model=PageListResponse)
 async def list_pages(
     page: int = Query(1, ge=1),
@@ -79,11 +106,22 @@ async def page_tree(user=Depends(get_current_user)):
     )
     all_pages = [dict(r) for r in rows]
 
+    # Defensive: protect against any cycle in the stored parent_id chain.
+    # New writes are validated in update_page/move_page/create_page, but a
+    # pre-existing or externally-corrupted DB could still contain a cycle —
+    # without this guard, build_tree would recurse forever.
+    visited: set[int] = set()
+
     def build_tree(parent_id):
         children = [p for p in all_pages if p["parent_id"] == parent_id]
+        result = []
         for child in children:
+            if child["id"] in visited:
+                continue
+            visited.add(child["id"])
             child["children"] = build_tree(child["id"])
-        return children
+            result.append(child)
+        return result
 
     return build_tree(None)
 
@@ -120,14 +158,37 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
         if tmpl:
             content = tmpl[0]["content_md"]
 
-    slug = await unique_slug(db, slugify(body.title, body.slug))
+    if body.parent_id is not None:
+        parent_rows = await db.execute_fetchall(
+            "SELECT id FROM pages WHERE id = ? AND deleted_at IS NULL",
+            (body.parent_id,),
+        )
+        if not parent_rows:
+            raise HTTPException(status_code=400, detail="Parent page not found")
 
-    cursor = await db.execute(
-        """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, version, created_by)
-           VALUES (?, ?, ?, ?, ?, 1, ?)""",
-        (slug, body.title, content, body.parent_id, body.sort_order, user["id"]),
-    )
-    page_id = cursor.lastrowid
+    # Retry on the rare race where two concurrent create_page calls resolve the
+    # same slug before either INSERT commits. unique_slug makes the collision
+    # window small, and the UNIQUE constraint backstops correctness.
+    import aiosqlite as _aiosqlite
+
+    page_id = None
+    slug = None
+    for _attempt in range(5):
+        candidate = await unique_slug(db, slugify(body.title, body.slug))
+        try:
+            cursor = await db.execute(
+                """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, version, created_by)
+                   VALUES (?, ?, ?, ?, ?, 1, ?)""",
+                (candidate, body.title, content, body.parent_id, body.sort_order, user["id"]),
+            )
+            slug = candidate
+            page_id = cursor.lastrowid
+            break
+        except _aiosqlite.IntegrityError:
+            # Another request grabbed the slug first; try the next candidate.
+            continue
+    if page_id is None:
+        raise HTTPException(status_code=409, detail="Could not allocate a unique slug; please retry")
 
     # Update search index
     await rebuild_search_index(db, page_id, body.title, content)
@@ -201,6 +262,13 @@ async def update_page(slug: str, body: PageUpdate, user=Depends(get_current_user
     content = body.content_md if body.content_md is not None else current["content_md"]
     parent_id = body.parent_id if "parent_id" in body.model_fields_set else current["parent_id"]
     sort_order = body.sort_order if body.sort_order is not None else current["sort_order"]
+
+    if "parent_id" in body.model_fields_set and parent_id != current["parent_id"]:
+        if await _would_create_parent_cycle(db, current["id"], parent_id):
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot set parent: would create a cycle in the page tree",
+            )
     current_is_public = bool(current.get("is_public", 0))
     is_public = body.is_public if body.is_public is not None else current_is_public
 
@@ -291,10 +359,16 @@ async def move_page(slug: str, body: PageMoveRequest, user=Depends(get_current_u
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
+    page_id = rows[0]["id"]
 
     updates = []
     params = []
     if "parent_id" in body.model_fields_set:
+        if await _would_create_parent_cycle(db, page_id, body.parent_id):
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot move page: would create a cycle in the page tree",
+            )
         updates.append("parent_id = ?")
         params.append(body.parent_id)
     if "sort_order" in body.model_fields_set:

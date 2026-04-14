@@ -1,6 +1,7 @@
 import io
 import os
 import shutil
+import sqlite3
 import zipfile
 from pathlib import Path
 
@@ -68,17 +69,80 @@ async def restore_backup(
     if "just-wiki.db" not in names:
         raise HTTPException(status_code=400, detail="Zip must contain just-wiki.db")
 
-    # Close current DB connection
-    await close_db()
-
     db_path = Path(settings.DB_PATH)
     media_dir = Path(settings.MEDIA_DIR)
 
-    # Write DB file atomically: write to temp first, then rename
+    # Write DB to a temp file first and validate it. Only once we're sure the
+    # candidate opens cleanly and passes integrity_check do we replace the live
+    # DB. This protects against partial writes, truncated zips, non-SQLite
+    # contents, and corrupt SQLite files.
     tmp_db = db_path.with_suffix(".db.tmp")
-    with zf.open("just-wiki.db") as src, open(tmp_db, "wb") as dst:
-        shutil.copyfileobj(src, dst)
-    tmp_db.replace(db_path)
+    # Clean up any leftover from a previous failed restore.
+    if tmp_db.exists():
+        try:
+            tmp_db.unlink()
+        except OSError:
+            pass
+
+    try:
+        with zf.open("just-wiki.db") as src, open(tmp_db, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+
+        # Validate the candidate DB before touching the live one.
+        try:
+            conn = sqlite3.connect(str(tmp_db))
+            try:
+                cur = conn.execute("PRAGMA integrity_check")
+                result = cur.fetchone()
+                if not result or result[0] != "ok":
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Backup database failed integrity check",
+                    )
+            finally:
+                conn.close()
+        except sqlite3.DatabaseError:
+            raise HTTPException(
+                status_code=400,
+                detail="Backup file does not contain a valid SQLite database",
+            )
+
+        # Flush the WAL back into the main DB file before copying. Without
+        # this, the safety copy would miss any committed-but-not-checkpointed
+        # transactions and would not be a faithful recovery snapshot.
+        live_db = await get_db()
+        await live_db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+        # Keep a safety copy of the current DB so an admin can recover by hand
+        # if the freshly-initialized connection later refuses the restored
+        # file. .pre-restore is intentionally a plain copy, not a rename, so
+        # the live file is untouched until the final atomic replace below.
+        if db_path.exists():
+            safety = db_path.with_suffix(".db.pre-restore")
+            try:
+                shutil.copy2(db_path, safety)
+            except OSError:
+                pass
+
+        # Close current DB connection just before swapping files, so the OS
+        # handle doesn't hold the old file open during the replace.
+        await close_db()
+
+        tmp_db.replace(db_path)
+    except HTTPException:
+        if tmp_db.exists():
+            try:
+                tmp_db.unlink()
+            except OSError:
+                pass
+        raise
+    except Exception:
+        if tmp_db.exists():
+            try:
+                tmp_db.unlink()
+            except OSError:
+                pass
+        raise
 
     # Restore media files (with Zip Slip protection)
     media_dir.mkdir(parents=True, exist_ok=True)

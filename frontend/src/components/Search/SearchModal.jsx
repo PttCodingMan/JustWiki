@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import DOMPurify from 'dompurify'
 import useSearch from '../../store/useSearch'
+
+// Defense-in-depth: the backend escapes snippet content before wrapping matches
+// in <mark>, but since this render path uses dangerouslySetInnerHTML, we also
+// sanitize on the way in. Only <mark> is permitted — anything else gets stripped.
+const SNIPPET_SANITIZE_CONFIG = { ALLOWED_TAGS: ['mark'], ALLOWED_ATTR: [] }
 
 export default function SearchModal({ isOpen, onClose }) {
   const [query, setQuery] = useState('')
@@ -110,7 +116,9 @@ export default function SearchModal({ isOpen, onClose }) {
               <div className="font-medium text-text text-sm">{r.title}</div>
               <div
                 className="text-xs text-text-secondary mt-0.5 line-clamp-2"
-                dangerouslySetInnerHTML={{ __html: r.snippet }}
+                dangerouslySetInnerHTML={{
+                  __html: DOMPurify.sanitize(r.snippet || '', SNIPPET_SANITIZE_CONFIG),
+                }}
               />
             </button>
           ))}

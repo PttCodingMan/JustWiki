@@ -1,9 +1,10 @@
 import uuid
 from pathlib import Path
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
+from jose import JWTError, jwt
 from app.schemas import MediaResponse, MediaListItem
-from app.auth import get_current_user, require_admin
+from app.auth import get_current_user, require_admin, ALGORITHM
 from app.config import settings
 from app.database import get_db
 
@@ -135,8 +136,50 @@ async def delete_media(media_id: int, user=Depends(require_admin)):
     await db.commit()
 
 
+def _request_is_authenticated(request: Request) -> bool:
+    """Best-effort credential check without raising.
+
+    Lets this route stay open for public-page readers while still serving
+    authenticated editors regardless of what the media references.
+    """
+    token = None
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+    if not token:
+        token = request.cookies.get("token")
+    if not token:
+        return False
+    try:
+        jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        return True
+    except JWTError:
+        return False
+
+
+# logo.png ships with the install and is referenced from the login page and
+# the default welcome content, so it must be fetchable without auth.
+_ALWAYS_PUBLIC_FILENAMES = {"logo.png"}
+
+
+async def _media_is_public(db, filename: str) -> bool:
+    """True if at least one live, public page references this media file."""
+    rows = await db.execute_fetchall(
+        """SELECT 1
+           FROM media m
+           JOIN media_references mr ON mr.media_id = m.id
+           JOIN pages p ON p.id = mr.page_id
+           WHERE m.filename = ?
+             AND p.is_public = 1
+             AND p.deleted_at IS NULL
+           LIMIT 1""",
+        (filename,),
+    )
+    return bool(rows)
+
+
 @router.get("/{filename}")
-async def get_media(filename: str):
+async def get_media(filename: str, request: Request):
     media_dir = Path(settings.MEDIA_DIR).resolve()
     filepath = (media_dir / filename).resolve()
 
@@ -146,4 +189,15 @@ async def get_media(filename: str):
 
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="File not found")
+
+    # Authenticated users can fetch any media in the library.
+    # Anonymous users can only fetch files that are either bundled (logo) or
+    # referenced by at least one live, public page, so private uploads aren't
+    # exposed via UUID guessing or enumeration.
+    if not _request_is_authenticated(request):
+        if filename not in _ALWAYS_PUBLIC_FILENAMES:
+            db = await get_db()
+            if not await _media_is_public(db, filename):
+                raise HTTPException(status_code=404, detail="File not found")
+
     return FileResponse(filepath)

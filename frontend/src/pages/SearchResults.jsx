@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import DOMPurify from 'dompurify'
 import useSearch from '../store/useSearch'
 import useTags from '../store/useTags'
+
+// Defense-in-depth: even though the backend HTML-escapes snippet text before
+// wrapping matches in <mark>, we sanitize again here so a future bug in the
+// escape path can't reach dangerouslySetInnerHTML with arbitrary HTML.
+const SNIPPET_SANITIZE_CONFIG = { ALLOWED_TAGS: ['mark'], ALLOWED_ATTR: [] }
 
 export default function SearchResults() {
   const [searchParams] = useSearchParams()
@@ -70,7 +76,9 @@ export default function SearchResults() {
               <div className="font-medium text-text">{r.title}</div>
               <div
                 className="text-sm text-text-secondary mt-1 line-clamp-2"
-                dangerouslySetInnerHTML={{ __html: r.snippet }}
+                dangerouslySetInnerHTML={{
+                  __html: DOMPurify.sanitize(r.snippet || '', SNIPPET_SANITIZE_CONFIG),
+                }}
               />
               <div className="text-xs text-text-secondary mt-2">
                 /{r.slug} &middot; {r.view_count} views &middot; {new Date(r.updated_at).toLocaleDateString()}
