@@ -57,15 +57,17 @@ export default function PageEdit() {
     })
   }, [slug])
 
-  // Extract diagram IDs from content and fetch their data
+  // Extract unique diagram IDs from content; a diagram may be referenced
+  // more than once, but the editor preview should render each unique diagram
+  // a single time (and React needs unique keys).
   const diagramIds = useMemo(() => {
-    const ids = []
+    const seen = new Set()
     const re = /::drawio\\?\[(\d+)\\?\]/g
     let m
     while ((m = re.exec(content)) !== null) {
-      ids.push(parseInt(m[1]))
+      seen.add(parseInt(m[1]))
     }
-    return ids
+    return [...seen]
   }, [content])
 
   useEffect(() => {

@@ -152,3 +152,23 @@ class DiagramResponse(BaseModel):
     created_by: Optional[int] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+
+class DiagramReferencedPage(BaseModel):
+    id: int
+    slug: str
+    title: str
+    deleted: bool = False
+
+
+class DiagramListItem(BaseModel):
+    id: int
+    name: str
+    page_id: Optional[int] = None
+    has_svg: bool = False
+    created_by: Optional[int] = None
+    created_by_name: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    reference_count: int = 0
+    referenced_pages: list[DiagramReferencedPage] = []

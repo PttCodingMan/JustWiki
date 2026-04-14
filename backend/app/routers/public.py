@@ -10,12 +10,11 @@ from collections import defaultdict
 from fastapi import APIRouter, HTTPException, Request
 
 from app.database import get_db
+from app.services.diagram_ref import DRAWIO_ID_RE as _DRAWIO_ID_RE
 
 router = APIRouter(prefix="/api/public", tags=["public"])
 
 _HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
-# Matches both ::drawio[123] and Milkdown-escaped ::drawio\[123\]
-_DRAWIO_ID_RE = re.compile(r"::drawio\\?\[(\d+)\\?\]")
 
 # In-memory rate limit: 60 requests per IP per 60 seconds.
 # Single-process only — see to-do Known Limitations.

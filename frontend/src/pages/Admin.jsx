@@ -224,7 +224,7 @@ function UsersSection() {
   )
 }
 
-function MediaLibrarySection() {
+function MediaLibraryPanel() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -286,9 +286,11 @@ function MediaLibrarySection() {
   const unused = items.filter((m) => m.reference_count === 0).length
 
   return (
-    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+    <>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-text">Media Library</h2>
+        <p className="text-sm text-text-secondary">
+          {items.length} files · {formatBytes(totalSize)} total · {unused} unused
+        </p>
         <button
           onClick={loadMedia}
           className="px-3 py-1.5 bg-surface-hover border border-border text-text rounded-lg text-sm hover:bg-surface-active"
@@ -296,10 +298,6 @@ function MediaLibrarySection() {
           Refresh
         </button>
       </div>
-
-      <p className="text-sm text-text-secondary mb-4">
-        {items.length} files · {formatBytes(totalSize)} total · {unused} unused
-      </p>
 
       {loading && <p className="text-sm text-text-secondary">Loading...</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -405,6 +403,236 @@ function MediaLibrarySection() {
           </table>
         </div>
       )}
+    </>
+  )
+}
+
+function DiagramsLibraryPanel() {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [expanded, setExpanded] = useState(() => new Set())
+  const [copied, setCopied] = useState(null)
+  const [unusedOnly, setUnusedOnly] = useState(false)
+
+  const loadDiagrams = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await api.get('/diagrams')
+      setItems(Array.isArray(res.data) ? res.data : [])
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to load diagrams')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadDiagrams()
+  }, [])
+
+  const handleDelete = async (item) => {
+    if (item.reference_count > 0) return
+    if (!confirm(`Delete "${item.name}"? This cannot be undone.`)) return
+    try {
+      await api.delete(`/diagrams/${item.id}`)
+      setItems((prev) => prev.filter((d) => d.id !== item.id))
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Failed to delete diagram')
+    }
+  }
+
+  const toggleExpanded = (id) => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const copyDirective = async (item) => {
+    const snippet = `::drawio[${item.id}]`
+    try {
+      await navigator.clipboard.writeText(snippet)
+      setCopied(item.id)
+      setTimeout(() => setCopied((c) => (c === item.id ? null : c)), 1500)
+    } catch {
+      alert(`Copy failed. Directive:\n${snippet}`)
+    }
+  }
+
+  const unusedCount = items.filter((d) => d.reference_count === 0).length
+  const visible = unusedOnly ? items.filter((d) => d.reference_count === 0) : items
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-text-secondary">
+          {items.length} diagrams · {unusedCount} unused
+        </p>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
+            <input
+              type="checkbox"
+              checked={unusedOnly}
+              onChange={(e) => setUnusedOnly(e.target.checked)}
+            />
+            Show unused only
+          </label>
+          <button
+            onClick={loadDiagrams}
+            className="px-3 py-1.5 bg-surface-hover border border-border text-text rounded-lg text-sm hover:bg-surface-active"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {loading && <p className="text-sm text-text-secondary">Loading...</p>}
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      {!loading && !error && items.length === 0 && (
+        <p className="text-sm text-text-secondary">No diagrams yet.</p>
+      )}
+
+      {!loading && !error && items.length > 0 && visible.length === 0 && (
+        <p className="text-sm text-text-secondary">No diagrams match the current filter.</p>
+      )}
+
+      {!loading && !error && visible.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">Preview</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">Name</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">Used by</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">Created</th>
+                <th className="text-right py-2 px-3 text-text-secondary font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((item) => {
+                const isExpanded = expanded.has(item.id)
+                const hasRefs = item.reference_count > 0
+                return (
+                  <Fragment key={item.id}>
+                    <tr className="border-b border-border align-top">
+                      <td className="py-2 px-3">
+                        {item.has_svg ? (
+                          <img
+                            src={`/api/diagrams/${item.id}/svg`}
+                            alt={item.name}
+                            className="h-10 w-10 object-contain rounded border border-border bg-white"
+                          />
+                        ) : (
+                          <span className="text-xs text-text-secondary">no preview</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 text-text">
+                        <div className="truncate max-w-[260px]" title={item.name}>{item.name}</div>
+                        <div className="text-xs text-text-secondary">id #{item.id}</div>
+                      </td>
+                      <td className="py-2 px-3">
+                        {hasRefs ? (
+                          <button
+                            onClick={() => toggleExpanded(item.id)}
+                            className="text-primary hover:underline"
+                          >
+                            {item.reference_count} page{item.reference_count === 1 ? '' : 's'}
+                          </button>
+                        ) : (
+                          <span className="text-text-secondary">unused</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 text-text-secondary">
+                        <div>{item.created_by_name || '-'}</div>
+                        <div className="text-xs">{item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}</div>
+                      </td>
+                      <td className="py-2 px-3 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => copyDirective(item)}
+                          className="text-text-secondary hover:text-text text-sm mr-3"
+                          title="Copy ::drawio[id] directive"
+                        >
+                          {copied === item.id ? 'Copied!' : 'Copy'}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item)}
+                          disabled={hasRefs}
+                          className="text-red-500 hover:text-red-700 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                          title={hasRefs ? 'Cannot delete — diagram is referenced by a page (live or in trash)' : 'Delete diagram'}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                    {isExpanded && hasRefs && (
+                      <tr className="border-b border-border bg-surface-hover">
+                        <td colSpan={5} className="py-2 px-3">
+                          <div className="text-xs text-text-secondary mb-1">Referenced by:</div>
+                          <ul className="flex flex-wrap gap-2">
+                            {item.referenced_pages.map((p) => (
+                              <li key={p.id}>
+                                <Link
+                                  to={`/page/${p.slug}`}
+                                  className={`text-sm hover:underline ${p.deleted ? 'text-text-secondary italic' : 'text-primary'}`}
+                                  title={p.deleted ? 'This page is currently in the trash' : undefined}
+                                >
+                                  {p.title}{p.deleted ? ' (in trash)' : ''}
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  )
+}
+
+function LibrarySection() {
+  const [tab, setTab] = useState('media')
+
+  const tabClass = (name) =>
+    `px-3 py-1.5 rounded-lg text-sm transition ${
+      tab === name
+        ? 'bg-primary text-primary-text'
+        : 'bg-surface-hover border border-border text-text hover:bg-surface-active'
+    }`
+
+  return (
+    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-text">Library</h2>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setTab('media')}
+            className={tabClass('media')}
+          >
+            Images &amp; Files
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('diagrams')}
+            className={tabClass('diagrams')}
+          >
+            Diagrams
+          </button>
+        </div>
+      </div>
+
+      {tab === 'media' ? <MediaLibraryPanel /> : <DiagramsLibraryPanel />}
     </div>
   )
 }
@@ -420,7 +648,7 @@ export default function Admin() {
     <div className="max-w-4xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-text">Admin</h1>
       <UsersSection />
-      <MediaLibrarySection />
+      <LibrarySection />
       <BackupSection />
       <ExportSection />
     </div>
