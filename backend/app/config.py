@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     AI_ENABLED: bool = False
     GEMINI_API_KEY: str = ""
 
+    # Dashboard / updates
+    # Off by default so air-gapped installs never make an outbound call.
+    CHECK_UPDATES: bool = False
+    # Repo on ghcr.io for the image-tag lookup. Matches docker-compose.yml.
+    UPDATE_CHECK_IMAGE: str = "pttcodingman/justwiki/backend"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

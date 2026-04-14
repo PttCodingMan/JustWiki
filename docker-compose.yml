@@ -1,7 +1,9 @@
 services:
   backend:
     image: ghcr.io/pttcodingman/justwiki/backend:main
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "8000:8000"
     volumes:
@@ -11,7 +13,9 @@ services:
 
   frontend:
     image: ghcr.io/pttcodingman/justwiki/frontend:main
-    build: ./frontend
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
     ports:
       - "3000:3000"
     depends_on:

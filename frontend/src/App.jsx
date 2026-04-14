@@ -13,6 +13,7 @@ import Activity from './pages/Activity'
 import PageVersions from './pages/PageVersions'
 import GraphView from './pages/GraphView'
 import Admin from './pages/Admin'
+import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import Trash from './pages/Trash'
 import PublicPageView from './pages/PublicPageView'
@@ -79,6 +80,7 @@ export default function App() {
         <Route path="/activity" element={<Activity />} />
         <Route path="/graph" element={<GraphView />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/trash" element={<Trash />} />
         <Route path="/page/:slug" element={<PageOrPublicView />} />

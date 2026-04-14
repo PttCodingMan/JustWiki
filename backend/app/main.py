@@ -5,10 +5,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app import __version__
 from app.config import settings
 from app.database import init_db, close_db, seed_welcome_page, get_db
 from app.auth import ensure_admin_exists
-from app.routers import auth_router, pages, media, templates, search, tags, activity, bookmarks, versions, diagrams, users, comments, backup, export, trash, notifications, watch, public
+from app.routers import auth_router, pages, media, templates, search, tags, activity, bookmarks, versions, diagrams, users, comments, backup, export, trash, notifications, watch, public, dashboard
 
 logger = logging.getLogger("justwiki")
 
@@ -52,7 +53,7 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 
-app = FastAPI(title="JustWiki", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="JustWiki", version=__version__, lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -141,6 +142,7 @@ app.include_router(trash.router)
 app.include_router(notifications.router)
 app.include_router(watch.router)
 app.include_router(public.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/api/health")
