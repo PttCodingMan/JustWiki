@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import useAuth from '../store/useAuth'
+import useGroups from '../store/useGroups'
 import api from '../api/client'
 
 function formatBytes(bytes) {
@@ -225,6 +226,217 @@ function UsersSection() {
     </div>
   )
 }
+
+function GroupsSection() {
+  const { groups, fetchGroups, createGroup, deleteGroup, membersByGroup, fetchMembers, addMember, removeMember } = useGroups()
+  const [showCreate, setShowCreate] = useState(false)
+  const [form, setForm] = useState({ name: '', description: '' })
+  const [error, setError] = useState('')
+  const [expanded, setExpanded] = useState(() => new Set())
+  const [userSearchTerm, setUserSearchTerm] = useState('')
+  const [userResults, setUserResults] = useState([])
+  const [activeGroupId, setActiveGroupId] = useState(null)
+
+  useEffect(() => {
+    fetchGroups()
+  }, [])
+
+  const handleCreate = async (e) => {
+    e.preventDefault()
+    setError('')
+    try {
+      await createGroup(form.name.trim(), form.description.trim())
+      setForm({ name: '', description: '' })
+      setShowCreate(false)
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to create group')
+    }
+  }
+
+  const handleDelete = async (group) => {
+    if (!confirm(`Delete group "${group.name}"? Any page ACL entries referencing it will be removed.`)) return
+    try {
+      await deleteGroup(group.id)
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Failed to delete group')
+    }
+  }
+
+  const toggle = async (group) => {
+    const next = new Set(expanded)
+    if (next.has(group.id)) {
+      next.delete(group.id)
+    } else {
+      next.add(group.id)
+      await fetchMembers(group.id)
+    }
+    setExpanded(next)
+    setActiveGroupId(group.id)
+  }
+
+  const runUserSearch = async (q) => {
+    setUserSearchTerm(q)
+    if (!q.trim()) {
+      setUserResults([])
+      return
+    }
+    try {
+      const res = await api.get('/users/search', { params: { q: q.trim(), limit: 10 } })
+      setUserResults(res.data || [])
+    } catch {
+      setUserResults([])
+    }
+  }
+
+  const handleAdd = async (groupId, userId) => {
+    try {
+      await addMember(groupId, userId)
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Failed to add member')
+    }
+  }
+
+  const handleRemove = async (groupId, userId) => {
+    try {
+      await removeMember(groupId, userId)
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Failed to remove member')
+    }
+  }
+
+  return (
+    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-text">Groups</h2>
+        <button
+          onClick={() => setShowCreate(!showCreate)}
+          className="px-3 py-1.5 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover"
+        >
+          + New Group
+        </button>
+      </div>
+
+      {showCreate && (
+        <form onSubmit={handleCreate} className="mb-4 p-4 bg-surface-hover rounded-lg border border-border">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              placeholder="Group name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              required
+              className="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
+            />
+            <input
+              type="text"
+              placeholder="Description (optional)"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              className="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
+            />
+            <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
+              Create
+            </button>
+          </div>
+          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        </form>
+      )}
+
+      {groups.length === 0 ? (
+        <p className="text-sm text-text-secondary">No groups yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {groups.map((g) => {
+            const isOpen = expanded.has(g.id)
+            const members = membersByGroup[g.id] || []
+            return (
+              <div key={g.id} className="border border-border rounded-lg overflow-hidden">
+                <div className="flex items-center px-4 py-2 bg-surface-hover">
+                  <button
+                    onClick={() => toggle(g)}
+                    className="flex-1 text-left text-sm text-text flex items-center gap-2"
+                  >
+                    <span className="font-medium">{g.name}</span>
+                    <span className="text-text-secondary">· {g.member_count} {g.member_count === 1 ? 'member' : 'members'}</span>
+                    {g.description && <span className="text-text-secondary italic">— {g.description}</span>}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(g)}
+                    className="text-sm text-red-500 hover:text-red-700"
+                  >
+                    Delete
+                  </button>
+                </div>
+                {isOpen && (
+                  <div className="px-4 py-3 space-y-3">
+                    <div>
+                      <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">Members</div>
+                      {members.length === 0 ? (
+                        <p className="text-sm text-text-secondary">No members yet.</p>
+                      ) : (
+                        <ul className="space-y-1">
+                          {members.map((m) => (
+                            <li key={m.id} className="flex items-center justify-between text-sm">
+                              <span className="text-text">
+                                {m.display_name || m.username}
+                                {m.display_name && <span className="text-text-secondary"> ({m.username})</span>}
+                              </span>
+                              <button
+                                onClick={() => handleRemove(g.id, m.id)}
+                                className="text-xs text-red-500 hover:text-red-700"
+                              >
+                                Remove
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">Add member</div>
+                      <input
+                        type="text"
+                        placeholder="Search users..."
+                        value={activeGroupId === g.id ? userSearchTerm : ''}
+                        onFocus={() => { setActiveGroupId(g.id); setUserResults([]) }}
+                        onChange={(e) => runUserSearch(e.target.value)}
+                        className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
+                      />
+                      {activeGroupId === g.id && userResults.length > 0 && (
+                        <ul className="mt-2 border border-border rounded-lg divide-y divide-border">
+                          {userResults.map((u) => {
+                            const alreadyMember = members.some((m) => m.id === u.id)
+                            return (
+                              <li key={u.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                                <span className="text-text">
+                                  {u.display_name || u.username}
+                                  {u.display_name && <span className="text-text-secondary"> ({u.username})</span>}
+                                  <span className="ml-2 text-xs text-text-secondary">[{u.role}]</span>
+                                </span>
+                                <button
+                                  disabled={alreadyMember}
+                                  onClick={() => handleAdd(g.id, u.id)}
+                                  className="text-xs text-primary disabled:text-text-secondary"
+                                >
+                                  {alreadyMember ? 'Already a member' : 'Add'}
+                                </button>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 function MediaLibraryPanel() {
   const [items, setItems] = useState([])
@@ -650,6 +862,7 @@ export default function Admin() {
     <div className="max-w-4xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-text">Admin</h1>
       <UsersSection />
+      <GroupsSection />
       <LibrarySection />
       <BackupSection />
       <ExportSection />
