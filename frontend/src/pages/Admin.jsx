@@ -175,6 +175,7 @@ function UsersSection() {
               className="px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
             >
               <option value="editor">Editor</option>
+              <option value="viewer">Viewer</option>
               <option value="admin">Admin</option>
             </select>
             <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
@@ -206,6 +207,7 @@ function UsersSection() {
                     className="text-sm px-2 py-1 border border-border rounded bg-surface text-text"
                   >
                     <option value="editor">Editor</option>
+                    <option value="viewer">Viewer</option>
                     <option value="admin">Admin</option>
                   </select>
                 </td>

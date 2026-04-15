@@ -42,10 +42,13 @@ async def list_users(
     }
 
 
+ALLOWED_ROLES = ("admin", "editor", "viewer")
+
+
 @router.post("", status_code=201)
 async def create_user(body: UserCreate, user=Depends(require_admin)):
-    if body.role not in ("admin", "editor"):
-        raise HTTPException(status_code=400, detail="Role must be admin or editor")
+    if body.role not in ALLOWED_ROLES:
+        raise HTTPException(status_code=400, detail="Role must be admin, editor, or viewer")
     db = await get_db()
     existing = await db.execute_fetchall(
         "SELECT id FROM users WHERE username = ?", (body.username,)
@@ -77,8 +80,8 @@ async def update_user(user_id: int, body: UserUpdate, user=Depends(require_admin
     updates = []
     values = []
     if body.role is not None:
-        if body.role not in ("admin", "editor"):
-            raise HTTPException(status_code=400, detail="Role must be admin or editor")
+        if body.role not in ALLOWED_ROLES:
+            raise HTTPException(status_code=400, detail="Role must be admin, editor, or viewer")
         # Prevent last admin from demoting themselves
         if user_id == user["id"] and body.role != "admin":
             admin_count = await db.execute_fetchall(

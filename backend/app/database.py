@@ -172,6 +172,35 @@ CREATE TABLE IF NOT EXISTS activity_log (
 
 CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_log(created_at DESC);
 
+CREATE TABLE IF NOT EXISTS groups (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT UNIQUE NOT NULL,
+    description TEXT DEFAULT '',
+    created_by  INTEGER REFERENCES users(id),
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS group_members (
+    group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    user_id  INTEGER NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (group_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id);
+
+CREATE TABLE IF NOT EXISTS page_acl (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    page_id        INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    principal_type TEXT    NOT NULL,
+    principal_id   INTEGER NOT NULL,
+    permission     TEXT    NOT NULL,
+    UNIQUE (page_id, principal_type, principal_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_page_acl_page ON page_acl(page_id);
+CREATE INDEX IF NOT EXISTS idx_page_acl_principal ON page_acl(principal_type, principal_id);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
     page_id, title, content_segmented,
     tokenize='unicode61'
