@@ -6,6 +6,8 @@ leak. Integration tests for router enforcement live in the router-specific
 test files added in later commits.
 """
 
+from pathlib import Path
+
 import pytest
 from app.database import get_db
 from app.services.acl import (
@@ -529,3 +531,85 @@ async def test_router_admin_bypass_through_http():
         get_resp = await client.get("/api/pages/acl-router-admin-bypass")
     assert get_resp.status_code == 200
     assert get_resp.json()["effective_permission"] == "admin"
+
+
+# ── media router integration ─────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_router_viewer_cannot_upload_media():
+    db = await get_db()
+    vic = await _get_or_create_user(db, "acl_media_vic_upload", "viewer")
+    async with _token_client(vic) as client:
+        resp = await client.post(
+            "/api/media/upload",
+            files={"file": ("x.png", b"\x89PNG\r\n\x1a\n", "image/png")},
+        )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_router_media_file_denied_via_page_acl():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_media_alice_file", "editor")
+    bob = await _get_or_create_user(db, "acl_media_bob_file", "editor")
+    page = await _make_page(db, "acl-media-router-page")
+    await _add_acl(db, page, "user", alice["id"], "read")
+
+    media_id = await _make_media(db, "acl-media-router.png", alice["id"])
+    await _link_media(db, page, media_id)
+
+    # Create the file on disk so FileResponse doesn't 404 on path check.
+    from app.config import settings as _settings
+    p = Path(_settings.MEDIA_DIR) / "acl-media-router.png"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(b"\x89PNG\r\n\x1a\n")
+
+    try:
+        async with _token_client(alice) as client:
+            a_resp = await client.get("/api/media/acl-media-router.png")
+        assert a_resp.status_code == 200
+
+        async with _token_client(bob) as client:
+            b_resp = await client.get("/api/media/acl-media-router.png")
+        assert b_resp.status_code == 404
+    finally:
+        if p.exists():
+            p.unlink()
+
+
+@pytest.mark.asyncio
+async def test_router_media_list_filters_by_readability():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_media_alice_list", "editor")
+    bob = await _get_or_create_user(db, "acl_media_bob_list", "editor")
+    restricted_page = await _make_page(db, "acl-media-list-restricted")
+    await _add_acl(db, restricted_page, "user", alice["id"], "read")
+
+    restricted_media = await _make_media(db, "acl-media-list-restricted.png", alice["id"])
+    await _link_media(db, restricted_page, restricted_media)
+
+    async with _token_client(bob) as client:
+        resp = await client.get("/api/media")
+    assert resp.status_code == 200
+    filenames = {m["filename"] for m in resp.json()}
+    assert "acl-media-list-restricted.png" not in filenames
+
+
+@pytest.mark.asyncio
+async def test_router_media_list_shows_orphan_only_to_uploader():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_media_alice_orph", "editor")
+    bob = await _get_or_create_user(db, "acl_media_bob_orph", "editor")
+
+    orphan_media = await _make_media(db, "acl-media-orph.png", alice["id"])  # no refs
+
+    async with _token_client(alice) as client:
+        a_resp = await client.get("/api/media")
+    alice_files = {m["filename"] for m in a_resp.json()}
+    assert "acl-media-orph.png" in alice_files
+
+    async with _token_client(bob) as client:
+        b_resp = await client.get("/api/media")
+    bob_files = {m["filename"] for m in b_resp.json()}
+    assert "acl-media-orph.png" not in bob_files

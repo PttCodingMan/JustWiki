@@ -7,6 +7,7 @@ from app.schemas import MediaResponse, MediaListItem
 from app.auth import get_current_user, require_admin, ALGORITHM
 from app.config import settings
 from app.database import get_db
+from app.services.acl import can_read_media, list_readable_page_ids
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 
@@ -23,6 +24,8 @@ async def upload_media(
     file: UploadFile = File(...),
     user=Depends(get_current_user),
 ):
+    if user.get("role") == "viewer":
+        raise HTTPException(status_code=403, detail="Viewers cannot upload media")
     if file.content_type not in ALLOWED_TYPES:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type}")
 
@@ -58,10 +61,11 @@ async def upload_media(
 
 @router.get("", response_model=list[MediaListItem])
 async def list_media(user=Depends(get_current_user)):
-    """List all uploaded media with reference counts and linked pages.
+    """List uploaded media visible to the current user.
 
-    Any authenticated user can browse the library (same permission level as
-    uploading), but only admins can delete entries.
+    Admins see everything. Other users see media that is either (a)
+    uploaded by them (handles orphan media) or (b) referenced by at least
+    one live page they can read. Only admins can delete entries.
     """
     db = await get_db()
     rows = await db.execute_fetchall(
@@ -86,15 +90,36 @@ async def list_media(user=Depends(get_current_user)):
            ORDER BY p.title"""
     )
     refs_by_media: dict[int, list[dict]] = {}
+    refs_page_ids_by_media: dict[int, set[int]] = {}
     for r in ref_rows:
         refs_by_media.setdefault(r["media_id"], []).append(
             {"id": r["id"], "slug": r["slug"], "title": r["title"]}
         )
+        refs_page_ids_by_media.setdefault(r["media_id"], set()).add(r["id"])
+
+    is_admin = user.get("role") == "admin"
+    readable_ids: set[int] = set()
+    if not is_admin:
+        readable_ids = await list_readable_page_ids(db, user)
 
     items: list[dict] = []
     for r in rows:
         item = dict(r)
-        item["referenced_pages"] = refs_by_media.get(item["id"], [])
+        media_id = item["id"]
+        referenced = refs_by_media.get(media_id, [])
+        if not is_admin:
+            ref_ids = refs_page_ids_by_media.get(media_id, set())
+            if ref_ids:
+                # Referenced media: must intersect with readable pages.
+                if not (ref_ids & readable_ids):
+                    continue
+                # Hide referenced-page entries the user can't read.
+                referenced = [p for p in referenced if p["id"] in readable_ids]
+            else:
+                # Orphan: only uploader sees it.
+                if item["uploaded_by"] != user["id"]:
+                    continue
+        item["referenced_pages"] = referenced
         item["url"] = f"/api/media/{item['filename']}"
         items.append(item)
     return items
@@ -136,11 +161,12 @@ async def delete_media(media_id: int, user=Depends(require_admin)):
     await db.commit()
 
 
-def _request_is_authenticated(request: Request) -> bool:
+async def _authenticated_user_from_request(request: Request) -> dict | None:
     """Best-effort credential check without raising.
 
-    Lets this route stay open for public-page readers while still serving
-    authenticated editors regardless of what the media references.
+    Returns the user dict (id, username, role) if the token is valid and
+    the user exists; otherwise None. Used by the media file route so
+    anonymous public-page readers keep working.
     """
     token = None
     auth_header = request.headers.get("Authorization", "")
@@ -149,12 +175,19 @@ def _request_is_authenticated(request: Request) -> bool:
     if not token:
         token = request.cookies.get("token")
     if not token:
-        return False
+        return None
     try:
-        jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
-        return True
-    except JWTError:
-        return False
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = int(payload["sub"])
+    except (JWTError, KeyError, ValueError):
+        return None
+    db = await get_db()
+    rows = await db.execute_fetchall(
+        "SELECT id, username, role FROM users WHERE id = ?", (user_id,)
+    )
+    if not rows:
+        return None
+    return dict(rows[0])
 
 
 # logo.png ships with the install and is referenced from the login page and
@@ -190,14 +223,31 @@ async def get_media(filename: str, request: Request):
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="File not found")
 
-    # Authenticated users can fetch any media in the library.
-    # Anonymous users can only fetch files that are either bundled (logo) or
-    # referenced by at least one live, public page, so private uploads aren't
-    # exposed via UUID guessing or enumeration.
-    if not _request_is_authenticated(request):
-        if filename not in _ALWAYS_PUBLIC_FILENAMES:
-            db = await get_db()
-            if not await _media_is_public(db, filename):
-                raise HTTPException(status_code=404, detail="File not found")
+    # Bundled-with-install files (e.g. logo.png) are always fetchable.
+    if filename in _ALWAYS_PUBLIC_FILENAMES:
+        return FileResponse(filepath)
+
+    db = await get_db()
+    user = await _authenticated_user_from_request(request)
+
+    if user is None:
+        # Anonymous: public-page referenced media only.
+        if not await _media_is_public(db, filename):
+            raise HTTPException(status_code=404, detail="File not found")
+        return FileResponse(filepath)
+
+    # Authenticated: admin short-circuits, otherwise run the ACL check.
+    if user.get("role") == "admin":
+        return FileResponse(filepath)
+
+    media_rows = await db.execute_fetchall(
+        "SELECT id FROM media WHERE filename = ?", (filename,)
+    )
+    if not media_rows:
+        # File exists on disk but not in DB — treat as not found for safety.
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if not await can_read_media(db, user, media_rows[0]["id"]):
+        raise HTTPException(status_code=404, detail="File not found")
 
     return FileResponse(filepath)
