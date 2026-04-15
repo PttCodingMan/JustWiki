@@ -363,3 +363,169 @@ async def test_can_read_media_admin_always():
     media_id = await _make_media(db, "acl-admin-media.png", alice["id"])
     # orphan, uploaded by alice; admin should still see it
     assert await can_read_media(db, admin, media_id) is True
+
+
+# ── pages router integration ─────────────────────────────────────────────
+#
+# These tests verify that router-level enforcement in pages.py calls into
+# the resolver correctly. They spin up users with distinct roles, create
+# ACL rows, and hit the HTTP API.
+
+from httpx import AsyncClient, ASGITransport
+from app.main import app
+from app.auth import create_token
+
+
+def _token_client(user: dict) -> AsyncClient:
+    token = create_token(user["id"], user["username"], user["role"])
+    return AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_router_viewer_cannot_create_page():
+    db = await get_db()
+    vic = await _get_or_create_user(db, "acl_router_vic_create", "viewer")
+    async with _token_client(vic) as client:
+        resp = await client.post(
+            "/api/pages",
+            json={"title": "Nope", "slug": "acl-router-viewer-create"},
+        )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_router_viewer_cannot_update_page():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_router_alice_upd", "editor")
+    vic = await _get_or_create_user(db, "acl_router_vic_upd", "viewer")
+
+    # Alice creates a page directly in DB so the test doesn't depend on create.
+    await _make_page(db, "acl-router-viewer-update")
+
+    async with _token_client(vic) as client:
+        resp = await client.put(
+            "/api/pages/acl-router-viewer-update",
+            json={"title": "Hijacked"},
+        )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_router_get_page_404_for_denied_user():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_router_alice_deny", "editor")
+    bob = await _get_or_create_user(db, "acl_router_bob_deny", "editor")
+    page = await _make_page(db, "acl-router-denied")
+    await _add_acl(db, page, "user", alice["id"], "write")
+
+    async with _token_client(alice) as client:
+        resp = await client.get("/api/pages/acl-router-denied")
+    assert resp.status_code == 200
+    assert resp.json()["effective_permission"] == "write"
+
+    async with _token_client(bob) as client:
+        resp = await client.get("/api/pages/acl-router-denied")
+    # 404 (not 403) so bob can't learn the page exists.
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_router_read_only_user_cannot_write():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_router_alice_ro", "editor")
+    page = await _make_page(db, "acl-router-readonly")
+    await _add_acl(db, page, "user", alice["id"], "read")
+
+    async with _token_client(alice) as client:
+        get_resp = await client.get("/api/pages/acl-router-readonly")
+        assert get_resp.status_code == 200
+        assert get_resp.json()["effective_permission"] == "read"
+
+        put_resp = await client.put(
+            "/api/pages/acl-router-readonly",
+            json={"title": "Nope"},
+        )
+        assert put_resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_router_list_pages_filters_denied():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_router_alice_list", "editor")
+    bob = await _get_or_create_user(db, "acl_router_bob_list", "editor")
+    restricted = await _make_page(db, "acl-router-list-restricted")
+    await _add_acl(db, restricted, "user", alice["id"], "read")
+
+    async with _token_client(bob) as client:
+        resp = await client.get("/api/pages", params={"per_page": 100})
+    assert resp.status_code == 200
+    slugs = {p["slug"] for p in resp.json()["pages"]}
+    assert "acl-router-list-restricted" not in slugs
+
+
+@pytest.mark.asyncio
+async def test_router_tree_filters_denied_but_keeps_readable_children():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_router_alice_tree", "editor")
+    bob = await _get_or_create_user(db, "acl_router_bob_tree", "editor")
+
+    parent = await _make_page(db, "acl-router-tree-parent")
+    child = await _make_page(db, "acl-router-tree-child", parent_id=parent)
+
+    # Parent locked to alice; child explicitly shared with bob (read).
+    await _add_acl(db, parent, "user", alice["id"], "write")
+    await _add_acl(db, child, "user", bob["id"], "read")
+
+    async with _token_client(bob) as client:
+        resp = await client.get("/api/pages/tree")
+    assert resp.status_code == 200
+    # Flatten tree and look for child — it should be visible (as a root,
+    # since parent was filtered out).
+    def _flatten(nodes):
+        out = []
+        for n in nodes:
+            out.append(n["slug"])
+            out.extend(_flatten(n.get("children", [])))
+        return out
+
+    slugs = _flatten(resp.json())
+    assert "acl-router-tree-child" in slugs
+    assert "acl-router-tree-parent" not in slugs
+
+
+@pytest.mark.asyncio
+async def test_router_create_under_denied_parent_403():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_router_alice_parent", "editor")
+    bob = await _get_or_create_user(db, "acl_router_bob_parent", "editor")
+    parent = await _make_page(db, "acl-router-parent-gate")
+    await _add_acl(db, parent, "user", alice["id"], "write")
+
+    async with _token_client(bob) as client:
+        resp = await client.post(
+            "/api/pages",
+            json={
+                "title": "Sneaky",
+                "slug": "acl-router-sneaky-child",
+                "parent_id": parent,
+            },
+        )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_router_admin_bypass_through_http():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_router_alice_admin_bypass", "editor")
+    admin = await _get_or_create_user(db, "acl_router_admin_bypass", "admin")
+    page = await _make_page(db, "acl-router-admin-bypass")
+    await _add_acl(db, page, "user", alice["id"], "read")
+
+    async with _token_client(admin) as client:
+        get_resp = await client.get("/api/pages/acl-router-admin-bypass")
+    assert get_resp.status_code == 200
+    assert get_resp.json()["effective_permission"] == "admin"

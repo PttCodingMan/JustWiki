@@ -56,6 +56,7 @@ class PageResponse(BaseModel):
     author_name: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    effective_permission: Optional[str] = None
 
 
 class PublicPageResponse(BaseModel):

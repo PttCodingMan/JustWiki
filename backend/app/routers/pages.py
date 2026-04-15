@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from app.schemas import PageCreate, PageUpdate, PageResponse, PageListResponse, PageMoveRequest
 from app.auth import get_current_user
 from app.database import get_db
+from app.services.acl import list_readable_page_ids, resolve_page_permission
 from app.services.search import rebuild_search_index, remove_from_search_index
 from app.services.wikilink import parse_and_update_backlinks
 from app.services.media_ref import parse_and_update_media_refs
@@ -11,6 +12,18 @@ from app.routers.activity import log_activity
 from app.routers.versions import save_version
 
 router = APIRouter(prefix="/api/pages", tags=["pages"])
+
+
+def _build_id_clause(ids: set[int], column: str = "id") -> tuple[str, list]:
+    """Produce a parameterized `column IN (?,?,...)` clause plus params.
+
+    For the empty set, returns a clause that never matches so downstream
+    SQL can be composed without branching.
+    """
+    if not ids:
+        return f"{column} IN (NULL)", []
+    placeholders = ",".join("?" * len(ids))
+    return f"{column} IN ({placeholders})", list(ids)
 
 
 def slugify(title: str, existing_slug: str | None = None) -> str:
@@ -79,8 +92,11 @@ async def list_pages(
     db = await get_db()
     offset = (page - 1) * per_page
 
-    where = "WHERE deleted_at IS NULL"
-    params: list = []
+    readable = await list_readable_page_ids(db, user)
+    id_clause, id_params = _build_id_clause(readable)
+
+    where = f"WHERE deleted_at IS NULL AND {id_clause}"
+    params: list = list(id_params)
     if parent_id is not None:
         where += " AND parent_id = ?"
         params.append(parent_id)
@@ -101,10 +117,23 @@ async def list_pages(
 @router.get("/tree")
 async def page_tree(user=Depends(get_current_user)):
     db = await get_db()
+    readable = await list_readable_page_ids(db, user)
+    id_clause, id_params = _build_id_clause(readable)
     rows = await db.execute_fetchall(
-        "SELECT id, slug, title, parent_id, sort_order FROM pages WHERE deleted_at IS NULL ORDER BY sort_order, title"
+        f"SELECT id, slug, title, parent_id, sort_order FROM pages "
+        f"WHERE deleted_at IS NULL AND {id_clause} "
+        f"ORDER BY sort_order, title",
+        id_params,
     )
     all_pages = [dict(r) for r in rows]
+
+    # Reparent: if a page's parent is filtered out (not readable), promote
+    # the page to a tree root so the user can still find it. Otherwise the
+    # node would be orphaned and never rendered.
+    readable_in_result = {p["id"] for p in all_pages}
+    for p in all_pages:
+        if p["parent_id"] is not None and p["parent_id"] not in readable_in_result:
+            p["parent_id"] = None
 
     # Defensive: protect against any cycle in the stored parent_id chain.
     # New writes are validated in update_page/move_page/create_page, but a
@@ -129,18 +158,21 @@ async def page_tree(user=Depends(get_current_user)):
 @router.get("/graph")
 async def page_graph(user=Depends(get_current_user)):
     db = await get_db()
+    readable = await list_readable_page_ids(db, user)
+    id_clause, id_params = _build_id_clause(readable)
     pages = await db.execute_fetchall(
-        "SELECT id, slug, title FROM pages WHERE deleted_at IS NULL"
+        f"SELECT id, slug, title FROM pages WHERE deleted_at IS NULL AND {id_clause}",
+        id_params,
     )
     nodes = [{"id": p["id"], "slug": p["slug"], "title": p["title"]} for p in pages]
 
-    # Only show links between live pages
-    live_ids = {p["id"] for p in pages}
+    # Only show links between pages the user can see.
+    visible_ids = {p["id"] for p in pages}
     backlinks = await db.execute_fetchall("SELECT source_page_id, target_page_id FROM backlinks")
     links = [
         {"source": b["source_page_id"], "target": b["target_page_id"]}
         for b in backlinks
-        if b["source_page_id"] in live_ids and b["target_page_id"] in live_ids
+        if b["source_page_id"] in visible_ids and b["target_page_id"] in visible_ids
     ]
 
     return {"nodes": nodes, "links": links}
@@ -148,6 +180,9 @@ async def page_graph(user=Depends(get_current_user)):
 
 @router.post("", response_model=PageResponse, status_code=201)
 async def create_page(body: PageCreate, user=Depends(get_current_user)):
+    if user.get("role") == "viewer":
+        raise HTTPException(status_code=403, detail="Viewers cannot create pages")
+
     db = await get_db()
 
     content = body.content_md
@@ -165,6 +200,13 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
         )
         if not parent_rows:
             raise HTTPException(status_code=400, detail="Parent page not found")
+        # Require write permission on the parent to nest under it.
+        parent_perm = await resolve_page_permission(db, user, body.parent_id)
+        if parent_perm not in ("admin", "write"):
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to create pages under this parent",
+            )
 
     # Retry on the rare race where two concurrent create_page calls resolve the
     # same slug before either INSERT commits. unique_slug makes the collision
@@ -223,19 +265,29 @@ async def get_page(slug: str, user=Depends(get_current_user)):
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
 
+    page = dict(rows[0])
+    permission = await resolve_page_permission(db, user, page["id"])
+    if permission == "none":
+        # Return 404 rather than 403 so unauthorized users can't probe for
+        # the existence of restricted pages.
+        raise HTTPException(status_code=404, detail="Page not found")
+
     # Increment view count (does not bump the content version)
     await db.execute(
         "UPDATE pages SET view_count = view_count + 1 WHERE slug = ?", (slug,)
     )
     await db.commit()
 
-    page = dict(rows[0])
     page["view_count"] += 1
+    page["effective_permission"] = permission
     return page
 
 
 @router.put("/{slug}", response_model=PageResponse)
 async def update_page(slug: str, body: PageUpdate, user=Depends(get_current_user)):
+    if user.get("role") == "viewer":
+        raise HTTPException(status_code=403, detail="Viewers cannot edit pages")
+
     db = await get_db()
     rows = await db.execute_fetchall(
         "SELECT * FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
@@ -244,6 +296,14 @@ async def update_page(slug: str, body: PageUpdate, user=Depends(get_current_user
         raise HTTPException(status_code=404, detail="Page not found")
 
     current = dict(rows[0])
+    permission = await resolve_page_permission(db, user, current["id"])
+    if permission == "none":
+        raise HTTPException(status_code=404, detail="Page not found")
+    if permission == "read":
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have write permission on this page",
+        )
 
     # Optimistic lock: if the client sent a base_version, it must match.
     # Missing base_version is allowed for legacy API clients, but logged.
@@ -324,9 +384,15 @@ async def get_children(slug: str, user=Depends(get_current_user)):
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = rows[0]["id"]
+    if await resolve_page_permission(db, user, page_id) == "none":
+        raise HTTPException(status_code=404, detail="Page not found")
+
+    readable = await list_readable_page_ids(db, user)
+    id_clause, id_params = _build_id_clause(readable)
     children = await db.execute_fetchall(
-        "SELECT * FROM pages WHERE parent_id = ? AND deleted_at IS NULL ORDER BY sort_order, title",
-        (page_id,),
+        f"SELECT * FROM pages WHERE parent_id = ? AND deleted_at IS NULL AND {id_clause} "
+        f"ORDER BY sort_order, title",
+        [page_id] + id_params,
     )
     return [dict(c) for c in children]
 
@@ -340,19 +406,27 @@ async def get_backlinks(slug: str, user=Depends(get_current_user)):
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = rows[0]["id"]
+    if await resolve_page_permission(db, user, page_id) == "none":
+        raise HTTPException(status_code=404, detail="Page not found")
+
+    readable = await list_readable_page_ids(db, user)
+    id_clause, id_params = _build_id_clause(readable, column="p.id")
     backlinks = await db.execute_fetchall(
-        """SELECT p.id, p.slug, p.title
+        f"""SELECT p.id, p.slug, p.title
            FROM backlinks b
            JOIN pages p ON p.id = b.source_page_id
-           WHERE b.target_page_id = ? AND p.deleted_at IS NULL
+           WHERE b.target_page_id = ? AND p.deleted_at IS NULL AND {id_clause}
            ORDER BY p.title""",
-        (page_id,),
+        [page_id] + id_params,
     )
     return [dict(b) for b in backlinks]
 
 
 @router.patch("/{slug}/move")
 async def move_page(slug: str, body: PageMoveRequest, user=Depends(get_current_user)):
+    if user.get("role") == "viewer":
+        raise HTTPException(status_code=403, detail="Viewers cannot move pages")
+
     db = await get_db()
     rows = await db.execute_fetchall(
         "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
@@ -360,6 +434,15 @@ async def move_page(slug: str, body: PageMoveRequest, user=Depends(get_current_u
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = rows[0]["id"]
+
+    src_perm = await resolve_page_permission(db, user, page_id)
+    if src_perm == "none":
+        raise HTTPException(status_code=404, detail="Page not found")
+    if src_perm == "read":
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have write permission on this page",
+        )
 
     updates = []
     params = []
@@ -369,6 +452,13 @@ async def move_page(slug: str, body: PageMoveRequest, user=Depends(get_current_u
                 status_code=400,
                 detail="Cannot move page: would create a cycle in the page tree",
             )
+        if body.parent_id is not None:
+            dst_perm = await resolve_page_permission(db, user, body.parent_id)
+            if dst_perm not in ("admin", "write"):
+                raise HTTPException(
+                    status_code=403,
+                    detail="You do not have permission to move pages under this parent",
+                )
         updates.append("parent_id = ?")
         params.append(body.parent_id)
     if "sort_order" in body.model_fields_set:
@@ -390,6 +480,9 @@ async def delete_page(slug: str, user=Depends(get_current_user)):
 
     Hard-deleting (purging) happens via DELETE /api/trash/{slug}, admin only.
     """
+    if user.get("role") == "viewer":
+        raise HTTPException(status_code=403, detail="Viewers cannot delete pages")
+
     db = await get_db()
     rows = await db.execute_fetchall(
         "SELECT id, title, created_by FROM pages WHERE slug = ? AND deleted_at IS NULL",
@@ -398,7 +491,17 @@ async def delete_page(slug: str, user=Depends(get_current_user)):
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
 
-    # Only admin or page creator can delete
+    permission = await resolve_page_permission(db, user, rows[0]["id"])
+    if permission == "none":
+        raise HTTPException(status_code=404, detail="Page not found")
+    if permission == "read":
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have write permission on this page",
+        )
+
+    # Only admin or page creator can delete (preserves existing rule in
+    # addition to the ACL write check above).
     if user["role"] != "admin" and rows[0]["created_by"] != user["id"]:
         raise HTTPException(status_code=403, detail="Only the page creator or an admin can delete this page")
 
