@@ -16,8 +16,18 @@ build:
 
 backup:
 	@mkdir -p backup
-	cp data/just-wiki.db backup/just-wiki-$$(date +%Y%m%d_%H%M%S).db
-	@echo "Backup complete"
+	@set -e; \
+	if [ ! -f data/just-wiki.db ]; then \
+		echo "Error: data/just-wiki.db not found"; exit 1; \
+	fi; \
+	TS=$$(date +%Y%m%d_%H%M%S); \
+	STAGE=backup/.stage-$$TS; \
+	mkdir -p $$STAGE; \
+	sqlite3 data/just-wiki.db ".backup $$STAGE/just-wiki.db"; \
+	if [ -d data/media ]; then cp -R data/media $$STAGE/media; else mkdir $$STAGE/media; fi; \
+	tar czf backup/just-wiki-$$TS.tar.gz -C $$STAGE .; \
+	rm -rf $$STAGE; \
+	echo "Backup complete: backup/just-wiki-$$TS.tar.gz"
 
 clean:
 	rm -f data/just-wiki.db
