@@ -178,6 +178,33 @@ function wikilinkRule(state, silent) {
   return true
 }
 
+// ── Inline rule: standalone `<br>` / `<br/>` / `<br />`
+// We keep markdown-it's `html: false` for safety, so raw HTML normally gets
+// escaped. Milkdown's commonmark preset, however, serializes empty paragraphs
+// as `<br />` to preserve blank lines in WYSIWYG — a round-trip we depend on.
+// Without this rule those lines would render as literal "<br />" text in the
+// viewer. We only whitelist the zero-attribute form; anything with attributes
+// (`<br onclick=...>`) falls through and is escaped as before.
+function brRule(state, silent) {
+  const src = state.src
+  const start = state.pos
+  // Fast reject: the inline parser hits this rule on every `<` character, and
+  // most of those aren't `<br>`. Check `< b r` byte-by-byte (case-insensitive)
+  // before allocating a substring for the regex. Saves O(n²) on big pages.
+  if (src.charCodeAt(start) !== 0x3c /* < */) return false
+  const c1 = src.charCodeAt(start + 1)
+  if (c1 !== 0x62 /* b */ && c1 !== 0x42 /* B */) return false
+  const c2 = src.charCodeAt(start + 2)
+  if (c2 !== 0x72 /* r */ && c2 !== 0x52 /* R */) return false
+  const match = src.slice(start).match(/^<br\s*\/?>/i)
+  if (!match) return false
+  if (!silent) {
+    state.push('hardbreak', 'br', 0)
+  }
+  state.pos = start + match[0].length
+  return true
+}
+
 // ── Inline rule: ::drawio[id]
 function drawioRule(state, silent) {
   const src = state.src
@@ -319,6 +346,10 @@ export function createMarkdown() {
     }
     return `<a href="/page/${safeSlug}" class="wikilink">${safeDisplay}</a>`
   }
+
+  // Standalone <br> whitelist (must run before markdown-it's default tokenizer
+  // consumes `<` as text). See brRule comment for rationale.
+  md.inline.ruler.before('link', 'br_tag', brRule)
 
   // Draw.io directive
   md.inline.ruler.before('link', 'drawio', drawioRule)

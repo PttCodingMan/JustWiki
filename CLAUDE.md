@@ -80,3 +80,11 @@ Multiple built-in themes (light, dark, lavender, forest, etc.) via CSS variables
 ## Deployment
 
 Docker Compose: backend (uvicorn, port 8000) + frontend (nginx, port 3000). Shared `./data` volume. All config in `.env`.
+
+## Development Workflow
+
+After completing any development task, always run the following before reporting the task as done:
+
+1. **Tests** — run `make test` (or the relevant subset: `make test-backend` / `make test-frontend`) and make sure everything passes.
+2. **Lint** — run `make lint` for frontend changes.
+3. **Code review** — perform a self-review of the diff, then run a second-opinion review with Gemini CLI for non-trivial changes.

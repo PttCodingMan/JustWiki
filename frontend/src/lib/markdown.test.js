@@ -161,6 +161,108 @@ describe('renderMarkdown', () => {
     expect(html).not.toContain('katex-inline')
   })
 
+  // ── <br> whitelist (Milkdown's empty-paragraph round-trip) ──
+
+  it('renders standalone <br /> between blocks as a visible line break', () => {
+    // Milkdown's `remarkPreserveEmptyLinePlugin` serializes empty paragraphs
+    // as `<br />`. Without the whitelist rule the viewer would show the
+    // literal "&lt;br /&gt;" text instead of a blank line.
+    const html = renderMarkdown('first\n\n<br />\n\nsecond')
+    expect(html).toContain('<br>')
+    expect(html).not.toContain('&lt;br')
+    expect(html).toContain('<p>first</p>')
+    expect(html).toContain('<p>second</p>')
+  })
+
+  it('accepts <br>, <br/>, <br />, and the uppercase form', () => {
+    for (const form of ['<br>', '<br/>', '<br />', '<br    />', '<BR>', '<Br />']) {
+      const html = renderMarkdown(`a\n\n${form}\n\nb`)
+      expect(html).toContain('<br>')
+      expect(html).not.toContain('&lt;')
+    }
+  })
+
+  it('does NOT match prefixes that only look like <br (e.g. <brx>, <br-foo>)', () => {
+    const a = renderMarkdown('<brx>')
+    expect(a).toContain('&lt;brx&gt;')
+    expect(a).not.toContain('<br>')
+
+    const b = renderMarkdown('<br-foo>')
+    expect(b).toContain('&lt;br-foo&gt;')
+  })
+
+  it('does NOT match unclosed <br variants', () => {
+    // Dangling `<br` at end of input, or `<br/` missing `>`, should fall
+    // through to markdown-it's default text handling (escaped).
+    const a = renderMarkdown('trailing <br')
+    expect(a).toContain('&lt;br')
+    expect(a).not.toMatch(/<br>/)
+
+    const b = renderMarkdown('trailing <br/ and more')
+    expect(b).toContain('&lt;br/')
+    expect(b).not.toMatch(/<br>/)
+  })
+
+  it('matches multiple <br /> occurrences inside the same paragraph', () => {
+    const html = renderMarkdown('alpha<br>beta<br />gamma<br/>delta')
+    const brs = html.match(/<br>/g) || []
+    expect(brs.length).toBe(3)
+    expect(html).toContain('alpha')
+    expect(html).toContain('delta')
+  })
+
+  it('respects backslash-escaped \\<br /> (escape rule wins)', () => {
+    // markdown-it's built-in `escape` rule consumes `\<` as literal `<`, which
+    // means brRule never sees the tag. Regression guard for rule ordering.
+    const html = renderMarkdown('literal \\<br /> tag')
+    expect(html).toContain('&lt;br /&gt;')
+    expect(html).not.toMatch(/<br>/)
+  })
+
+  it('renders inline <br /> inside a paragraph as a line break', () => {
+    const html = renderMarkdown('line one<br />line two')
+    expect(html).toContain('line one<br>')
+    expect(html).toContain('line two')
+    expect(html).not.toContain('&lt;br')
+  })
+
+  it('renders consecutive <br /> lines as multiple line breaks', () => {
+    // When users press Enter several times Milkdown emits one <br /> per
+    // empty paragraph. Each should survive to the viewer.
+    const html = renderMarkdown('a\n\n<br />\n\n<br />\n\n<br />\n\nb')
+    const brMatches = html.match(/<br>/g) || []
+    expect(brMatches.length).toBe(3)
+  })
+
+  it('does NOT whitelist <br> with attributes (security)', () => {
+    // Anything the rule doesn't recognize must fall through to markdown-it's
+    // default handling, which escapes raw HTML because `html: false`.
+    const attr = renderMarkdown('<br onclick="x">')
+    expect(attr).not.toContain('<br onclick')
+    expect(attr).toContain('&lt;br onclick')
+
+    const cls = renderMarkdown('<br class="foo">')
+    expect(cls).not.toContain('<br class')
+    expect(cls).toContain('&lt;br class')
+  })
+
+  it('does NOT whitelist other HTML tags (regression guard)', () => {
+    const html = renderMarkdown('<div>x</div> and <span>y</span>')
+    expect(html).not.toContain('<div>')
+    expect(html).not.toContain('<span>')
+    expect(html).toContain('&lt;div&gt;')
+    expect(html).toContain('&lt;span&gt;')
+  })
+
+  it('keeps <br /> literal inside code fences and inline code', () => {
+    const fence = renderMarkdown('```\n<br />\n```')
+    expect(fence).toContain('&lt;br /&gt;')
+    expect(fence).not.toMatch(/<br>(?!\/)/)  // no rendered <br> element
+
+    const inline = renderMarkdown('inline `<br />` code')
+    expect(inline).toContain('<code>&lt;br /&gt;</code>')
+  })
+
   it('escapes HTML comment syntax rather than emitting raw comments', () => {
     // The backend's /api/public endpoint strips comments entirely before
     // sending; the frontend parser runs with `html: false` so any leftover
