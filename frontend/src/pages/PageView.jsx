@@ -9,6 +9,7 @@ import MarkdownViewer from '../components/Viewer/MarkdownViewer'
 import TableOfContents from '../components/Viewer/TableOfContents'
 import Comments from '../components/Comments'
 import ConfirmDialog from '../components/ConfirmDialog'
+import AclManager from '../components/AclManager'
 import api from '../api/client'
 
 export default function PageView() {
@@ -31,6 +32,7 @@ export default function PageView() {
   const menuRef = useRef(null)
   const [publicConfirmOpen, setPublicConfirmOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [aclManagerOpen, setAclManagerOpen] = useState(false)
   const [toast, setToast] = useState('')
   const [headings, setHeadings] = useState([])
 
@@ -267,7 +269,7 @@ export default function PageView() {
             )}
             {manageable && (
               <button
-                onClick={() => { setMenuOpen(false); setToast('ACL editor coming soon') }}
+                onClick={() => { setMenuOpen(false); setAclManagerOpen(true) }}
                 className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
               >
                 <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -450,6 +452,12 @@ export default function PageView() {
         variant="danger"
         onConfirm={handleDelete}
         onCancel={() => setDeleteConfirmOpen(false)}
+      />
+
+      <AclManager
+        slug={slug}
+        open={aclManagerOpen}
+        onClose={() => setAclManagerOpen(false)}
       />
 
       {toast && (
