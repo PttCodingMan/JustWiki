@@ -20,6 +20,33 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+@router.get("/search")
+async def search_users(
+    q: str = Query("", description="Substring match on username or display_name"),
+    limit: int = Query(20, ge=1, le=100),
+    user=Depends(get_current_user),
+):
+    """Username lookup for the AclManager picker.
+
+    Returns a minimal shape (id, username, display_name) to keep the
+    response small. Available to any authenticated user since the
+    alternative is no UI for managing ACLs at all; this does allow
+    username enumeration by authenticated users, which is an accepted
+    trade-off for a small-team wiki.
+    """
+    db = await get_db()
+    pattern = f"%{q}%"
+    rows = await db.execute_fetchall(
+        """SELECT id, username, display_name, role
+           FROM users
+           WHERE username LIKE ? OR display_name LIKE ?
+           ORDER BY username
+           LIMIT ?""",
+        (pattern, pattern, limit),
+    )
+    return [dict(r) for r in rows]
+
+
 @router.get("")
 async def list_users(
     page: int = Query(1, ge=1),

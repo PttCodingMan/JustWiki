@@ -715,3 +715,140 @@ async def test_router_trash_viewer_blocked():
     async with _token_client(vic) as client:
         resp = await client.get("/api/trash")
     assert resp.status_code == 403
+
+
+# ── ACL management endpoints ─────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_acl_get_returns_explicit_and_inherited():
+    db = await get_db()
+    admin = await _get_or_create_user(db, "acl_crud_admin_get", "admin")
+    alice = await _get_or_create_user(db, "acl_crud_alice_get", "editor")
+    bob = await _get_or_create_user(db, "acl_crud_bob_get", "editor")
+
+    parent = await _make_page(db, "acl-crud-parent-get")
+    child = await _make_page(db, "acl-crud-child-get", parent_id=parent)
+    await _add_acl(db, parent, "user", alice["id"], "write")
+    await _add_acl(db, child, "user", bob["id"], "read")
+
+    # Admin can always view the ACL regardless of inheritance chain.
+    async with _token_client(admin) as client:
+        resp = await client.get("/api/pages/acl-crud-child-get/acl")
+    assert resp.status_code == 200
+    data = resp.json()
+    explicit_ids = [(r["principal_type"], r["principal_id"]) for r in data["explicit"]]
+    assert ("user", bob["id"]) in explicit_ids
+
+    inherited_ids = [(r["principal_type"], r["principal_id"]) for r in data["inherited"]]
+    assert ("user", alice["id"]) in inherited_ids
+    assert data["inherited"][0]["source_page_slug"] == "acl-crud-parent-get"
+
+
+@pytest.mark.asyncio
+async def test_acl_put_replaces_rows_and_validates():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_crud_alice_put", "editor")
+    bob = await _get_or_create_user(db, "acl_crud_bob_put", "editor")
+    page = await _make_page(db, "acl-crud-put-page")
+
+    # Alice grants herself write first so she has manage permission.
+    await _add_acl(db, page, "user", alice["id"], "write")
+
+    async with _token_client(alice) as client:
+        # Replace with {alice:write, bob:read}
+        resp = await client.put(
+            "/api/pages/acl-crud-put-page/acl",
+            json={
+                "rows": [
+                    {"principal_type": "user", "principal_id": alice["id"], "permission": "write"},
+                    {"principal_type": "user", "principal_id": bob["id"], "permission": "read"},
+                ]
+            },
+        )
+    assert resp.status_code == 200
+    pairs = {(r["principal_id"], r["permission"]) for r in resp.json()["explicit"]}
+    assert (alice["id"], "write") in pairs
+    assert (bob["id"], "read") in pairs
+
+    # Invalid user id rejected.
+    async with _token_client(alice) as client:
+        bad = await client.put(
+            "/api/pages/acl-crud-put-page/acl",
+            json={
+                "rows": [
+                    {"principal_type": "user", "principal_id": 999999, "permission": "read"},
+                ]
+            },
+        )
+    assert bad.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_acl_delete_reverts_to_inheritance():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_crud_alice_del", "editor")
+    page = await _make_page(db, "acl-crud-del-page")
+    await _add_acl(db, page, "user", alice["id"], "write")
+
+    async with _token_client(alice) as client:
+        resp = await client.delete("/api/pages/acl-crud-del-page/acl")
+    assert resp.status_code == 200
+    assert resp.json()["explicit"] == []
+    # With no explicit rows anywhere, the page is back to open default.
+    async with _token_client(alice) as client:
+        get_resp = await client.get("/api/pages/acl-crud-del-page")
+    assert get_resp.json()["effective_permission"] == "write"
+
+
+@pytest.mark.asyncio
+async def test_acl_put_requires_manage_permission():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_crud_alice_gate", "editor")
+    bob = await _get_or_create_user(db, "acl_crud_bob_gate", "editor")
+    page = await _make_page(db, "acl-crud-gate-page")
+    # Alice has write; bob has read only.
+    await _add_acl(db, page, "user", alice["id"], "write")
+    await _add_acl(db, page, "user", bob["id"], "read")
+
+    async with _token_client(bob) as client:
+        resp = await client.put(
+            "/api/pages/acl-crud-gate-page/acl",
+            json={"rows": []},
+        )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_acl_my_permission_endpoint():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_crud_alice_mp", "editor")
+    bob = await _get_or_create_user(db, "acl_crud_bob_mp", "editor")
+    page = await _make_page(db, "acl-crud-mp-page")
+    await _add_acl(db, page, "user", alice["id"], "read")
+
+    async with _token_client(alice) as client:
+        a = await client.get("/api/pages/acl-crud-mp-page/my-permission")
+    assert a.status_code == 200
+    assert a.json()["permission"] == "read"
+
+    async with _token_client(bob) as client:
+        b = await client.get("/api/pages/acl-crud-mp-page/my-permission")
+    assert b.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_users_search_endpoint():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_users_search_alice", "editor")
+    await _get_or_create_user(db, "acl_users_search_target_one", "editor")
+    await _get_or_create_user(db, "acl_users_search_target_two", "editor")
+
+    async with _token_client(alice) as client:
+        resp = await client.get(
+            "/api/users/search", params={"q": "acl_users_search_target"}
+        )
+    assert resp.status_code == 200
+    names = {u["username"] for u in resp.json()}
+    assert "acl_users_search_target_one" in names
+    assert "acl_users_search_target_two" in names
