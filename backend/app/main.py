@@ -9,7 +9,7 @@ from app import __version__
 from app.config import settings
 from app.database import init_db, close_db, seed_welcome_page, get_db
 from app.auth import ensure_admin_exists
-from app.routers import auth_router, pages, media, templates, search, tags, activity, bookmarks, versions, diagrams, users, comments, backup, export, trash, notifications, watch, public, dashboard, acl
+from app.routers import auth_router, pages, media, templates, search, tags, activity, bookmarks, versions, diagrams, users, comments, backup, export, trash, notifications, watch, public, dashboard, acl, groups
 
 logger = logging.getLogger("justwiki")
 
@@ -144,6 +144,7 @@ app.include_router(watch.router)
 app.include_router(public.router)
 app.include_router(dashboard.router)
 app.include_router(acl.router)
+app.include_router(groups.router)
 
 
 @app.get("/api/health")
