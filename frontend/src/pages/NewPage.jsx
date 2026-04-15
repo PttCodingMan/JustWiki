@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import usePages from '../store/usePages'
 import api from '../api/client'
 import Editor from '../components/Editor/Editor'
@@ -7,9 +7,28 @@ import MediaPickerModal from '../components/Editor/MediaPickerModal'
 import DrawioModal from '../components/DrawioModal'
 import useUnsavedWarning from '../hooks/useUnsavedWarning'
 
+function findNodeById(nodes, id) {
+  for (const node of nodes) {
+    if (node.id === id) return node
+    if (node.children?.length) {
+      const found = findNodeById(node.children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
 export default function NewPage() {
   const navigate = useNavigate()
-  const { createPage, fetchTree } = usePages()
+  const [searchParams] = useSearchParams()
+  const { createPage, fetchTree, tree } = usePages()
+  const parentParam = searchParams.get('parent')
+  const parentIdRaw = parentParam ? Number(parentParam) : null
+  const parentId = Number.isInteger(parentIdRaw) && parentIdRaw > 0 ? parentIdRaw : null
+  const parentNode = useMemo(
+    () => (parentId ? findNodeById(tree, parentId) : null),
+    [parentId, tree]
+  )
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [templates, setTemplates] = useState([])
@@ -67,6 +86,15 @@ export default function NewPage() {
     api.get('/templates').then((res) => setTemplates(res.data))
   }, [])
 
+  const [parentLookupDone, setParentLookupDone] = useState(false)
+  useEffect(() => {
+    if (!parentId || parentNode || parentLookupDone) return
+    fetchTree()
+      .catch(() => {})
+      .finally(() => setParentLookupDone(true))
+  }, [parentId, parentNode, parentLookupDone, fetchTree])
+  const parentMissing = parentId && parentLookupDone && !parentNode
+
   const selectTemplate = (tmpl) => {
     setSelectedTemplate(tmpl)
     setContent(tmpl.content_md)
@@ -94,6 +122,7 @@ export default function NewPage() {
         title,
         content_md: content,
         template_id: selectedTemplate?.id,
+        parent_id: parentMissing ? null : parentId,
       })
       await fetchTree()
       setSaved(true)
@@ -103,7 +132,7 @@ export default function NewPage() {
       setError(err?.response?.data?.detail || err.message || 'Create failed')
       setSaving(false)
     }
-  }, [title, content, saving, selectedTemplate, createPage, fetchTree, navigate])
+  }, [title, content, saving, selectedTemplate, parentId, parentMissing, createPage, fetchTree, navigate])
 
   // Ctrl+S
   useEffect(() => {
@@ -117,10 +146,50 @@ export default function NewPage() {
     return () => window.removeEventListener('keydown', handler)
   }, [handleSave])
 
+  const parentHint = parentId ? (
+    parentMissing ? (
+      <div className="flex items-center gap-2 text-xs mb-3 px-3 py-2 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800">
+        <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M4.93 19h14.14a2 2 0 001.74-3l-7.07-12a2 2 0 00-3.48 0l-7.07 12a2 2 0 001.74 3z" />
+        </svg>
+        <span>
+          Parent page <span className="font-mono">#{parentId}</span> not found — will create as a root page.
+        </span>
+        <button
+          type="button"
+          onClick={() => navigate('/new', { replace: true })}
+          className="ml-auto text-yellow-800 hover:text-yellow-900 underline"
+        >
+          Dismiss
+        </button>
+      </div>
+    ) : (
+      <div className="flex items-center gap-2 text-xs text-text-secondary mb-3 px-3 py-2 rounded-lg bg-surface border border-border">
+        <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h12M4 12h8m-8 6h4M20 10v10m-5-5h10" />
+        </svg>
+        <span>
+          Sub-page of:{' '}
+          <span className="font-medium text-text">
+            {parentNode ? parentNode.title : 'Loading…'}
+          </span>
+        </span>
+        <button
+          type="button"
+          onClick={() => navigate('/new', { replace: true })}
+          className="ml-auto text-primary hover:text-primary-hover underline"
+        >
+          Remove
+        </button>
+      </div>
+    )
+  ) : null
+
   if (showTemplates) {
     return (
       <div className="max-w-2xl mx-auto">
         <h1 className="text-2xl font-bold text-text mb-6">New Page</h1>
+        {parentHint}
         <p className="text-text-secondary mb-4">Start from a template or blank page</p>
         <div className="grid grid-cols-2 gap-3 mb-4">
           <button
@@ -147,6 +216,7 @@ export default function NewPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {parentHint}
       <div className="flex items-center justify-between mb-4">
         <input
           type="text"

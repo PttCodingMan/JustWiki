@@ -1,11 +1,12 @@
 import React, { useState, useRef } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import usePages from '../../store/usePages'
 import useBookmarks from '../../store/useBookmarks'
 import useAuth from '../../store/useAuth'
 
 function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
   const location = useLocation()
+  const navigate = useNavigate()
   const { movePage } = usePages()
   const isActive = location.pathname === `/page/${node.slug}`
   const hasChildren = node.children?.length > 0
@@ -128,6 +129,22 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
         >
           {node.title}
         </Link>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            navigate(`/new?parent=${node.id}`)
+          }}
+          draggable={false}
+          aria-label={`New subpage under ${node.title}`}
+          title="New subpage"
+          className="w-6 h-6 mr-1 flex items-center justify-center shrink-0 rounded opacity-0 group-hover:opacity-100 focus:opacity-100 text-text-secondary hover:text-text hover:bg-surface-hover"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
       </div>
       {hasChildren && expanded && (
         <div>
