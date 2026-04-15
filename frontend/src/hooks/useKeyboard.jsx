@@ -1,14 +1,17 @@
 import React, { useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import useAuth from '../store/useAuth'
 
 export default function KeyboardShortcuts({ onOpenSearch }) {
   const navigate = useNavigate()
   const location = useLocation()
+  const { user } = useAuth()
 
   useEffect(() => {
     const handler = (e) => {
-      // Ctrl+N — new page
+      // Ctrl+N — new page (viewers can't create pages)
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        if (user?.role === 'viewer') return
         e.preventDefault()
         navigate('/new')
         return
@@ -39,7 +42,7 @@ export default function KeyboardShortcuts({ onOpenSearch }) {
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [navigate, location, onOpenSearch])
+  }, [navigate, location, onOpenSearch, user?.role])
 
   return null
 }

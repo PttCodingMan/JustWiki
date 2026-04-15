@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import usePages from '../store/usePages'
+import useAuth from '../store/useAuth'
 import api from '../api/client'
 import Editor from '../components/Editor/Editor'
 import MediaPickerModal from '../components/Editor/MediaPickerModal'
@@ -22,6 +23,13 @@ export default function NewPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { createPage, fetchTree, tree } = usePages()
+  const { user } = useAuth()
+
+  useEffect(() => {
+    if (user?.role === 'viewer') {
+      navigate('/', { replace: true })
+    }
+  }, [user, navigate])
   const parentParam = searchParams.get('parent')
   const parentIdRaw = parentParam ? Number(parentParam) : null
   const parentId = Number.isInteger(parentIdRaw) && parentIdRaw > 0 ? parentIdRaw : null

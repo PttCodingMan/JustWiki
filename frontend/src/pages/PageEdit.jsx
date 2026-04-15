@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import DOMPurify from 'dompurify'
 import usePages from '../store/usePages'
+import useAuth from '../store/useAuth'
+import { canEdit } from '../store/usePermissions'
 import Editor from '../components/Editor/Editor'
 import MediaPickerModal from '../components/Editor/MediaPickerModal'
 import MarkdownViewer from '../components/Viewer/MarkdownViewer'
@@ -13,6 +15,7 @@ export default function PageEdit() {
   const { slug } = useParams()
   const navigate = useNavigate()
   const { getPage, updatePage, fetchTree } = usePages()
+  const { user } = useAuth()
   const [page, setPage] = useState(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -47,6 +50,12 @@ export default function PageEdit() {
 
   useEffect(() => {
     getPage(slug).then((p) => {
+      if (!canEdit(p?.effective_permission, user?.role)) {
+        // Read-only users shouldn't land in the editor at all; bounce
+        // them to the view page instead.
+        navigate(`/page/${slug}`)
+        return
+      }
       setPage(p)
       setTitle(p.title)
       setContent(p.content_md)

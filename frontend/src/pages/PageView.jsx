@@ -3,6 +3,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import usePages from '../store/usePages'
 import useTags from '../store/useTags'
 import useBookmarks from '../store/useBookmarks'
+import useAuth from '../store/useAuth'
+import usePermissions, { canEdit, canManageAcl } from '../store/usePermissions'
 import MarkdownViewer from '../components/Viewer/MarkdownViewer'
 import TableOfContents from '../components/Viewer/TableOfContents'
 import Comments from '../components/Comments'
@@ -15,6 +17,8 @@ export default function PageView() {
   const { getPage, deletePage, fetchTree } = usePages()
   const { pageTags, fetchPageTags, addTag, removeTag } = useTags()
   const { checkBookmark, addBookmark, removeBookmark, fetchBookmarks } = useBookmarks()
+  const { user } = useAuth()
+  const seedPermission = usePermissions((s) => s.seed)
   const [page, setPage] = useState(null)
   const [loading, setLoading] = useState(true)
   const [bookmarked, setBookmarked] = useState(false)
@@ -63,6 +67,7 @@ export default function PageView() {
         ])
         if (!cancelled) {
           setPage(pageData)
+          seedPermission(slug, pageData?.effective_permission)
           setBookmarked(isBookmarked)
           setWatching(watchRes.data.watching)
           setWatcherCount(watchRes.data.watcher_count || 0)
@@ -170,8 +175,13 @@ export default function PageView() {
   if (loading) return <div className="text-text-secondary">Loading...</div>
   if (!page) return null
 
+  const permission = page.effective_permission
+  const writable = canEdit(permission, user?.role)
+  const manageable = canManageAcl(permission, user?.role)
+
   const renderActions = (variant) => (
     <div className={`page-actions page-actions-${variant}`}>
+      {writable && (
       <button
         onClick={() => navigate(`/page/${slug}/edit`)}
         className="fab-btn fab-btn-primary"
@@ -183,6 +193,7 @@ export default function PageView() {
         </svg>
         Edit
       </button>
+      )}
       <div className="relative" ref={menuRef}>
         <button
           onClick={() => setMenuOpen(!menuOpen)}
@@ -216,6 +227,8 @@ export default function PageView() {
               </svg>
               {watching ? 'Stop watching' : 'Watch page'}
             </button>
+            {writable && (
+            <>
             <div className="border-t border-border my-1" />
             {page.is_public ? (
               <>
@@ -252,6 +265,19 @@ export default function PageView() {
                 Make public
               </button>
             )}
+            {manageable && (
+              <button
+                onClick={() => { setMenuOpen(false); setToast('ACL editor coming soon') }}
+                className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
+              >
+                <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                  <path d="M12 11c0-1.1.9-2 2-2h.01M12 11c0-1.1-.9-2-2-2H9.99M12 11v3m0 0v.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2h-3.17a2 2 0 01-1.42-.59l-1.17-1.17A2 2 0 0011.83 4H10.17a2 2 0 00-1.41.59L7.59 5.76A2 2 0 016.17 6.35H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                Manage permissions
+              </button>
+            )}
+            </>
+            )}
             <div className="border-t border-border my-1" />
             <button
               onClick={() => {
@@ -277,16 +303,20 @@ export default function PageView() {
               </svg>
               Export PDF
             </button>
-            <div className="border-t border-border my-1" />
-            <button
-              onClick={() => { setMenuOpen(false); setDeleteConfirmOpen(true) }}
-              className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-              Delete
-            </button>
+            {writable && (
+              <>
+                <div className="border-t border-border my-1" />
+                <button
+                  onClick={() => { setMenuOpen(false); setDeleteConfirmOpen(true) }}
+                  className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Delete
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

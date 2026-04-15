@@ -99,14 +99,46 @@ describe('Sidebar Component', () => {
         <Sidebar />
       </MemoryRouter>
     )
-    
+
     // Parent Page should be visible
     const parentNode = screen.getByText('Parent Page')
     expect(parentNode).toBeDefined()
-    
+
     // Child Page should be visible because depth < 1 or isActive is true
     // In TreeNode: const [expanded, setExpanded] = useState(isActive || depth < 1)
     // For Parent Page, depth is 0, so it's expanded by default.
     expect(screen.getByText('Child Page')).toBeDefined()
+  })
+
+  it('hides "New subpage" buttons for viewers', () => {
+    useAuth.mockReturnValue({ user: { role: 'viewer' } })
+
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>
+    )
+
+    // Editor/admin renders a "New subpage under <title>" button per tree
+    // node. Viewers must not see any of them.
+    const newSubpageButtons = screen.queryAllByRole('button', {
+      name: /New subpage under/i,
+    })
+    expect(newSubpageButtons).toHaveLength(0)
+  })
+
+  it('shows "New subpage" buttons for editors', () => {
+    useAuth.mockReturnValue({ user: { role: 'editor' } })
+
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>
+    )
+
+    const newSubpageButtons = screen.queryAllByRole('button', {
+      name: /New subpage under/i,
+    })
+    expect(newSubpageButtons.length).toBeGreaterThan(0)
   })
 })
