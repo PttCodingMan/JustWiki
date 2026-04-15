@@ -18,6 +18,8 @@ router = APIRouter(prefix="/api/trash", tags=["trash"])
 @router.get("")
 async def list_trash(user=Depends(get_current_user)):
     """List soft-deleted pages. Non-admins only see pages they created."""
+    if user.get("role") == "viewer":
+        raise HTTPException(status_code=403, detail="Viewers cannot view the trash")
     db = await get_db()
     base_sql = """
         SELECT p.id, p.slug, p.title, p.content_md, p.parent_id, p.version,
@@ -41,6 +43,8 @@ async def list_trash(user=Depends(get_current_user)):
 @router.post("/{slug}/restore")
 async def restore_page(slug: str, user=Depends(get_current_user)):
     """Restore a soft-deleted page. Admin or the original creator only."""
+    if user.get("role") == "viewer":
+        raise HTTPException(status_code=403, detail="Viewers cannot restore pages")
     db = await get_db()
     rows = await db.execute_fetchall(
         "SELECT * FROM pages WHERE slug = ? AND deleted_at IS NOT NULL", (slug,)

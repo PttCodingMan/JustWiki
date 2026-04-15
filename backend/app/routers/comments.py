@@ -4,9 +4,17 @@ from typing import Optional
 
 from app.auth import get_current_user
 from app.database import get_db
+from app.services.acl import resolve_page_permission
 from app.routers.activity import log_activity
 
 router = APIRouter(prefix="/api/pages/{slug}/comments", tags=["comments"])
+
+
+async def _require_comment_page_access(db, user, page_id: int):
+    """Any read-or-better permission is enough to list/post comments."""
+    perm = await resolve_page_permission(db, user, page_id)
+    if perm == "none":
+        raise HTTPException(status_code=404, detail="Page not found")
 
 
 class CommentCreate(BaseModel):
@@ -29,6 +37,7 @@ async def list_comments(
     if not page_rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = page_rows[0]["id"]
+    await _require_comment_page_access(db, user, page_id)
 
     offset = (page - 1) * per_page
     count_rows = await db.execute_fetchall(
@@ -64,6 +73,7 @@ async def create_comment(slug: str, body: CommentCreate, user=Depends(get_curren
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = page_rows[0]["id"]
     page_title = page_rows[0]["title"]
+    await _require_comment_page_access(db, user, page_id)
 
     cursor = await db.execute(
         "INSERT INTO comments (page_id, user_id, content) VALUES (?, ?, ?)",

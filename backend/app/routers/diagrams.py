@@ -7,9 +7,32 @@ from app.schemas import (
 )
 from app.auth import get_current_user, require_admin
 from app.database import get_db
+from app.services.acl import list_readable_page_ids, resolve_page_permission
 from app.services.diagram_ref import extract_diagram_ids
 
 router = APIRouter(prefix="/api/diagrams", tags=["diagrams"])
+
+
+async def _require_diagram_access(db, user, diagram, *, write: bool = False):
+    """Gate a diagram request via its owning page ACL.
+
+    Orphan diagrams (page_id is null) are admin-only. For diagrams owned
+    by a page, the user must have at least read (or write when
+    `write=True`) on the page.
+    """
+    if user.get("role") == "admin":
+        return
+    page_id = diagram["page_id"]
+    if page_id is None:
+        raise HTTPException(status_code=404, detail="Diagram not found")
+    perm = await resolve_page_permission(db, user, page_id)
+    if perm == "none":
+        raise HTTPException(status_code=404, detail="Diagram not found")
+    if write and perm == "read":
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have write permission on the page that owns this diagram",
+        )
 
 
 @router.get("", response_model=list[DiagramListItem])
@@ -42,6 +65,7 @@ async def list_diagrams(user=Depends(get_current_user)):
            WHERE content_md LIKE '%::drawio%'"""
     )
     refs_by_diagram: dict[int, list[dict]] = {}
+    ref_page_ids_by_diagram: dict[int, set[int]] = {}
     for pr in page_rows:
         for did in extract_diagram_ids(pr["content_md"] or ""):
             refs_by_diagram.setdefault(did, []).append(
@@ -52,12 +76,28 @@ async def list_diagrams(user=Depends(get_current_user)):
                     "deleted": pr["deleted_at"] is not None,
                 }
             )
+            ref_page_ids_by_diagram.setdefault(did, set()).add(pr["id"])
+
+    is_admin = user.get("role") == "admin"
+    readable_ids: set[int] = set()
+    if not is_admin:
+        readable_ids = await list_readable_page_ids(db, user)
 
     items: list[dict] = []
     for r in rows:
         item = dict(r)
         item["has_svg"] = bool(item["has_svg"])
         refs = refs_by_diagram.get(item["id"], [])
+        if not is_admin:
+            # Hide diagrams whose owning page is unreadable and whose
+            # referencing pages are all unreadable. Orphan diagrams
+            # (no page_id and no references) fall through to admin-only.
+            owning_ok = item["page_id"] is not None and item["page_id"] in readable_ids
+            ref_ids = ref_page_ids_by_diagram.get(item["id"], set())
+            ref_ok = bool(ref_ids & readable_ids)
+            if not owning_ok and not ref_ok:
+                continue
+            refs = [p for p in refs if p["id"] in readable_ids]
         item["referenced_pages"] = refs
         item["reference_count"] = len(refs)
         items.append(item)
@@ -67,6 +107,10 @@ async def list_diagrams(user=Depends(get_current_user)):
 @router.get("/page/{page_id}")
 async def list_page_diagrams(page_id: int, user=Depends(get_current_user)):
     db = await get_db()
+    if user.get("role") != "admin":
+        perm = await resolve_page_permission(db, user, page_id)
+        if perm == "none":
+            raise HTTPException(status_code=404, detail="Page not found")
     rows = await db.execute_fetchall(
         "SELECT * FROM diagrams WHERE page_id = ? ORDER BY created_at", (page_id,)
     )
@@ -78,7 +122,25 @@ async def create_diagram(
     body: DiagramCreate,
     user=Depends(get_current_user),
 ):
+    if user.get("role") == "viewer":
+        raise HTTPException(status_code=403, detail="Viewers cannot create diagrams")
     db = await get_db()
+    # Creating a diagram requires write on its owning page. Orphan diagrams
+    # (no page_id) are admin-only.
+    if user.get("role") != "admin":
+        if body.page_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Only admins can create diagrams without a page",
+            )
+        perm = await resolve_page_permission(db, user, body.page_id)
+        if perm == "none":
+            raise HTTPException(status_code=404, detail="Page not found")
+        if perm == "read":
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have write permission on the owning page",
+            )
     cursor = await db.execute(
         """INSERT INTO diagrams (name, xml_data, page_id, created_by, updated_at)
            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)""",
@@ -100,6 +162,7 @@ async def get_diagram(diagram_id: int, user=Depends(get_current_user)):
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Diagram not found")
+    await _require_diagram_access(db, user, rows[0])
     return dict(rows[0])
 
 
@@ -109,12 +172,15 @@ async def update_diagram(
     body: DiagramUpdate,
     user=Depends(get_current_user),
 ):
+    if user.get("role") == "viewer":
+        raise HTTPException(status_code=403, detail="Viewers cannot edit diagrams")
     db = await get_db()
     rows = await db.execute_fetchall(
         "SELECT * FROM diagrams WHERE id = ?", (diagram_id,)
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Diagram not found")
+    await _require_diagram_access(db, user, rows[0], write=True)
 
     updates = []
     values = []
@@ -168,10 +234,11 @@ async def delete_diagram(diagram_id: int, user=Depends(require_admin)):
 async def get_diagram_svg(diagram_id: int, user=Depends(get_current_user)):
     db = await get_db()
     rows = await db.execute_fetchall(
-        "SELECT svg_cache FROM diagrams WHERE id = ?", (diagram_id,)
+        "SELECT svg_cache, page_id FROM diagrams WHERE id = ?", (diagram_id,)
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Diagram not found")
+    await _require_diagram_access(db, user, rows[0])
     svg = rows[0]["svg_cache"]
     if not svg:
         raise HTTPException(status_code=404, detail="No SVG cache available")

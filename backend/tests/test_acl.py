@@ -613,3 +613,105 @@ async def test_router_media_list_shows_orphan_only_to_uploader():
         b_resp = await client.get("/api/media")
     bob_files = {m["filename"] for m in b_resp.json()}
     assert "acl-media-orph.png" not in bob_files
+
+
+# ── search / versions / export / comments / trash integration ────────────
+
+
+@pytest.mark.asyncio
+async def test_router_search_hides_denied_pages():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_search_alice", "editor")
+    bob = await _get_or_create_user(db, "acl_search_bob", "editor")
+
+    # Create via HTTP so search_index gets populated.
+    async with _token_client(alice) as client:
+        create = await client.post(
+            "/api/pages",
+            json={
+                "title": "Secret Moonbeam",
+                "slug": "acl-search-secret",
+                "content_md": "Contains the word acluminousunique.",
+            },
+        )
+        assert create.status_code == 201
+
+    page_id = create.json()["id"]
+    await _add_acl(db, page_id, "user", alice["id"], "read")
+
+    async with _token_client(alice) as client:
+        a_resp = await client.get("/api/search", params={"q": "acluminousunique"})
+    assert a_resp.status_code == 200
+    assert a_resp.json()["total"] >= 1
+
+    async with _token_client(bob) as client:
+        b_resp = await client.get("/api/search", params={"q": "acluminousunique"})
+    assert b_resp.status_code == 200
+    slugs = {r["slug"] for r in b_resp.json()["results"]}
+    assert "acl-search-secret" not in slugs
+
+
+@pytest.mark.asyncio
+async def test_router_versions_hidden_when_page_denied():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_versions_alice", "editor")
+    bob = await _get_or_create_user(db, "acl_versions_bob", "editor")
+
+    async with _token_client(alice) as client:
+        r = await client.post(
+            "/api/pages",
+            json={"title": "V", "slug": "acl-versions-secret", "content_md": "a"},
+        )
+        assert r.status_code == 201
+        page_id = r.json()["id"]
+        # Bump version so there's at least one historical row.
+        await client.put(
+            "/api/pages/acl-versions-secret",
+            json={"content_md": "b"},
+        )
+
+    await _add_acl(db, page_id, "user", alice["id"], "read")
+
+    async with _token_client(bob) as client:
+        resp = await client.get("/api/pages/acl-versions-secret/versions")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_router_comments_denied_when_page_denied():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_comments_alice", "editor")
+    bob = await _get_or_create_user(db, "acl_comments_bob", "editor")
+    page = await _make_page(db, "acl-comments-secret")
+    await _add_acl(db, page, "user", alice["id"], "read")
+
+    async with _token_client(bob) as client:
+        list_resp = await client.get("/api/pages/acl-comments-secret/comments")
+        post_resp = await client.post(
+            "/api/pages/acl-comments-secret/comments",
+            json={"content": "hello"},
+        )
+    assert list_resp.status_code == 404
+    assert post_resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_router_export_page_denied_for_non_readers():
+    db = await get_db()
+    alice = await _get_or_create_user(db, "acl_export_alice", "editor")
+    bob = await _get_or_create_user(db, "acl_export_bob", "editor")
+    page = await _make_page(db, "acl-export-secret")
+    await _add_acl(db, page, "user", alice["id"], "read")
+
+    async with _token_client(bob) as client:
+        resp = await client.get("/api/export/page/acl-export-secret")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_router_trash_viewer_blocked():
+    db = await get_db()
+    vic = await _get_or_create_user(db, "acl_trash_vic", "viewer")
+    async with _token_client(vic) as client:
+        resp = await client.get("/api/trash")
+    assert resp.status_code == 403

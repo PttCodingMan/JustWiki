@@ -6,8 +6,9 @@ import zipfile
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse, HTMLResponse
 
-from app.auth import get_current_user
+from app.auth import get_current_user, require_admin
 from app.database import get_db
+from app.services.acl import resolve_page_permission
 
 
 def _sanitize_url(url: str) -> str:
@@ -190,6 +191,8 @@ async def export_page(
         raise HTTPException(status_code=404, detail="Page not found")
 
     page = dict(rows[0])
+    if await resolve_page_permission(db, user, page["id"]) == "none":
+        raise HTTPException(status_code=404, detail="Page not found")
     html_content = md_to_simple_html(page["content_md"])
     full_html = HTML_TEMPLATE.format(
         title=page["title"],
@@ -217,9 +220,13 @@ async def export_page(
 @router.get("/site")
 async def export_site(
     format: str = Query("html"),
-    user=Depends(get_current_user),
+    user=Depends(require_admin),
 ):
-    """Export all pages as a static HTML site in a .zip file."""
+    """Export all pages as a static HTML site in a .zip file.
+
+    Admin-only because partial exports (containing only the caller's
+    readable pages) would be confusing and silently omit content.
+    """
     db = await get_db()
     pages = await db.execute_fetchall(
         "SELECT id, slug, title, content_md FROM pages WHERE deleted_at IS NULL ORDER BY title"
