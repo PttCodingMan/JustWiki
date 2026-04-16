@@ -192,9 +192,9 @@ CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id);
 CREATE TABLE IF NOT EXISTS page_acl (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     page_id        INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
-    principal_type TEXT    NOT NULL,
+    principal_type TEXT    NOT NULL CHECK (principal_type IN ('user', 'group')),
     principal_id   INTEGER NOT NULL,
-    permission     TEXT    NOT NULL,
+    permission     TEXT    NOT NULL CHECK (permission IN ('read', 'write')),
     UNIQUE (page_id, principal_type, principal_id)
 );
 

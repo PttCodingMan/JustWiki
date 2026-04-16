@@ -20,10 +20,31 @@ Resolution model (see /docs or the original plan for the full rationale):
   (no live references) is accessible to its uploader and admins only.
 """
 
+import time
+
 # SQLite recursive-CTE safety cap: the parent chain should never be this
 # deep in real wikis, but the cap prevents a corrupted cyclic chain from
 # locking the DB. Writes are already cycle-checked in pages.py.
 _MAX_CHAIN_DEPTH = 50
+
+# ── In-memory TTL cache for list_readable_page_ids ──────────────────
+# Key: user_id → (monotonic_timestamp, frozenset[int])
+# Cleared by invalidate_readable_cache() on ACL / group-membership writes.
+_readable_cache: dict[int, tuple[float, frozenset[int]]] = {}
+_READABLE_CACHE_TTL = 30  # seconds
+
+
+def invalidate_readable_cache(user_id: int | None = None):
+    """Drop cached readable-page sets.
+
+    Call with ``user_id`` when only one user's view may have changed (e.g.
+    a group-membership edit), or with ``None`` to flush the whole cache
+    (e.g. after a page_acl write that could affect multiple users).
+    """
+    if user_id is None:
+        _readable_cache.clear()
+    else:
+        _readable_cache.pop(user_id, None)
 
 
 async def _user_group_ids(db, user_id: int) -> list[int]:
@@ -93,14 +114,23 @@ async def list_readable_page_ids(db, user: dict) -> set[int]:
 
     Used by list/tree/graph/search/export/etc. to filter result sets
     efficiently in SQL rather than per-row Python loops.
+
+    Results are cached per-user for ``_READABLE_CACHE_TTL`` seconds to
+    avoid re-running the recursive CTE on every sidebar / search request.
     """
     role = user.get("role") or "editor"
 
-    all_rows = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE deleted_at IS NULL"
-    )
     if role == "admin":
+        all_rows = await db.execute_fetchall(
+            "SELECT id FROM pages WHERE deleted_at IS NULL"
+        )
         return {r["id"] for r in all_rows}
+
+    user_id = user["id"]
+    now = time.monotonic()
+    cached = _readable_cache.get(user_id)
+    if cached and now - cached[0] < _READABLE_CACHE_TTL:
+        return cached[1]
 
     group_ids = await _user_group_ids(db, user["id"])
 
@@ -152,7 +182,9 @@ async def list_readable_page_ids(db, user: dict) -> set[int]:
     """
     params = [user["id"]] + group_params
     rows = await db.execute_fetchall(sql, params)
-    return {r["id"] for r in rows}
+    result = frozenset(r["id"] for r in rows)
+    _readable_cache[user_id] = (now, result)
+    return result
 
 
 async def can_read_media(db, user: dict, media_id: int) -> bool:
@@ -182,8 +214,6 @@ async def can_read_media(db, user: dict, media_id: int) -> bool:
             return False
         return media[0]["uploaded_by"] == user["id"]
 
-    for r in ref_rows:
-        perm = await resolve_page_permission(db, user, r["page_id"])
-        if perm != "none":
-            return True
-    return False
+    # Use the cached readable-set instead of N individual resolve calls.
+    readable = await list_readable_page_ids(db, user)
+    return any(r["page_id"] in readable for r in ref_rows)

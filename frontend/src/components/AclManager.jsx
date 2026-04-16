@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import api from '../api/client'
 import useGroups from '../store/useGroups'
+import usePermissions from '../store/usePermissions'
 
 /**
  * AclManager — modal that edits a page's explicit ACL.
@@ -12,6 +13,7 @@ import useGroups from '../store/useGroups'
  */
 export default function AclManager({ slug, open, onClose }) {
   const { groups, fetchGroups } = useGroups()
+  const invalidatePermission = usePermissions((s) => s.invalidate)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -93,6 +95,7 @@ export default function AclManager({ slug, open, onClose }) {
     setError('')
     try {
       await api.put(`/pages/${slug}/acl`, { rows })
+      invalidatePermission(slug)
       onClose?.()
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to save ACL')
@@ -106,6 +109,7 @@ export default function AclManager({ slug, open, onClose }) {
     setSaving(true)
     try {
       await api.delete(`/pages/${slug}/acl`)
+      invalidatePermission(slug)
       onClose?.()
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to clear ACL')

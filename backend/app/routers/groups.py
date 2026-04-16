@@ -14,6 +14,8 @@ from pydantic import BaseModel
 
 from app.auth import get_current_user, require_admin
 from app.database import get_db
+from app.routers.activity import log_activity
+from app.services.acl import invalidate_readable_cache
 
 router = APIRouter(prefix="/api/groups", tags=["groups"])
 
@@ -54,9 +56,14 @@ async def create_group(body: GroupCreate, user=Depends(require_admin)):
         "INSERT INTO groups (name, description, created_by) VALUES (?, ?, ?)",
         (name, body.description, user["id"]),
     )
+    group_id = cursor.lastrowid
+    await log_activity(
+        db, user["id"], "created", "group", group_id,
+        {"name": name},
+    )
     await db.commit()
     return {
-        "id": cursor.lastrowid,
+        "id": group_id,
         "name": name,
         "description": body.description,
         "member_count": 0,
@@ -67,11 +74,12 @@ async def create_group(body: GroupCreate, user=Depends(require_admin)):
 async def delete_group(group_id: int, user=Depends(require_admin)):
     db = await get_db()
     rows = await db.execute_fetchall(
-        "SELECT id FROM groups WHERE id = ?", (group_id,)
+        "SELECT id, name FROM groups WHERE id = ?", (group_id,)
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Group not found")
 
+    group_name = rows[0]["name"]
     # Clean up ACL rows that referenced this group so they don't turn into
     # dangling "grant to unknown group" entries. group_members cascades via
     # the schema's ON DELETE CASCADE.
@@ -80,7 +88,12 @@ async def delete_group(group_id: int, user=Depends(require_admin)):
         (group_id,),
     )
     await db.execute("DELETE FROM groups WHERE id = ?", (group_id,))
+    await log_activity(
+        db, user["id"], "deleted", "group", group_id,
+        {"name": group_name},
+    )
     await db.commit()
+    invalidate_readable_cache()
 
 
 @router.get("/{group_id}/members")
@@ -125,7 +138,12 @@ async def add_member(
         "INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?, ?)",
         (group_id, body.user_id),
     )
+    await log_activity(
+        db, user["id"], "member_added", "group", group_id,
+        {"user_id": body.user_id},
+    )
     await db.commit()
+    invalidate_readable_cache(body.user_id)
     return {"group_id": group_id, "user_id": body.user_id}
 
 
@@ -140,4 +158,9 @@ async def remove_member(
         "DELETE FROM group_members WHERE group_id = ? AND user_id = ?",
         (group_id, user_id),
     )
+    await log_activity(
+        db, user["id"], "member_removed", "group", group_id,
+        {"user_id": user_id},
+    )
     await db.commit()
+    invalidate_readable_cache(user_id)

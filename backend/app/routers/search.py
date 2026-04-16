@@ -1,4 +1,5 @@
 import html
+import json
 import re
 from fastapi import APIRouter, Depends, Query
 from app.auth import get_current_user
@@ -64,23 +65,22 @@ async def search_pages(
     readable = await list_readable_page_ids(db, user)
     if not readable:
         return {"results": [], "total": 0, "page": page, "per_page": per_page}
-    id_placeholders = ",".join("?" * len(readable))
-    id_params = list(readable)
+    readable_json = json.dumps(list(readable))
 
     if tag:
-        count_sql = f"""
+        count_sql = """
             SELECT COUNT(DISTINCT p.id) as cnt
             FROM search_index
             JOIN pages p ON CAST(search_index.page_id AS INTEGER) = p.id
             JOIN page_tags pt ON pt.page_id = p.id
             JOIN tags t ON t.id = pt.tag_id
             WHERE search_index MATCH ? AND t.name = ? AND p.deleted_at IS NULL
-              AND p.id IN ({id_placeholders})
+              AND p.id IN (SELECT value FROM json_each(?))
         """
-        count_rows = await db.execute_fetchall(count_sql, [fts_query, tag] + id_params)
+        count_rows = await db.execute_fetchall(count_sql, [fts_query, tag, readable_json])
         total = count_rows[0]["cnt"]
 
-        search_sql = f"""
+        search_sql = """
             SELECT DISTINCT p.id, p.slug, p.title, p.content_md, p.updated_at, p.view_count,
                    search_index.rank
             FROM search_index
@@ -88,36 +88,36 @@ async def search_pages(
             JOIN page_tags pt ON pt.page_id = p.id
             JOIN tags t ON t.id = pt.tag_id
             WHERE search_index MATCH ? AND t.name = ? AND p.deleted_at IS NULL
-              AND p.id IN ({id_placeholders})
+              AND p.id IN (SELECT value FROM json_each(?))
             ORDER BY search_index.rank
             LIMIT ? OFFSET ?
         """
         rows = await db.execute_fetchall(
-            search_sql, [fts_query, tag] + id_params + [per_page, offset]
+            search_sql, [fts_query, tag, readable_json, per_page, offset]
         )
     else:
-        count_sql = f"""
+        count_sql = """
             SELECT COUNT(*) as cnt
             FROM search_index
             JOIN pages p ON CAST(search_index.page_id AS INTEGER) = p.id
             WHERE search_index MATCH ? AND p.deleted_at IS NULL
-              AND p.id IN ({id_placeholders})
+              AND p.id IN (SELECT value FROM json_each(?))
         """
-        count_rows = await db.execute_fetchall(count_sql, [fts_query] + id_params)
+        count_rows = await db.execute_fetchall(count_sql, [fts_query, readable_json])
         total = count_rows[0]["cnt"]
 
-        search_sql = f"""
+        search_sql = """
             SELECT p.id, p.slug, p.title, p.content_md, p.updated_at, p.view_count,
                    search_index.rank
             FROM search_index
             JOIN pages p ON CAST(search_index.page_id AS INTEGER) = p.id
             WHERE search_index MATCH ? AND p.deleted_at IS NULL
-              AND p.id IN ({id_placeholders})
+              AND p.id IN (SELECT value FROM json_each(?))
             ORDER BY search_index.rank
             LIMIT ? OFFSET ?
         """
         rows = await db.execute_fetchall(
-            search_sql, [fts_query] + id_params + [per_page, offset]
+            search_sql, [fts_query, readable_json, per_page, offset]
         )
 
     results = []

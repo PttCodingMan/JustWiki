@@ -25,7 +25,8 @@ from pydantic import BaseModel
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.services.acl import resolve_page_permission
+from app.routers.activity import log_activity
+from app.services.acl import invalidate_readable_cache, resolve_page_permission
 
 router = APIRouter(prefix="/api/pages", tags=["acl"])
 
@@ -110,9 +111,10 @@ async def get_page_acl(slug: str, user=Depends(get_current_user)):
         )
         explicit.append(d)
 
-    # Walk the parent chain to find inherited rows. We show *all* rows at
-    # ancestors that have no explicit row on the target page itself — this
-    # mirrors what the resolver would consider at each anchor.
+    # Walk the parent chain to find inherited rows. Stop at the first
+    # ancestor that has any ACL rows — that is the "anchor" the resolver
+    # uses. Showing rows from deeper ancestors would be misleading because
+    # those are shadowed and never affect the resolved permission.
     inherited: list[dict] = []
     ancestor_id = page["parent_id"]
     while ancestor_id is not None:
@@ -138,6 +140,8 @@ async def get_page_acl(slug: str, user=Depends(get_current_user)):
             d["source_page_slug"] = anc["slug"]
             d["source_page_title"] = anc["title"]
             inherited.append(d)
+        if acl_rows:
+            break  # anchor found — deeper ancestors are shadowed
         ancestor_id = anc["parent_id"]
 
     return {"explicit": explicit, "inherited": inherited}
@@ -202,7 +206,12 @@ async def put_page_acl(slug: str, body: AclPutBody, user=Depends(get_current_use
                VALUES (?, ?, ?, ?)""",
             (page["id"], r.principal_type, r.principal_id, r.permission),
         )
+    await log_activity(
+        db, user["id"], "acl_updated", "page", page["id"],
+        {"slug": slug, "rows": [r.model_dump() for r in body.rows]},
+    )
     await db.commit()
+    invalidate_readable_cache()
 
     return await get_page_acl(slug=slug, user=user)
 
@@ -217,7 +226,12 @@ async def delete_page_acl(slug: str, user=Depends(get_current_user)):
     await _require_manage_permission(db, user, page["id"])
 
     await db.execute("DELETE FROM page_acl WHERE page_id = ?", (page["id"],))
+    await log_activity(
+        db, user["id"], "acl_cleared", "page", page["id"],
+        {"slug": slug},
+    )
     await db.commit()
+    invalidate_readable_cache()
 
     return await get_page_acl(slug=slug, user=user)
 

@@ -10,11 +10,21 @@ from app.routers.activity import log_activity
 router = APIRouter(prefix="/api/pages/{slug}/comments", tags=["comments"])
 
 
-async def _require_comment_page_access(db, user, page_id: int):
-    """Any read-or-better permission is enough to list/post comments."""
+async def _require_page_read(db, user, page_id: int):
+    """Read-or-better permission is enough to list comments."""
     perm = await resolve_page_permission(db, user, page_id)
     if perm == "none":
         raise HTTPException(status_code=404, detail="Page not found")
+    return perm
+
+
+async def _require_page_write(db, user, page_id: int):
+    """Write-or-better permission is required to post comments."""
+    perm = await resolve_page_permission(db, user, page_id)
+    if perm == "none":
+        raise HTTPException(status_code=404, detail="Page not found")
+    if perm == "read":
+        raise HTTPException(status_code=403, detail="You do not have write permission on this page")
 
 
 class CommentCreate(BaseModel):
@@ -37,7 +47,7 @@ async def list_comments(
     if not page_rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = page_rows[0]["id"]
-    await _require_comment_page_access(db, user, page_id)
+    await _require_page_read(db, user, page_id)
 
     offset = (page - 1) * per_page
     count_rows = await db.execute_fetchall(
@@ -73,7 +83,7 @@ async def create_comment(slug: str, body: CommentCreate, user=Depends(get_curren
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = page_rows[0]["id"]
     page_title = page_rows[0]["title"]
-    await _require_comment_page_access(db, user, page_id)
+    await _require_page_write(db, user, page_id)
 
     cursor = await db.execute(
         "INSERT INTO comments (page_id, user_id, content) VALUES (?, ?, ?)",
@@ -105,12 +115,14 @@ async def update_comment(
     page_rows = await db.execute_fetchall("SELECT id FROM pages WHERE slug = ?", (slug,))
     if not page_rows:
         raise HTTPException(status_code=404, detail="Page not found")
+    page_id = page_rows[0]["id"]
+    await _require_page_write(db, user, page_id)
     rows = await db.execute_fetchall(
         "SELECT id, user_id, page_id FROM comments WHERE id = ?", (comment_id,)
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Comment not found")
-    if rows[0]["page_id"] != page_rows[0]["id"]:
+    if rows[0]["page_id"] != page_id:
         raise HTTPException(status_code=404, detail="Comment not found on this page")
     if rows[0]["user_id"] != user["id"] and user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Not allowed")
@@ -139,12 +151,14 @@ async def delete_comment(slug: str, comment_id: int, user=Depends(get_current_us
     page_rows = await db.execute_fetchall("SELECT id FROM pages WHERE slug = ?", (slug,))
     if not page_rows:
         raise HTTPException(status_code=404, detail="Page not found")
+    page_id = page_rows[0]["id"]
+    await _require_page_write(db, user, page_id)
     rows = await db.execute_fetchall(
         "SELECT id, user_id, page_id FROM comments WHERE id = ?", (comment_id,)
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Comment not found")
-    if rows[0]["page_id"] != page_rows[0]["id"]:
+    if rows[0]["page_id"] != page_id:
         raise HTTPException(status_code=404, detail="Comment not found on this page")
     if rows[0]["user_id"] != user["id"] and user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Not allowed")

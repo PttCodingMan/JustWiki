@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.auth import get_current_user, require_admin
 from app.database import get_db
 from app.routers.activity import log_activity
+from app.services.acl import invalidate_readable_cache, resolve_page_permission
 from app.services.search import rebuild_search_index
 from app.services.wikilink import parse_and_update_backlinks
 
@@ -58,6 +59,16 @@ async def restore_page(slug: str, user=Depends(get_current_user)):
             status_code=403,
             detail="Only the page creator or an admin can restore this page",
         )
+    # Even if the user is the creator, verify they still have write
+    # access via ACL (a parent's permissions may have changed while the
+    # page was in the trash). Admin bypass is inside resolve_page_permission.
+    if user["role"] != "admin":
+        perm = await resolve_page_permission(db, user, page["id"])
+        if perm not in ("admin", "write"):
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have write permission to restore this page",
+            )
 
     # If the slug has been taken by a new page while this one was in the trash,
     # refuse to restore — caller must purge or the new page must be renamed.
@@ -86,6 +97,7 @@ async def restore_page(slug: str, user=Depends(get_current_user)):
         {"title": page["title"], "slug": slug},
     )
     await db.commit()
+    invalidate_readable_cache()
 
     # Return the fully re-hydrated page
     rows = await db.execute_fetchall(
@@ -118,3 +130,4 @@ async def purge_page(slug: str, user=Depends(require_admin)):
         {"title": page_title, "slug": slug},
     )
     await db.commit()
+    invalidate_readable_cache()

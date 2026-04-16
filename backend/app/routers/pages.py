@@ -1,10 +1,11 @@
+import json
 import re
 import unicodedata
 from fastapi import APIRouter, HTTPException, Depends, Query
 from app.schemas import PageCreate, PageUpdate, PageResponse, PageListResponse, PageMoveRequest
 from app.auth import get_current_user
 from app.database import get_db
-from app.services.acl import list_readable_page_ids, resolve_page_permission
+from app.services.acl import invalidate_readable_cache, list_readable_page_ids, resolve_page_permission
 from app.services.search import rebuild_search_index, remove_from_search_index
 from app.services.wikilink import parse_and_update_backlinks
 from app.services.media_ref import parse_and_update_media_refs
@@ -15,15 +16,17 @@ router = APIRouter(prefix="/api/pages", tags=["pages"])
 
 
 def _build_id_clause(ids: set[int], column: str = "id") -> tuple[str, list]:
-    """Produce a parameterized `column IN (?,?,...)` clause plus params.
+    """Produce a parameterized ``column IN (SELECT value FROM json_each(?))``
+    clause plus params.
 
+    Uses ``json_each`` instead of ``IN (?,?,...)`` to avoid hitting
+    SQLite's ``SQLITE_MAX_VARIABLE_NUMBER`` limit on large page sets.
     For the empty set, returns a clause that never matches so downstream
     SQL can be composed without branching.
     """
     if not ids:
-        return f"{column} IN (NULL)", []
-    placeholders = ",".join("?" * len(ids))
-    return f"{column} IN ({placeholders})", list(ids)
+        return "0 = 1", []
+    return f"{column} IN (SELECT value FROM json_each(?))", [json.dumps(list(ids))]
 
 
 def slugify(title: str, existing_slug: str | None = None) -> str:
@@ -241,6 +244,7 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
     # Log activity
     await log_activity(db, user["id"], "created", "page", page_id, {"title": body.title, "slug": slug})
     await db.commit()
+    invalidate_readable_cache()
 
     rows = await db.execute_fetchall("SELECT * FROM pages WHERE id = ?", (page_id,))
     new_page = dict(rows[0])
@@ -363,6 +367,8 @@ async def update_page(slug: str, body: PageUpdate, user=Depends(get_current_user
         action = "made_public" if is_public else "made_private"
         await log_activity(db, user["id"], action, "page", current["id"], {"title": title, "slug": slug})
     await db.commit()
+    if "parent_id" in body.model_fields_set and parent_id != current["parent_id"]:
+        invalidate_readable_cache()  # parent change alters inherited ACL
 
     rows = await db.execute_fetchall("SELECT * FROM pages WHERE slug = ?", (slug,))
     updated = dict(rows[0])
@@ -471,6 +477,8 @@ async def move_page(slug: str, body: PageMoveRequest, user=Depends(get_current_u
     params.append(slug)
     await db.execute(f"UPDATE pages SET {', '.join(updates)} WHERE slug = ?", params)
     await db.commit()
+    if "parent_id" in body.model_fields_set:
+        invalidate_readable_cache()  # parent change alters inherited ACL
     return {"ok": True}
 
 
@@ -518,6 +526,7 @@ async def delete_page(slug: str, user=Depends(get_current_user)):
     await log_activity(db, user["id"], "deleted", "page", page_id, {"title": page_title, "slug": slug})
 
     await db.commit()
+    invalidate_readable_cache()
 
     # Fire notification
     from app.services.notifications import notify_page_deleted
