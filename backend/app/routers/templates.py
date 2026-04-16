@@ -1,3 +1,4 @@
+import aiosqlite
 from fastapi import APIRouter, HTTPException, Depends
 from app.schemas import TemplateCreate, TemplateUpdate, TemplateResponse
 from app.auth import get_current_user
@@ -16,11 +17,14 @@ async def list_templates(user=Depends(get_current_user)):
 @router.post("", response_model=TemplateResponse, status_code=201)
 async def create_template(body: TemplateCreate, user=Depends(get_current_user)):
     db = await get_db()
-    cursor = await db.execute(
-        "INSERT INTO templates (name, description, content_md, created_by) VALUES (?, ?, ?, ?)",
-        (body.name, body.description, body.content_md, user["id"]),
-    )
-    await db.commit()
+    try:
+        cursor = await db.execute(
+            "INSERT INTO templates (name, description, content_md, created_by) VALUES (?, ?, ?, ?)",
+            (body.name, body.description, body.content_md, user["id"]),
+        )
+        await db.commit()
+    except aiosqlite.IntegrityError:
+        raise HTTPException(status_code=409, detail="A template with this name already exists")
     rows = await db.execute_fetchall(
         "SELECT * FROM templates WHERE id = ?", (cursor.lastrowid,)
     )
@@ -43,11 +47,14 @@ async def update_template(
     desc = body.description if body.description is not None else current["description"]
     content = body.content_md if body.content_md is not None else current["content_md"]
 
-    await db.execute(
-        "UPDATE templates SET name = ?, description = ?, content_md = ? WHERE id = ?",
-        (name, desc, content, template_id),
-    )
-    await db.commit()
+    try:
+        await db.execute(
+            "UPDATE templates SET name = ?, description = ?, content_md = ? WHERE id = ?",
+            (name, desc, content, template_id),
+        )
+        await db.commit()
+    except aiosqlite.IntegrityError:
+        raise HTTPException(status_code=409, detail="A template with this name already exists")
     rows = await db.execute_fetchall(
         "SELECT * FROM templates WHERE id = ?", (template_id,)
     )
