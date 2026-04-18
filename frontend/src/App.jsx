@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import useAuth from './store/useAuth'
 import useTheme from './store/useTheme'
 import Layout from './components/Layout/Layout'
@@ -11,7 +11,9 @@ import NewPage from './pages/NewPage'
 import SearchResults from './pages/SearchResults'
 import Activity from './pages/Activity'
 import PageVersions from './pages/PageVersions'
-import GraphView from './pages/GraphView'
+// GraphView pulls in react-force-graph + three.js (~600 KB min / ~150 KB
+// gzip). Lazy-load it so the bundle only downloads when /graph is visited.
+const GraphView = lazy(() => import('./pages/GraphView'))
 import Admin from './pages/Admin'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
@@ -78,7 +80,14 @@ export default function App() {
         <Route path="/new" element={<NewPage />} />
         <Route path="/search" element={<SearchResults />} />
         <Route path="/activity" element={<Activity />} />
-        <Route path="/graph" element={<GraphView />} />
+        <Route
+          path="/graph"
+          element={
+            <Suspense fallback={<div className="text-text-secondary">Loading graph…</div>}>
+              <GraphView />
+            </Suspense>
+          }
+        />
         <Route path="/admin" element={<Admin />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/profile" element={<Profile />} />

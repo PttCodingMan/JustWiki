@@ -1,168 +1,217 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
+import { buildPlanetObject, planetColor, planetParams } from '../lib/planet'
+
+const ForceGraph3D = lazy(() => import('react-force-graph-3d'))
+const ForceGraph2D = lazy(() => import('react-force-graph-2d'))
+
+// WebGL feature-detect. Some older browsers / low-end mobile devices have no
+// WebGL context; in that case we force 2D mode regardless of user toggle.
+function detectWebGL() {
+  try {
+    const canvas = document.createElement('canvas')
+    return !!(canvas.getContext('webgl') || canvas.getContext('experimental-webgl'))
+  } catch {
+    return false
+  }
+}
 
 export default function GraphView() {
   const navigate = useNavigate()
-  const svgRef = useRef(null)
+  const graphRef = useRef(null)
+  const containerRef = useRef(null)
+  const webglSupported = useMemo(() => detectWebGL(), [])
   const [graphData, setGraphData] = useState(null)
   const [loading, setLoading] = useState(true)
+  // If WebGL is unavailable, default to 2D so the user never sees a broken
+  // 3D canvas.
+  const [mode, setMode] = useState(() => (webglSupported ? '3d' : '2d'))
+  const [selectedNode, setSelectedNode] = useState(null)
+  const [size, setSize] = useState({ width: 800, height: 600 })
 
   useEffect(() => {
-    api.get('/pages/graph').then((res) => {
-      setGraphData(res.data)
-      setLoading(false)
-    }).catch(() => setLoading(false))
+    api
+      .get('/pages/graph')
+      .then((res) => {
+        setGraphData(res.data)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
   }, [])
 
+  // Track container size so the canvas fills available width.
   useEffect(() => {
-    if (!graphData || !svgRef.current) return
-    const { nodes, links } = graphData
-    if (nodes.length === 0) return
-
-    const svg = svgRef.current
-    const width = svg.clientWidth || 800
-    const height = svg.clientHeight || 600
-
-    // Clear
-    svg.innerHTML = ''
-
-    // Create node map
-    const nodeMap = new Map(nodes.map((n) => [n.id, { ...n, x: width / 2 + (Math.random() - 0.5) * 200, y: height / 2 + (Math.random() - 0.5) * 200, vx: 0, vy: 0 }]))
-
-    // Resolve links
-    const resolvedLinks = links
-      .filter((l) => nodeMap.has(l.source) && nodeMap.has(l.target))
-      .map((l) => ({ source: nodeMap.get(l.source), target: nodeMap.get(l.target) }))
-
-    const simNodes = [...nodeMap.values()]
-
-    // Simple force simulation
-    const ITERATIONS = 300
-    for (let iter = 0; iter < ITERATIONS; iter++) {
-      const alpha = 1 - iter / ITERATIONS
-
-      // Repulsion between all nodes
-      for (let i = 0; i < simNodes.length; i++) {
-        for (let j = i + 1; j < simNodes.length; j++) {
-          const a = simNodes[i], b = simNodes[j]
-          let dx = b.x - a.x, dy = b.y - a.y
-          let dist = Math.sqrt(dx * dx + dy * dy) || 1
-          const force = (150 * alpha) / dist
-          const fx = (dx / dist) * force
-          const fy = (dy / dist) * force
-          a.x -= fx; a.y -= fy
-          b.x += fx; b.y += fy
-        }
-      }
-
-      // Attraction along links
-      for (const link of resolvedLinks) {
-        const { source: a, target: b } = link
-        let dx = b.x - a.x, dy = b.y - a.y
-        let dist = Math.sqrt(dx * dx + dy * dy) || 1
-        const force = (dist - 100) * 0.05 * alpha
-        const fx = (dx / dist) * force
-        const fy = (dy / dist) * force
-        a.x += fx; a.y += fy
-        b.x -= fx; b.y -= fy
-      }
-
-      // Center gravity
-      for (const node of simNodes) {
-        node.x += (width / 2 - node.x) * 0.01 * alpha
-        node.y += (height / 2 - node.y) * 0.01 * alpha
-      }
+    if (!containerRef.current) return
+    const el = containerRef.current
+    const update = () => {
+      setSize({ width: el.clientWidth, height: 600 })
     }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [graphData])
 
-    // Draw SVG
-    const ns = 'http://www.w3.org/2000/svg'
-
-    // Defs for arrow markers
-    const defs = document.createElementNS(ns, 'defs')
-    const marker = document.createElementNS(ns, 'marker')
-    marker.setAttribute('id', 'arrowhead')
-    marker.setAttribute('viewBox', '0 0 10 10')
-    marker.setAttribute('refX', '20')
-    marker.setAttribute('refY', '5')
-    marker.setAttribute('markerWidth', '6')
-    marker.setAttribute('markerHeight', '6')
-    marker.setAttribute('orient', 'auto')
-    const path = document.createElementNS(ns, 'path')
-    path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 Z')
-    path.setAttribute('fill', '#94a3b8')
-    marker.appendChild(path)
-    defs.appendChild(marker)
-    svg.appendChild(defs)
-
-    // Links
-    for (const link of resolvedLinks) {
-      const line = document.createElementNS(ns, 'line')
-      line.setAttribute('x1', link.source.x)
-      line.setAttribute('y1', link.source.y)
-      line.setAttribute('x2', link.target.x)
-      line.setAttribute('y2', link.target.y)
-      line.setAttribute('stroke', '#cbd5e1')
-      line.setAttribute('stroke-width', '1.5')
-      line.setAttribute('marker-end', 'url(#arrowhead)')
-      svg.appendChild(line)
+  // Pre-compute link counts so nodes with more connections can be rendered
+  // larger. react-force-graph mutates nodes/links (replaces string IDs with
+  // object refs), so we derive a stable degree count first.
+  const enrichedData = useMemo(() => {
+    if (!graphData) return null
+    const degree = new Map()
+    for (const link of graphData.links) {
+      degree.set(link.source, (degree.get(link.source) || 0) + 1)
+      degree.set(link.target, (degree.get(link.target) || 0) + 1)
     }
+    const nodes = graphData.nodes.map((n) => ({
+      ...n,
+      linkCount: degree.get(n.id) || 0,
+    }))
+    return { nodes, links: graphData.links.map((l) => ({ ...l })) }
+  }, [graphData])
 
-    // Nodes
-    for (const node of simNodes) {
-      const g = document.createElementNS(ns, 'g')
-      g.style.cursor = 'pointer'
-      g.addEventListener('click', () => navigate(`/page/${node.slug}`))
-
-      const circle = document.createElementNS(ns, 'circle')
-      circle.setAttribute('cx', node.x)
-      circle.setAttribute('cy', node.y)
-      circle.setAttribute('r', '8')
-      circle.setAttribute('fill', '#3b82f6')
-      circle.setAttribute('stroke', '#fff')
-      circle.setAttribute('stroke-width', '2')
-      g.appendChild(circle)
-
-      const text = document.createElementNS(ns, 'text')
-      text.setAttribute('x', node.x)
-      text.setAttribute('y', node.y + 22)
-      text.setAttribute('text-anchor', 'middle')
-      text.setAttribute('font-size', '11')
-      text.setAttribute('fill', '#4b5563')
-      text.textContent = node.title.length > 20 ? node.title.slice(0, 18) + '…' : node.title
-      g.appendChild(text)
-
-      svg.appendChild(g)
+  const handleNodeClick = (node) => {
+    setSelectedNode(node)
+    const g = graphRef.current
+    if (!g) return
+    if (mode === '3d') {
+      // Move the camera to a point offset along the vector from origin to
+      // node, so we end up looking at the node from a sensible distance
+      // instead of clipping through it.
+      const distance = 80
+      const dist = Math.hypot(node.x || 1, node.y || 1, node.z || 1) || 1
+      const ratio = 1 + distance / dist
+      g.cameraPosition(
+        { x: (node.x || 0) * ratio, y: (node.y || 0) * ratio, z: (node.z || 0) * ratio },
+        node,
+        1000,
+      )
+    } else {
+      g.centerAt(node.x, node.y, 1000)
+      g.zoom(4, 1000)
     }
+  }
 
-    return () => {
-      svg.innerHTML = ''
-    }
-  }, [graphData, navigate])
+  const colorFor = (node) => planetColor(node)
+  const sizeFor = (node) => 1 + planetParams(node).radius * 2
 
   if (loading) return <div className="text-text-secondary">Loading...</div>
 
+  const hasData = graphData && graphData.nodes.length > 0
+
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h1 className="text-2xl font-bold text-text">Knowledge Graph</h1>
-        <div className="text-sm text-text-secondary">
-          {graphData?.nodes?.length || 0} pages &middot; {graphData?.links?.length || 0} links
+        <div className="flex items-center gap-3">
+          <div className="text-sm text-text-secondary">
+            {graphData?.nodes?.length || 0} pages &middot; {graphData?.links?.length || 0} links
+          </div>
+          {hasData && webglSupported && (
+            <div className="inline-flex rounded-md border border-border overflow-hidden text-sm">
+              <button
+                type="button"
+                onClick={() => setMode('2d')}
+                className={`px-3 py-1 ${mode === '2d' ? 'bg-primary text-white' : 'bg-surface text-text-secondary hover:bg-surface-hover'}`}
+              >
+                2D
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('3d')}
+                className={`px-3 py-1 ${mode === '3d' ? 'bg-primary text-white' : 'bg-surface text-text-secondary hover:bg-surface-hover'}`}
+              >
+                3D
+              </button>
+            </div>
+          )}
         </div>
       </div>
-      {!graphData || graphData.nodes.length === 0 ? (
+
+      {!hasData ? (
         <div className="text-center py-16 text-text-secondary">
           <p className="text-lg mb-2">No pages to visualize</p>
           <p className="text-sm">Create pages with [[wikilinks]] to build your knowledge graph</p>
         </div>
       ) : (
-        <div className="bg-surface rounded-xl shadow-sm border border-border overflow-hidden">
-          <svg
-            ref={svgRef}
-            width="100%"
-            height="600"
-            className="w-full"
-          />
+        <div className="relative bg-surface rounded-xl shadow-sm border border-border overflow-hidden">
+          <div ref={containerRef} className="w-full" style={{ height: 600 }}>
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center h-full text-text-secondary">
+                  Loading graph…
+                </div>
+              }
+            >
+              {mode === '3d' && webglSupported ? (
+                <ForceGraph3D
+                  ref={graphRef}
+                  graphData={enrichedData}
+                  width={size.width}
+                  height={size.height}
+                  backgroundColor="rgba(0,0,0,0)"
+                  nodeLabel="title"
+                  nodeThreeObject={buildPlanetObject}
+                  nodeThreeObjectExtend={false}
+                  linkColor={() => 'rgba(148, 163, 184, 0.5)'}
+                  linkDirectionalArrowLength={3}
+                  linkDirectionalArrowRelPos={1}
+                  onNodeClick={handleNodeClick}
+                  onBackgroundClick={() => setSelectedNode(null)}
+                />
+              ) : (
+                <ForceGraph2D
+                  ref={graphRef}
+                  graphData={enrichedData}
+                  width={size.width}
+                  height={size.height}
+                  nodeLabel="title"
+                  nodeRelSize={4}
+                  nodeVal={sizeFor}
+                  nodeColor={colorFor}
+                  linkColor={() => 'rgba(148, 163, 184, 0.6)'}
+                  linkDirectionalArrowLength={4}
+                  linkDirectionalArrowRelPos={1}
+                  onNodeClick={handleNodeClick}
+                  onBackgroundClick={() => setSelectedNode(null)}
+                />
+              )}
+            </Suspense>
+          </div>
+
+          {selectedNode && (
+            <div className="absolute top-4 right-4 w-64 bg-surface border border-border rounded-lg shadow-lg p-4">
+              <div className="text-xs uppercase tracking-wide text-text-secondary mb-1">
+                Selected page
+              </div>
+              <div className="font-semibold text-text break-words">{selectedNode.title}</div>
+              <div className="text-xs text-text-secondary mt-1">
+                {selectedNode.linkCount || 0} connection{selectedNode.linkCount === 1 ? '' : 's'}
+              </div>
+              <div className="flex gap-2 mt-3">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/page/${selectedNode.slug}`)}
+                  className="flex-1 px-3 py-1.5 text-sm bg-primary text-white rounded hover:opacity-90"
+                >
+                  Go to page
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedNode(null)}
+                  className="px-3 py-1.5 text-sm text-text-secondary hover:text-text"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!webglSupported && (
+            <div className="absolute bottom-3 left-3 text-xs text-text-secondary bg-surface/80 border border-border rounded px-2 py-1">
+              WebGL unavailable — showing 2D view
+            </div>
+          )}
         </div>
       )}
     </div>
