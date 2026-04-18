@@ -400,3 +400,13 @@ export function renderMarkdown(source) {
   if (!source) return ''
   return singletonMd.render(source)
 }
+
+// Milkdown preserves pasted `<br>` as raw HTML inline nodes, which then round-
+// trip back into serialized markdown verbatim. Users reasonably expect clean
+// markdown when copying/exporting, so we normalize those to CommonMark hard
+// breaks (two trailing spaces + newline). Any following newline is absorbed
+// to avoid turning `<br />\n` into an accidental paragraph break.
+export function stripBrTags(source) {
+  if (!source) return source
+  return source.replace(/<br\s*\/?>[ \t]*\n?/gi, '  \n')
+}

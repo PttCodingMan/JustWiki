@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { renderMarkdown } from './markdown'
+import { renderMarkdown, stripBrTags } from './markdown'
 
 describe('renderMarkdown', () => {
   it('returns empty string for null/undefined/empty', () => {
@@ -273,5 +273,37 @@ describe('renderMarkdown', () => {
     expect(html).not.toContain('<!--')
     expect(html).not.toContain('-->')
     expect(html).toContain('visible')
+  })
+})
+
+describe('stripBrTags', () => {
+  it('passes through null/undefined/empty unchanged', () => {
+    expect(stripBrTags('')).toBe('')
+    expect(stripBrTags(null)).toBeNull()
+    expect(stripBrTags(undefined)).toBeUndefined()
+  })
+
+  it('converts <br /> followed by newline to a markdown hard break', () => {
+    expect(stripBrTags('Line 1<br />\nLine 2')).toBe('Line 1  \nLine 2')
+  })
+
+  it('handles <br>, <br/>, <br /> and case variants', () => {
+    expect(stripBrTags('a<br>b')).toBe('a  \nb')
+    expect(stripBrTags('a<br/>b')).toBe('a  \nb')
+    expect(stripBrTags('a<BR />b')).toBe('a  \nb')
+    expect(stripBrTags('a<Br/>b')).toBe('a  \nb')
+  })
+
+  it('strips trailing horizontal whitespace after the tag', () => {
+    expect(stripBrTags('foo<br />   \nbar')).toBe('foo  \nbar')
+  })
+
+  it('replaces multiple occurrences', () => {
+    expect(stripBrTags('a<br />b<br />c')).toBe('a  \nb  \nc')
+  })
+
+  it('leaves markdown without <br> untouched', () => {
+    const md = '# Heading\n\nHello world\n\n- item'
+    expect(stripBrTags(md)).toBe(md)
   })
 })

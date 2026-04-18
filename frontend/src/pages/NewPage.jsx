@@ -7,6 +7,7 @@ import Editor from '../components/Editor/Editor'
 import MediaPickerModal from '../components/Editor/MediaPickerModal'
 import DrawioModal from '../components/DrawioModal'
 import useUnsavedWarning from '../hooks/useUnsavedWarning'
+import { stripBrTags } from '../lib/markdown'
 
 function findNodeById(nodes, id) {
   for (const node of nodes) {
@@ -128,7 +129,7 @@ export default function NewPage() {
     try {
       const page = await createPage({
         title,
-        content_md: content,
+        content_md: stripBrTags(content),
         template_id: selectedTemplate?.id,
         parent_id: parentMissing ? null : parentId,
       })

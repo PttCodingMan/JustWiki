@@ -9,6 +9,7 @@ import MediaPickerModal from '../components/Editor/MediaPickerModal'
 import MarkdownViewer from '../components/Viewer/MarkdownViewer'
 import DrawioModal from '../components/DrawioModal'
 import useUnsavedWarning from '../hooks/useUnsavedWarning'
+import { stripBrTags } from '../lib/markdown'
 import api from '../api/client'
 
 export default function PageEdit() {
@@ -152,14 +153,17 @@ export default function PageEdit() {
     setError('')
     setConflict(null)
     try {
+      // Milkdown round-trips pasted <br> tags as raw HTML; normalize to
+      // markdown hard breaks before persisting so new content stays clean.
+      const cleanContent = stripBrTags(content)
       const updated = await updatePage(slug, {
         title,
-        content_md: content,
+        content_md: cleanContent,
         base_version: baseVersionRef.current,
       })
       baseVersionRef.current = updated.version
       await fetchTree()
-      setOriginal({ title, content })
+      setOriginal({ title, content: cleanContent })
       setSaving(false)
       navigate(`/page/${slug}`)
     } catch (err) {

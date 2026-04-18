@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import usePages from '../store/usePages'
 import useTags from '../store/useTags'
@@ -10,6 +10,7 @@ import TableOfContents from '../components/Viewer/TableOfContents'
 import Comments from '../components/Comments'
 import ConfirmDialog from '../components/ConfirmDialog'
 import AclManager from '../components/AclManager'
+import { stripBrTags } from '../lib/markdown'
 import api from '../api/client'
 
 export default function PageView() {
@@ -138,6 +139,31 @@ export default function PageView() {
     } catch {
       setToast(link)
     }
+    setMenuOpen(false)
+  }
+
+  const handleCopyMarkdown = async () => {
+    try {
+      await navigator.clipboard.writeText(stripBrTags(page.content_md ?? ''))
+      setToast('Markdown copied')
+    } catch {
+      setToast('Copy failed — clipboard requires HTTPS or localhost')
+    }
+    setMenuOpen(false)
+  }
+
+  const handleDownloadMarkdown = () => {
+    const blob = new Blob([stripBrTags(page.content_md ?? '')], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${page.slug}.md`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    // Defer revoke: some browsers start the download asynchronously after
+    // click(), and revoking the blob URL too early can cancel it.
+    setTimeout(() => URL.revokeObjectURL(url), 0)
     setMenuOpen(false)
   }
 
@@ -281,6 +307,27 @@ export default function PageView() {
             </>
             )}
             <div className="border-t border-border my-1" />
+            <button
+              onClick={handleCopyMarkdown}
+              className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
+            >
+              <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <rect x="9" y="9" width="11" height="11" rx="2" />
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+              </svg>
+              Copy Markdown
+            </button>
+            <button
+              onClick={handleDownloadMarkdown}
+              className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
+            >
+              <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <path d="M12 3v12" />
+                <path d="M7 10l5 5 5-5" />
+                <path d="M5 21h14" />
+              </svg>
+              Download .md
+            </button>
             <button
               onClick={() => {
                 setMenuOpen(false)
