@@ -64,15 +64,14 @@ async def test_page_move(auth_client):
     assert response.json()["sort_order"] == 5
 
 @pytest.mark.asyncio
-async def test_create_page_with_template(auth_client):
-    # 1. Create template
-    res_tmpl = await auth_client.post("/api/templates", json={
+async def test_create_page_with_template(auth_client, admin_client):
+    # Templates are admin-managed; any authenticated user can apply one.
+    res_tmpl = await admin_client.post("/api/templates", json={
         "name": "Tmpl",
         "content_md": "Template Content"
     })
     tmpl_id = res_tmpl.json()["id"]
 
-    # 2. Create page using template
     response = await auth_client.post("/api/pages", json={
         "title": "Tmpl Page",
         "template_id": tmpl_id

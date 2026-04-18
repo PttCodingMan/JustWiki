@@ -838,6 +838,53 @@ async def test_acl_my_permission_endpoint():
 
 
 @pytest.mark.asyncio
+async def test_acl_updated_activity_log_omits_principal_rows():
+    """PUT /acl writes to activity_log, which is readable by any authenticated
+    user. The metadata must NOT contain principal_type/principal_id/permission
+    details — that would leak organizational ACL structure across the wiki.
+    """
+    import json as _json
+    db = await get_db()
+    admin = await _get_or_create_user(db, "acl_log_admin", "admin")
+    target = await _get_or_create_user(db, "acl_log_target", "editor")
+    page = await _make_page(db, "acl-log-page")
+
+    async with _token_client(admin) as client:
+        r = await client.put(
+            f"/api/pages/acl-log-page/acl",
+            json={
+                "rows": [
+                    {
+                        "principal_type": "user",
+                        "principal_id": target["id"],
+                        "permission": "write",
+                    }
+                ]
+            },
+        )
+    assert r.status_code == 200
+
+    rows = await db.execute_fetchall(
+        """SELECT metadata FROM activity_log
+           WHERE action = 'acl_updated' AND target_id = ?
+           ORDER BY id DESC LIMIT 1""",
+        (page,),
+    )
+    assert rows, "acl_updated activity entry missing"
+    meta = _json.loads(rows[0]["metadata"])
+    # Fine to expose slug + row count — both are bounded.
+    assert meta.get("slug") == "acl-log-page"
+    assert meta.get("row_count") == 1
+    # Must NOT contain principal details.
+    assert "rows" not in meta
+    serialized = _json.dumps(meta)
+    assert "principal_type" not in serialized
+    assert "principal_id" not in serialized
+    assert "permission" not in serialized
+    assert str(target["id"]) not in serialized
+
+
+@pytest.mark.asyncio
 async def test_users_search_endpoint():
     db = await get_db()
     alice = await _get_or_create_user(db, "acl_users_search_alice", "editor")

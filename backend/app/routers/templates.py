@@ -1,7 +1,7 @@
 import aiosqlite
 from fastapi import APIRouter, HTTPException, Depends
 from app.schemas import TemplateCreate, TemplateUpdate, TemplateResponse
-from app.auth import get_current_user
+from app.auth import get_current_user, require_admin
 from app.database import get_db
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
@@ -15,7 +15,7 @@ async def list_templates(user=Depends(get_current_user)):
 
 
 @router.post("", response_model=TemplateResponse, status_code=201)
-async def create_template(body: TemplateCreate, user=Depends(get_current_user)):
+async def create_template(body: TemplateCreate, user=Depends(require_admin)):
     db = await get_db()
     try:
         cursor = await db.execute(
@@ -33,7 +33,7 @@ async def create_template(body: TemplateCreate, user=Depends(get_current_user)):
 
 @router.put("/{template_id}", response_model=TemplateResponse)
 async def update_template(
-    template_id: int, body: TemplateUpdate, user=Depends(get_current_user)
+    template_id: int, body: TemplateUpdate, user=Depends(require_admin)
 ):
     db = await get_db()
     rows = await db.execute_fetchall(
@@ -62,7 +62,7 @@ async def update_template(
 
 
 @router.delete("/{template_id}")
-async def delete_template(template_id: int, user=Depends(get_current_user)):
+async def delete_template(template_id: int, user=Depends(require_admin)):
     db = await get_db()
     rows = await db.execute_fetchall(
         "SELECT id FROM templates WHERE id = ?", (template_id,)

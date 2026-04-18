@@ -206,9 +206,12 @@ async def put_page_acl(slug: str, body: AclPutBody, user=Depends(get_current_use
                VALUES (?, ?, ?, ?)""",
             (page["id"], r.principal_type, r.principal_id, r.permission),
         )
+    # Metadata intentionally omits principal details: activity_log is readable
+    # by any authenticated user (see pending finding #5), and leaking the
+    # principal/permission list would reveal organizational ACL structure.
     await log_activity(
         db, user["id"], "acl_updated", "page", page["id"],
-        {"slug": slug, "rows": [r.model_dump() for r in body.rows]},
+        {"slug": slug, "row_count": len(body.rows)},
     )
     await db.commit()
     invalidate_readable_cache()

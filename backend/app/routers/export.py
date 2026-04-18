@@ -1,4 +1,5 @@
 import base64
+import html as _html
 import io
 import mimetypes
 import re
@@ -283,9 +284,12 @@ async def export_page(
     if await resolve_page_permission(db, user, page["id"]) == "none":
         raise HTTPException(status_code=404, detail="Page not found")
     html_content = _inline_media_srcs(md_to_simple_html(page["content_md"]))
+    # Escape title/slug: they're rendered into <title>, <h1>, and a meta
+    # breadcrumb as raw text, so a page title containing e.g. `<script>` would
+    # execute when the exported HTML is opened locally (file:// context).
     full_html = HTML_TEMPLATE.format(
-        title=page["title"],
-        slug=page["slug"],
+        title=_html.escape(page["title"]),
+        slug=_html.escape(page["slug"]),
         content=html_content,
     )
 
@@ -331,13 +335,20 @@ async def export_site(
         for p in pages:
             page = dict(p)
             html_content = _inline_media_srcs(md_to_simple_html(page["content_md"]))
+            safe_title = _html.escape(page["title"])
+            safe_slug = _html.escape(page["slug"])
             full_html = HTML_TEMPLATE.format(
-                title=page["title"],
-                slug=page["slug"],
+                title=safe_title,
+                slug=safe_slug,
                 content=html_content,
             )
             zf.writestr(f"{page['slug']}.html", full_html)
-            page_links.append(f'<li><a href="{page["slug"]}.html">{page["title"]}</a></li>')
+            # Both href and link text need escaping — slug may contain chars
+            # that break the attribute, title may contain HTML.
+            page_links.append(
+                f'<li><a href="{urllib.parse.quote(page["slug"], safe="")}.html">'
+                f'{safe_title}</a></li>'
+            )
 
         # Generate index
         index_html = SITE_INDEX_TEMPLATE.format(page_list="\n".join(page_links))

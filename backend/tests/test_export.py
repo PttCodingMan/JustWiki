@@ -150,6 +150,43 @@ async def test_export_double_backtick_doesnt_desync_inline_code(auth_client):
 
 
 @pytest.mark.asyncio
+async def test_export_escapes_title_and_slug(auth_client):
+    """Title/slug are injected raw into <title>, <h1>, <a href>, meta — any
+    HTML in them must be escaped so opening the downloaded HTML doesn't run
+    attacker-controlled script.
+    """
+    await auth_client.post("/api/pages", json={
+        "title": "<script>alert('xss-title')</script>",
+        "content_md": "body",
+        "slug": "xss-target",
+    })
+    response = await auth_client.get("/api/export/page/xss-target")
+    assert response.status_code == 200
+    body = response.text
+    # Escaped form should appear; raw <script> tag for the title should not.
+    assert "&lt;script&gt;alert(&#x27;xss-title&#x27;)&lt;/script&gt;" in body
+    assert "<script>alert('xss-title')</script>" not in body
+
+
+@pytest.mark.asyncio
+async def test_export_site_escapes_title_in_index(admin_client):
+    """Site export's index.html lists page titles as link text — must escape
+    both the title (link text) and slug (href)."""
+    await admin_client.post("/api/pages", json={
+        "title": "<img src=x onerror=alert(1)>",
+        "content_md": "body",
+        "slug": "xss-in-index",
+    })
+    import zipfile, io
+    response = await admin_client.get("/api/export/site")
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
+        index = zf.read("index.html").decode()
+    assert "&lt;img src=x onerror=alert(1)&gt;" in index
+    assert "<img src=x onerror=alert(1)>" not in index
+
+
+@pytest.mark.asyncio
 async def test_export_site_requires_admin(auth_client):
     # Non-admins should be blocked — site exports would otherwise silently
     # omit ACL-restricted content with no user-visible indicator.
