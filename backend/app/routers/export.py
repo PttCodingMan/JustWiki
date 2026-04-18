@@ -1,12 +1,16 @@
+import base64
 import io
+import mimetypes
 import re
 import urllib.parse
 import zipfile
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse, HTMLResponse
 
 from app.auth import get_current_user, require_admin
+from app.config import settings
 from app.database import get_db
 from app.services.acl import resolve_page_permission
 
@@ -18,6 +22,43 @@ def _sanitize_url(url: str) -> str:
         return "about:blank"
     return url
 
+
+# Matches `src="/api/media/<name>"` (optionally with a scheme+host prefix or
+# query/fragment). Only attribute-form srcs — URLs in user text aren't rewritten.
+_MEDIA_SRC_PATTERN = re.compile(
+    r'(?P<prefix>src=")'
+    r'(?:https?://[^/"]+)?'
+    r'/api/media/'
+    r'(?P<filename>[^"?#]+)'
+    r'(?:[?#][^"]*)?"'
+)
+
+
+def _inline_media_srcs(html: str) -> str:
+    """Rewrite ``/api/media/<file>`` image srcs into ``data:`` URIs.
+
+    Without this, downloaded HTML opened via ``file://`` and print-dialog
+    PDFs saved from the browser can't resolve the media URLs, so embedded
+    images silently disappear from the export. Inlining keeps the artifact
+    self-contained.
+    """
+    media_dir = Path(settings.MEDIA_DIR).resolve()
+
+    def _replace(match: re.Match) -> str:
+        filename = match.group("filename")
+        try:
+            filepath = (media_dir / filename).resolve()
+            if not filepath.is_relative_to(media_dir) or not filepath.is_file():
+                return match.group(0)
+            data = filepath.read_bytes()
+        except OSError:
+            return match.group(0)
+        mime = mimetypes.guess_type(str(filepath))[0] or "application/octet-stream"
+        b64 = base64.b64encode(data).decode("ascii")
+        return f'{match.group("prefix")}data:{mime};base64,{b64}"'
+
+    return _MEDIA_SRC_PATTERN.sub(_replace, html)
+
 router = APIRouter(prefix="/api/export", tags=["export"])
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -27,20 +68,26 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{title}</title>
 <style>
-  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; color: #1e293b; line-height: 1.7; }}
-  h1 {{ border-bottom: 2px solid #e2e8f0; padding-bottom: 0.3em; }}
-  h2 {{ border-bottom: 1px solid #e2e8f0; padding-bottom: 0.3em; }}
-  pre {{ background: #1e293b; color: #e2e8f0; padding: 1em; border-radius: 8px; overflow-x: auto; }}
-  code {{ background: #f1f5f9; padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.9em; }}
-  pre code {{ background: none; padding: 0; color: inherit; }}
-  blockquote {{ border-left: 4px solid #e2e8f0; padding-left: 1em; color: #64748b; margin: 0.5em 0; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang TC', 'Noto Sans CJK TC', sans-serif; max-width: 820px; margin: 2rem auto; padding: 0 1.25rem; color: #1e293b; line-height: 1.7; background: #ffffff; }}
+  h1, h2, h3, h4, h5, h6 {{ margin: 1.4em 0 0.6em; font-weight: 600; line-height: 1.3; }}
+  h1 {{ font-size: 2em; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.3em; }}
+  h2 {{ font-size: 1.5em; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.3em; }}
+  h3 {{ font-size: 1.25em; }}
+  p {{ margin: 0.5em 0; }}
+  ul, ol {{ padding-left: 1.6em; margin: 0.5em 0; }}
+  li {{ margin: 0.25em 0; }}
+  pre {{ background: #1e293b; color: #e2e8f0; padding: 1em; border-radius: 8px; overflow-x: auto; font-size: 0.9em; }}
+  code {{ background: #f1f5f9; padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.9em; font-family: 'SF Mono', Menlo, Consolas, monospace; }}
+  pre code {{ background: none; padding: 0; color: inherit; font-size: 1em; }}
+  blockquote {{ border-left: 4px solid #e2e8f0; padding-left: 1em; color: #64748b; margin: 0.75em 0; }}
   table {{ border-collapse: collapse; width: 100%; margin: 0.75em 0; }}
   th, td {{ border: 1px solid #e2e8f0; padding: 0.5em 0.75em; text-align: left; }}
   th {{ background: #f8fafc; font-weight: 600; }}
-  img {{ max-width: 100%; }}
-  a {{ color: #2563eb; }}
+  img {{ max-width: 100%; border-radius: 6px; display: block; margin: 0.5em 0; }}
+  a {{ color: #2563eb; text-decoration: underline; }}
+  a.wikilink {{ color: #2563eb; text-decoration: none; border-bottom: 1px dashed #93c5fd; }}
   hr {{ border: none; border-top: 2px solid #e2e8f0; margin: 1.5em 0; }}
-  .callout {{ border: 1px solid; border-radius: 8px; padding: 0.75em 1em; margin: 1em 0; }}
+  .callout {{ border: 1px solid; border-left-width: 4px; border-radius: 6px; padding: 0.75em 1em; margin: 1em 0; }}
   .callout-info {{ border-color: #bfdbfe; background: #f0f7ff; }}
   .callout-warning {{ border-color: #fde68a; background: #fffdf5; }}
   .callout-tip {{ border-color: #a7f3d0; background: #f0fdf8; }}
@@ -54,6 +101,33 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 {content}
 </body>
 </html>"""
+
+PDF_PRINT_CSS = """
+  .print-hint { background: #fef3c7; border: 1px solid #fde68a; border-radius: 8px; padding: 0.75em 1em; margin-bottom: 1.5em; color: #78350f; font-size: 0.9em; }
+  .print-hint kbd { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 4px; padding: 0 0.35em; font-family: inherit; font-size: 0.85em; }
+  @media print {
+    body { margin: 0; max-width: 100%; }
+    @page { margin: 1.5cm; }
+    .print-hint { display: none; }
+  }
+"""
+
+PDF_HINT_BANNER = (
+    '<div class="print-hint">'
+    '已自動開啟列印對話框 — 若未彈出，請按 '
+    '<kbd>Ctrl</kbd>+<kbd>P</kbd>（Windows）或 '
+    '<kbd>⌘</kbd>+<kbd>P</kbd>（Mac），'
+    '在印表機選擇「另存為 PDF / Save as PDF」即可下載。'
+    '</div>'
+)
+
+PDF_AUTO_PRINT_SCRIPT = (
+    "<script>"
+    "window.addEventListener('load', function () { "
+    "setTimeout(function () { window.print(); }, 150); "
+    "});"
+    "</script>"
+)
 
 SITE_INDEX_TEMPLATE = """<!DOCTYPE html>
 <html lang="zh-TW">
@@ -102,6 +176,20 @@ def md_to_simple_html(text):
     for i, b in enumerate(blocks):
         html = html.replace(f"%%BLOCK_{i}%%", b)
 
+    # Inline code — stash before other transforms so content can't be mangled
+    # (e.g. `**x**` inside code must stay literal). Double-backtick form first so
+    # an escaped backtick inside ``…`` doesn't desync single-backtick pairing —
+    # otherwise every `code` span later in the document gets flipped (</code>
+    # where <code> was expected), which is how the 部署方式 section broke.
+    inline_codes = []
+    def save_inline(content):
+        idx = len(inline_codes)
+        inline_codes.append(content)
+        return f"%%INLINE_{idx}%%"
+
+    html = re.sub(r"``\s*(.+?)\s*``", lambda m: save_inline(m.group(1)), html)
+    html = re.sub(r"`([^`\n]+)`", lambda m: save_inline(m.group(1)), html)
+
     # Headers
     for i in range(6, 0, -1):
         html = re.sub(rf"^{'#' * i}\s+(.+)$", rf"<h{i}>\1</h{i}>", html, flags=re.MULTILINE)
@@ -113,9 +201,6 @@ def md_to_simple_html(text):
     html = re.sub(r"\*\*\*(.+?)\*\*\*", r"<strong><em>\1</em></strong>", html)
     html = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", html)
     html = re.sub(r"\*(.+?)\*", r"<em>\1</em>", html)
-
-    # Inline code
-    html = re.sub(r"`([^`]+)`", r"<code>\1</code>", html)
 
     # Wikilinks
     html = re.sub(r"\[\[([^\]|]+?)\|([^\]]+?)\]\]", r'<a href="\1.html">\2</a>', html)
@@ -173,6 +258,10 @@ def md_to_simple_html(text):
     # Paragraphs
     html = re.sub(r"^(?!<[a-z/])((?!\s*$).+)$", r"<p>\1</p>", html, flags=re.MULTILINE)
 
+    # Restore stashed inline code
+    for i, content in enumerate(inline_codes):
+        html = html.replace(f"%%INLINE_{i}%%", f"<code>{content}</code>")
+
     return html
 
 
@@ -193,7 +282,7 @@ async def export_page(
     page = dict(rows[0])
     if await resolve_page_permission(db, user, page["id"]) == "none":
         raise HTTPException(status_code=404, detail="Page not found")
-    html_content = md_to_simple_html(page["content_md"])
+    html_content = _inline_media_srcs(md_to_simple_html(page["content_md"]))
     full_html = HTML_TEMPLATE.format(
         title=page["title"],
         slug=page["slug"],
@@ -201,13 +290,16 @@ async def export_page(
     )
 
     if format == "pdf":
-        # Return HTML with print-friendly styling — browser can use Ctrl+P
-        pdf_html = full_html.replace("</style>", """
-  @media print {
-    body { margin: 0; max-width: 100%; }
-    @page { margin: 1.5cm; }
-  }
-</style>""")
+        # Browser-print approach: inject print CSS + user hint banner +
+        # auto-trigger window.print() on load. The user picks "Save as PDF"
+        # from the print dialog. Response stays HTML (filename .html) — we
+        # don't claim to return a real PDF.
+        pdf_html = (
+            full_html
+            .replace("</style>", PDF_PRINT_CSS + "</style>", 1)
+            .replace("<body>", "<body>" + PDF_HINT_BANNER, 1)
+            .replace("</body>", PDF_AUTO_PRINT_SCRIPT + "</body>", 1)
+        )
         return HTMLResponse(content=pdf_html, headers={
             "Content-Disposition": f'inline; filename="{slug}.html"',
         })
@@ -238,7 +330,7 @@ async def export_site(
         page_links = []
         for p in pages:
             page = dict(p)
-            html_content = md_to_simple_html(page["content_md"])
+            html_content = _inline_media_srcs(md_to_simple_html(page["content_md"]))
             full_html = HTML_TEMPLATE.format(
                 title=page["title"],
                 slug=page["slug"],
