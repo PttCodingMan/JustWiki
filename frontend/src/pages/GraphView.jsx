@@ -53,6 +53,31 @@ export default function GraphView() {
     return () => ro.disconnect()
   }, [graphData])
 
+  // Bump 3D zoom sensitivity. TrackballControls ships with zoomSpeed=1.2
+  // which feels sluggish on typical trackpads. The graph ref is populated
+  // after the Suspense-lazy component mounts, so retry briefly until the
+  // controls handle is available.
+  useEffect(() => {
+    if (mode !== '3d' || !graphData) return
+    let cancelled = false
+    const apply = () => {
+      if (cancelled) return
+      const g = graphRef.current
+      if (g && typeof g.controls === 'function') {
+        const c = g.controls()
+        if (c) {
+          c.zoomSpeed = 4
+          return
+        }
+      }
+      setTimeout(apply, 50)
+    }
+    apply()
+    return () => {
+      cancelled = true
+    }
+  }, [mode, graphData])
+
   // Pre-compute link counts so nodes with more connections can be rendered
   // larger. react-force-graph mutates nodes/links (replaces string IDs with
   // object refs), so we derive a stable degree count first.

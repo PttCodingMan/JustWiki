@@ -210,6 +210,16 @@ CREATE TABLE IF NOT EXISTS page_acl (
 CREATE INDEX IF NOT EXISTS idx_page_acl_page ON page_acl(page_id);
 CREATE INDEX IF NOT EXISTS idx_page_acl_principal ON page_acl(principal_type, principal_id);
 
+-- Short-lived dedup keys for view_count. Rows are hashes, not user ids,
+-- so a plain DB dump can't be used to reconstruct a reading history.
+CREATE TABLE IF NOT EXISTS view_dedup (
+    dedup_key      TEXT PRIMARY KEY,
+    page_id        INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    last_viewed_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_view_dedup_last ON view_dedup(last_viewed_at);
+
 """
 
 WELCOME_PAGE_CONTENT_EN = r"""# Welcome to JustWiki

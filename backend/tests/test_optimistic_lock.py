@@ -103,4 +103,5 @@ async def test_get_page_does_not_bump_version(auth_client):
         res = await auth_client.get("/api/pages/lock-view")
         assert res.status_code == 200
     assert res.json()["version"] == 1
-    assert res.json()["view_count"] == 3
+    # View dedup collapses the 3 refreshes by the same user into one count.
+    assert res.json()["view_count"] == 1

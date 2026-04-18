@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     # Repo on ghcr.io for the image-tag lookup. Matches docker-compose.yml.
     UPDATE_CHECK_IMAGE: str = "pttcodingman/justwiki/backend"
 
+    # Repeat views by the same user within this window don't re-increment
+    # a page's view_count. Keeps counts meaningful across refreshes / tab
+    # switches without permanently storing per-user reading history.
+    VIEW_DEDUP_MINUTES: int = 30
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

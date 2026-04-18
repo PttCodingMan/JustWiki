@@ -1,7 +1,11 @@
+import hashlib
 import json
+import random
 import re
+import time
 import unicodedata
 from fastapi import APIRouter, HTTPException, Depends, Query
+from app.config import settings
 from app.schemas import PageCreate, PageUpdate, PageResponse, PageListResponse, PageMoveRequest
 from app.auth import get_current_user
 from app.database import get_db
@@ -13,6 +17,46 @@ from app.routers.activity import log_activity
 from app.routers.versions import save_version
 
 router = APIRouter(prefix="/api/pages", tags=["pages"])
+
+
+async def _should_count_view(db, user_id: int, page_id: int) -> bool:
+    """Record this view and return True if it should bump view_count.
+
+    Counts at most once per (user, page) per VIEW_DEDUP_MINUTES. Keyed on
+    sha256(user|page|SECRET_KEY) so a plain DB dump doesn't expose reading
+    history — note that an attacker with both the DB and SECRET_KEY can
+    still brute-force the small user_id × page_id space.
+    """
+    cooldown = settings.VIEW_DEDUP_MINUTES * 60
+    now = int(time.time())
+    cutoff = now - cooldown
+    dedup_key = hashlib.sha256(
+        f"u:{user_id}|{page_id}|{settings.SECRET_KEY}".encode()
+    ).hexdigest()
+
+    # Single-statement UPSERT so two concurrent views for the same key can't
+    # both see no row and race on INSERT. The WHERE clause makes the UPDATE
+    # branch a no-op while still inside the cooldown window, so rowcount
+    # cleanly distinguishes "counted" (1) from "deduped" (0).
+    cursor = await db.execute(
+        """
+        INSERT INTO view_dedup (dedup_key, page_id, last_viewed_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(dedup_key) DO UPDATE SET last_viewed_at = excluded.last_viewed_at
+          WHERE view_dedup.last_viewed_at < ?
+        """,
+        (dedup_key, page_id, now, cutoff),
+    )
+    if cursor.rowcount != 1:
+        return False
+
+    # Opportunistic cleanup so the table doesn't grow unbounded. 1% of counted
+    # views prune expired rows — amortises cleanup across traffic, no cron needed.
+    if random.random() < 0.01:
+        await db.execute(
+            "DELETE FROM view_dedup WHERE last_viewed_at < ?", (cutoff,)
+        )
+    return True
 
 
 def _build_id_clause(ids: set[int], column: str = "id") -> tuple[str, list]:
@@ -276,13 +320,15 @@ async def get_page(slug: str, user=Depends(get_current_user)):
         # the existence of restricted pages.
         raise HTTPException(status_code=404, detail="Page not found")
 
-    # Increment view count (does not bump the content version)
-    await db.execute(
-        "UPDATE pages SET view_count = view_count + 1 WHERE slug = ?", (slug,)
-    )
+    # Increment view count (does not bump the content version), deduplicated
+    # so refreshes / tab-switches by the same user don't inflate the count.
+    if await _should_count_view(db, user["id"], page["id"]):
+        await db.execute(
+            "UPDATE pages SET view_count = view_count + 1 WHERE id = ?", (page["id"],)
+        )
+        page["view_count"] += 1
     await db.commit()
 
-    page["view_count"] += 1
     page["effective_permission"] = permission
     return page
 

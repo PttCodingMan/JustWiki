@@ -237,21 +237,17 @@ async def test_view_count_unchanged_by_public_endpoint(auth_client, client):
     })
     await auth_client.put("/api/pages/public-vc", json={"is_public": True})
 
-    # Reset view count to 0 (it may have been incremented by the PUT flow? no — only GET bumps)
-    # Hit the public endpoint several times
+    # Snapshot the current view_count via one authed GET (dedup makes
+    # subsequent same-user GETs inert inside the cooldown window).
+    before = (await auth_client.get("/api/pages/public-vc")).json()["view_count"]
+
+    # Public reads must not touch view_count.
     for _ in range(5):
         res = await client.get("/api/public/pages/public-vc")
         assert res.status_code == 200
 
-    # Look at the raw page row (auth_client GETs would bump it further, so query DB)
-    # Use a dedicated authed GET that we know bumps by 1 and reason about the delta.
-    res = await auth_client.get("/api/pages/public-vc")
-    first = res.json()["view_count"]
-    res = await auth_client.get("/api/pages/public-vc")
-    second = res.json()["view_count"]
-    # Public reads should not have bumped view_count, so two sequential authed GETs
-    # must differ by exactly 1.
-    assert second - first == 1
+    after = (await auth_client.get("/api/pages/public-vc")).json()["view_count"]
+    assert after == before
 
 
 @pytest.mark.asyncio
