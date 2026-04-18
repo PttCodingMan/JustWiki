@@ -1,7 +1,16 @@
+import logging
+import re
+import sqlite3
 from pathlib import Path
 
 import aiosqlite
 from app.config import settings
+
+logger = logging.getLogger(__name__)
+
+# FTS5 trigram tokenizer requires SQLite 3.43.0+ (2023-08-24)
+_TRIGRAM_MIN_VERSION = (3, 43, 0)
+_TOKENIZE_RE = re.compile(r"""tokenize\s*=\s*['"](\w+)['"]""", re.IGNORECASE)
 
 _db: aiosqlite.Connection | None = None
 
@@ -201,10 +210,6 @@ CREATE TABLE IF NOT EXISTS page_acl (
 CREATE INDEX IF NOT EXISTS idx_page_acl_page ON page_acl(page_id);
 CREATE INDEX IF NOT EXISTS idx_page_acl_principal ON page_acl(principal_type, principal_id);
 
-CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
-    page_id, title, content_segmented,
-    tokenize='unicode61'
-);
 """
 
 WELCOME_PAGE_CONTENT_EN = r"""# Welcome to JustWiki
@@ -877,6 +882,54 @@ DEFAULT_TEMPLATES = [
 ]
 
 
+def _get_preferred_tokenizer() -> str:
+    """Return 'trigram' if the linked SQLite supports it, else 'unicode61'."""
+    version = tuple(int(x) for x in sqlite3.sqlite_version.split("."))
+    if version >= _TRIGRAM_MIN_VERSION:
+        return "trigram"
+    logger.warning(
+        "SQLite %s < 3.43.0 — falling back to 'unicode61' tokenizer. "
+        "CJK phrase search will be limited.",
+        sqlite3.sqlite_version,
+    )
+    return "unicode61"
+
+
+async def _ensure_fts5_index(db) -> bool:
+    """Create or migrate the FTS5 search_index with the preferred tokenizer.
+
+    Returns True if the table was (re)created and a full rebuild is needed.
+    """
+    preferred = _get_preferred_tokenizer()
+
+    rows = await db.execute_fetchall(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='search_index'"
+    )
+
+    if rows:
+        create_sql = rows[0]["sql"] or ""
+        match = _TOKENIZE_RE.search(create_sql)
+        current = match.group(1).lower() if match else None
+
+        if current == preferred:
+            return False  # Already using the right tokenizer
+
+        logger.info(
+            "Migrating search_index tokenizer from '%s' to '%s' …",
+            current or "unknown",
+            preferred,
+        )
+        await db.execute("DROP TABLE IF EXISTS search_index")
+
+    await db.execute(
+        f"CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5("
+        f"page_id, title, content_segmented, tokenize='{preferred}')"
+    )
+    await db.commit()
+    logger.info("FTS5 search_index ready (tokenizer=%s)", preferred)
+    return True
+
+
 async def get_db() -> aiosqlite.Connection:
     global _db
     if _db is None:
@@ -1050,6 +1103,11 @@ async def init_db():
         "CREATE INDEX IF NOT EXISTS idx_pages_public ON pages(slug) WHERE is_public = 1"
     )
     await db.commit()
+
+    # Ensure FTS5 index exists with the best available tokenizer.
+    # If the tokenizer changed (e.g. unicode61 → trigram), the table is
+    # recreated empty and rebuild_all_search_indexes will repopulate it.
+    await _ensure_fts5_index(db)
 
     # Rebuild search index for existing pages
     await rebuild_all_search_indexes(db)

@@ -152,6 +152,7 @@ class SlashMenuView {
 
   handleKey(event) {
     if (!this.isVisible) return false
+    if (event.isComposing || event.keyCode === 229) return false
     if (event.key === 'ArrowDown') {
       event.preventDefault()
       this.selectedIndex = Math.min(this.selectedIndex + 1, this.filteredItems.length - 1)
@@ -323,6 +324,7 @@ class WikilinkMenu {
 
   handleKeyDown(view, event) {
     if (!this.active) return false
+    if (event.isComposing || event.keyCode === 229) return false
     if (event.key === 'ArrowDown') {
       event.preventDefault()
       this.selectedIndex = Math.min(this.selectedIndex + 1, this.filtered.length - 1)

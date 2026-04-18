@@ -47,6 +47,8 @@ export default function SearchModal({ isOpen, onClose }) {
   }
 
   const handleKeyDown = (e) => {
+    // Ignore keystrokes that are confirming IME composition (e.g. CJK candidate selection).
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return
     if (e.key === 'Escape') {
       onClose()
       return
