@@ -1,3 +1,5 @@
+import sqlite3
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
@@ -6,6 +8,15 @@ from app.auth import get_current_user, require_admin, hash_password
 from app.database import get_db
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+
+# Reserved prefix applied to a soft-deleted user's `username` so the original
+# name is immediately free for reuse while the row stays put to preserve FK
+# references (pages.created_by, page_versions.edited_by, comments.user_id, ...).
+TOMBSTONE_PREFIX = "__deleted_"
+
+
+def _is_reserved(name: str) -> bool:
+    return name.startswith(TOMBSTONE_PREFIX)
 
 
 class UserCreate(BaseModel):
@@ -18,6 +29,10 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     password: Optional[str] = None
     is_active: Optional[bool] = None
+
+
+class UserRestore(BaseModel):
+    username: Optional[str] = None
 
 
 @router.get("/search")
@@ -39,7 +54,7 @@ async def search_users(
     rows = await db.execute_fetchall(
         """SELECT id, username, display_name, role
            FROM users
-           WHERE username LIKE ? OR display_name LIKE ?
+           WHERE deleted_at IS NULL AND (username LIKE ? OR display_name LIKE ?)
            ORDER BY username
            LIMIT ?""",
         (pattern, pattern, limit),
@@ -51,14 +66,18 @@ async def search_users(
 async def list_users(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
+    include_deleted: bool = Query(False, description="Include soft-deleted users"),
     user=Depends(require_admin),
 ):
     db = await get_db()
     offset = (page - 1) * per_page
-    count_rows = await db.execute_fetchall("SELECT COUNT(*) as cnt FROM users")
+    where = "" if include_deleted else "WHERE deleted_at IS NULL"
+    count_rows = await db.execute_fetchall(f"SELECT COUNT(*) as cnt FROM users {where}")
     total = count_rows[0]["cnt"]
     rows = await db.execute_fetchall(
-        "SELECT id, username, role, created_at FROM users ORDER BY id LIMIT ? OFFSET ?",
+        f"""SELECT id, username, original_username, role, deleted_at, created_at
+            FROM users {where}
+            ORDER BY id LIMIT ? OFFSET ?""",
         (per_page, offset),
     )
     return {
@@ -69,6 +88,19 @@ async def list_users(
     }
 
 
+@router.get("/deleted")
+async def list_deleted_users(user=Depends(require_admin)):
+    """Trash list: soft-deleted users with their original username preserved."""
+    db = await get_db()
+    rows = await db.execute_fetchall(
+        """SELECT id, original_username, display_name, email, role, deleted_at, created_at
+           FROM users
+           WHERE deleted_at IS NOT NULL
+           ORDER BY deleted_at DESC"""
+    )
+    return [dict(r) for r in rows]
+
+
 ALLOWED_ROLES = ("admin", "editor", "viewer")
 
 
@@ -76,7 +108,11 @@ ALLOWED_ROLES = ("admin", "editor", "viewer")
 async def create_user(body: UserCreate, user=Depends(require_admin)):
     if body.role not in ALLOWED_ROLES:
         raise HTTPException(status_code=400, detail="Role must be admin, editor, or viewer")
+    if _is_reserved(body.username):
+        raise HTTPException(status_code=400, detail="Username prefix is reserved")
     db = await get_db()
+    # Deleted users have tombstone usernames so they won't match here; the
+    # uniqueness check naturally only considers the active namespace.
     existing = await db.execute_fetchall(
         "SELECT id FROM users WHERE username = ?", (body.username,)
     )
@@ -99,7 +135,8 @@ async def create_user(body: UserCreate, user=Depends(require_admin)):
 async def update_user(user_id: int, body: UserUpdate, user=Depends(require_admin)):
     db = await get_db()
     rows = await db.execute_fetchall(
-        "SELECT id, username, role FROM users WHERE id = ?", (user_id,)
+        "SELECT id, username, role FROM users WHERE id = ? AND deleted_at IS NULL",
+        (user_id,),
     )
     if not rows:
         raise HTTPException(status_code=404, detail="User not found")
@@ -112,7 +149,7 @@ async def update_user(user_id: int, body: UserUpdate, user=Depends(require_admin
         # Prevent last admin from demoting themselves
         if user_id == user["id"] and body.role != "admin":
             admin_count = await db.execute_fetchall(
-                "SELECT COUNT(*) as cnt FROM users WHERE role = 'admin'"
+                "SELECT COUNT(*) as cnt FROM users WHERE role = 'admin' AND deleted_at IS NULL"
             )
             if admin_count[0]["cnt"] <= 1:
                 raise HTTPException(
@@ -143,8 +180,66 @@ async def delete_user(user_id: int, user=Depends(require_admin)):
     if user_id == user["id"]:
         raise HTTPException(status_code=400, detail="Cannot delete yourself")
     db = await get_db()
-    rows = await db.execute_fetchall("SELECT id FROM users WHERE id = ?", (user_id,))
+    rows = await db.execute_fetchall(
+        "SELECT id FROM users WHERE id = ? AND deleted_at IS NULL",
+        (user_id,),
+    )
     if not rows:
         raise HTTPException(status_code=404, detail="User not found")
-    await db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    # No "last admin" guard here: `require_admin` means the caller is an
+    # admin, the self-check above ensures they differ from the target, so at
+    # least two admins exist whenever this point is reached.
+
+    # Soft-delete: keep the row (FKs still resolve) but rename `username` to a
+    # tombstone that is guaranteed unique. The epoch suffix covers the
+    # delete → restore → delete loop for the same user id.
+    await db.execute(
+        """UPDATE users
+           SET deleted_at = CURRENT_TIMESTAMP,
+               original_username = username,
+               username = '__deleted_' || id || '_' || strftime('%s','now')
+           WHERE id = ?""",
+        (user_id,),
+    )
     await db.commit()
+
+
+@router.post("/{user_id}/restore")
+async def restore_user(user_id: int, body: UserRestore, user=Depends(require_admin)):
+    db = await get_db()
+    rows = await db.execute_fetchall(
+        "SELECT id, original_username FROM users WHERE id = ? AND deleted_at IS NOT NULL",
+        (user_id,),
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Deleted user not found")
+
+    target = (body.username or rows[0]["original_username"] or "").strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="Username required for restore")
+    if _is_reserved(target):
+        raise HTTPException(status_code=400, detail="Username prefix is reserved")
+
+    # UPDATE relies on the UNIQUE(username) constraint to reject collisions —
+    # catching IntegrityError closes the TOCTOU window that a SELECT-then-UPDATE
+    # check would open if two admins restored into the same slot concurrently.
+    try:
+        await db.execute(
+            """UPDATE users
+               SET deleted_at = NULL,
+                   original_username = NULL,
+                   username = ?
+               WHERE id = ?""",
+            (target, user_id),
+        )
+        await db.commit()
+    except sqlite3.IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"Username '{target}' is taken; choose a different one",
+        )
+    row = await db.execute_fetchall(
+        "SELECT id, username, role, created_at FROM users WHERE id = ?", (user_id,)
+    )
+    return dict(row[0])

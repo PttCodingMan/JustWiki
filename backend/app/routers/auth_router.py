@@ -36,7 +36,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
 
     db = await get_db()
     rows = await db.execute_fetchall(
-        "SELECT id, username, password_hash, role, display_name, email FROM users WHERE username = ?",
+        "SELECT id, username, password_hash, role, display_name, email FROM users WHERE username = ? AND deleted_at IS NULL",
         (body.username,),
     )
     if not rows or not verify_password(body.password, rows[0]["password_hash"]):

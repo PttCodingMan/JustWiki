@@ -16,13 +16,15 @@ _db: aiosqlite.Connection | None = None
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS users (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    username      TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    role          TEXT NOT NULL DEFAULT 'editor',
-    display_name  TEXT DEFAULT '',
-    email         TEXT DEFAULT '',
-    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    username          TEXT UNIQUE NOT NULL,
+    password_hash     TEXT NOT NULL,
+    role              TEXT NOT NULL DEFAULT 'editor',
+    display_name      TEXT DEFAULT '',
+    email             TEXT DEFAULT '',
+    original_username TEXT,
+    deleted_at        TIMESTAMP,
+    created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS api_tokens (
@@ -1094,6 +1096,11 @@ async def init_db():
         await db.execute("ALTER TABLE users ADD COLUMN display_name TEXT DEFAULT ''")
     if "email" not in col_names:
         await db.execute("ALTER TABLE users ADD COLUMN email TEXT DEFAULT ''")
+    if "deleted_at" not in col_names:
+        await db.execute("ALTER TABLE users ADD COLUMN deleted_at TIMESTAMP")
+    if "original_username" not in col_names:
+        await db.execute("ALTER TABLE users ADD COLUMN original_username TEXT")
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_users_deleted ON users(deleted_at)")
     await db.commit()
 
     # Migrate: add new page columns if missing

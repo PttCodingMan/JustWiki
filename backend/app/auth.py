@@ -58,7 +58,7 @@ async def get_current_user(request: Request):
 
     db = await get_db()
     row = await db.execute_fetchall(
-        "SELECT id, username, role, display_name, email FROM users WHERE id = ?",
+        "SELECT id, username, role, display_name, email FROM users WHERE id = ? AND deleted_at IS NULL",
         (user_id,),
     )
     if not row:
