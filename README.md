@@ -1,14 +1,14 @@
+# JustWiki
+
+一套輕量、自架式的小團隊 Wiki。Clone 下來、執行，就能開始寫。
+
 <p align="center">
-  <img src="docs/images/logo.png" alt="JustWiki Logo" width="480">
+  <img src="docs/images/hero.png" alt="JustWiki 主介面：左側頁面樹、右側目錄、中央 Markdown 檢視" width="100%">
 </p>
 
 <p align="center">
   <strong>中文</strong> · <a href="README.en.md">English</a>
 </p>
-
-# JustWiki
-
-一套輕量、自架式的小團隊 Wiki。Clone 下來、執行，就能開始寫。
 
 ## 為什麼選 JustWiki
 
@@ -29,10 +29,18 @@
 - **頁面階層與範本** — 巢狀頁面結構、常用範本一鍵套用
 - **Draw.io 整合** — 內建圖表編輯器
 
+<p align="center">
+  <img src="docs/images/rich-content.png" alt="callout 提示框（Info / Warning / Tip / Danger）與 Mermaid 圖表的渲染效果" width="90%">
+</p>
+
 **檢視與搜尋**
 - **多種檢視模式** — 樹狀、圖譜（Graph，支援 3D 與平面切換）
-- **全文搜尋** — FTS5 驅動，可選用 Gemini AI 問答
+- **全文搜尋** — FTS5 驅動，原生支援 CJK
 - **中文 URL** — 頁面網址保留原始中文標題，不會變成 `%E4%B8...` 一長串編碼
+
+<p align="center">
+  <img src="docs/images/graph-3d.png" alt="3D 知識圖譜：以行星節點呈現頁面，連結以線條顯示" width="90%">
+</p>
 
 **協作與權限**
 - **多使用者 + 群組 ACL** — 頁面層級的權限控制
@@ -80,8 +88,6 @@ docker-compose up -d
 | `ADMIN_USER`      | 管理員帳號                    | `admin`               |
 | `ADMIN_PASS`      | 管理員密碼                    | `admin`               |
 | `DB_PATH`         | SQLite 資料庫路徑             | `./data/just-wiki.db` |
-| `AI_ENABLED`      | 啟用 Gemini AI 問答           | `false`               |
-| `GEMINI_API_KEY`  | Gemini API key（啟用 AI 時）  |                       |
 
 ## 使用指南
 
@@ -110,6 +116,14 @@ docker-compose up -d
 | `/mermaid` | Mermaid 圖表 |
 | `/math` | KaTeX 數學公式 |
 | `/drawio` | Draw.io 圖表 |
+
+### Wikilinks 自動補全
+
+<p align="center">
+  <img src="docs/images/wikilink.png" alt="輸入 [[ 觸發頁面搜尋下拉選單" width="90%">
+</p>
+
+在編輯器中輸入 `[[` 即會跳出頁面搜尋下拉，繼續輸入即時篩選；按 ↑ ↓ 選擇、Enter 插入。系統會自動建立反向連結，讓你在頁面底部的 **LINKED FROM** 區塊看到所有引用來源。
 
 ---
 

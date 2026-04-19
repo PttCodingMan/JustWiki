@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/logo.png" alt="JustWiki Logo" width="480">
+  <img src="docs/images/logo.jpg" alt="JustWiki Logo" width="480">
 </p>
 
 <p align="center">
@@ -9,6 +9,10 @@
 # JustWiki
 
 A lightweight, self-hosted wiki for small teams. Just clone, run, and write.
+
+<p align="center">
+  <img src="docs/images/hero.png" alt="JustWiki main UI: page tree on the left, table of contents on the right, Markdown viewer in the middle" width="100%">
+</p>
 
 ## Why JustWiki
 
@@ -29,10 +33,18 @@ All your data = one `data/just-wiki.db` SQLite file + the `media/` folder. Backu
 - **Page hierarchy & templates** — nested page trees, one-click reusable templates
 - **Draw.io integration** — embedded diagram editor
 
+<p align="center">
+  <img src="docs/images/rich-content.png" alt="Callout blocks (Info / Warning / Tip / Danger) and Mermaid diagrams rendered in the viewer" width="90%">
+</p>
+
 **Views & search**
 - **Multiple views** — tree and graph (with 3D / 2D-plane toggle)
-- **Full-text search** — FTS5 powered, with optional Gemini AI Q&A
+- **Full-text search** — FTS5 powered, with native CJK support
 - **Readable CJK URLs** — page URLs keep the original Chinese/Japanese/Korean title instead of mangling it into `%E4%B8...` escapes
+
+<p align="center">
+  <img src="docs/images/graph-3d.png" alt="3D knowledge graph with planet-style nodes and visible link edges" width="90%">
+</p>
 
 **Collaboration & permissions**
 - **Multi-user + group ACL** — per-page permission control
@@ -80,8 +92,6 @@ Key variables:
 | `ADMIN_USER`    | Admin username                     | `admin`              |
 | `ADMIN_PASS`    | Admin password                     | `admin`              |
 | `DB_PATH`       | SQLite database path               | `./data/just-wiki.db`|
-| `AI_ENABLED`    | Enable Gemini AI Q&A               | `false`              |
-| `GEMINI_API_KEY`| Gemini API key (when AI enabled)   |                      |
 
 ## Usage
 
@@ -110,6 +120,14 @@ In the editor, type `/` to open the slash menu. You can filter by typing after t
 | `/mermaid` | Mermaid Diagram — insert mermaid chart |
 | `/math` | Math Formula — KaTeX math block |
 | `/drawio` | Draw.io Diagram — insert Draw.io embed |
+
+### Wikilink Autocomplete
+
+<p align="center">
+  <img src="docs/images/wikilink.png" alt="Typing [[ opens a page search dropdown" width="90%">
+</p>
+
+Type `[[` in the editor to open a page search dropdown; keep typing to filter, ↑ ↓ to select, Enter to insert. JustWiki tracks the reverse direction automatically — every page shows incoming links in its **LINKED FROM** section.
 
 ---
 
