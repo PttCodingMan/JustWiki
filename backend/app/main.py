@@ -13,7 +13,9 @@ from app.routers import auth_router, pages, media, templates, search, tags, acti
 
 logger = logging.getLogger("justwiki")
 
-_ALLOWED_ORIGINS = {"http://localhost:5173", "http://localhost:3000"}
+_ALLOWED_ORIGINS = {"http://localhost:5173", "http://localhost:3000"} | {
+    o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()
+}
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 _CSRF_EXEMPT_PATHS = {"/api/auth/login", "/api/auth/logout"}
 

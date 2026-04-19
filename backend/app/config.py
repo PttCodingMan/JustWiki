@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     VITE_API_URL: str = "http://localhost:8000"
     COOKIE_SECURE: bool = False  # Set to True in production with HTTPS
 
+    # Comma-separated list of origins allowed for CSRF/CORS on top of the
+    # always-included localhost dev origins. Set this to your public URL(s)
+    # in production, e.g. "https://wiki.example.com".
+    ALLOWED_ORIGINS: str = ""
+
     # ── AI chat (optional, OpenAI-compatible) ──
     # Default targets Gemini's OpenAI-compatible endpoint, but any provider
     # that speaks the same wire format works (OpenAI, Ollama, Groq, DeepSeek…).
