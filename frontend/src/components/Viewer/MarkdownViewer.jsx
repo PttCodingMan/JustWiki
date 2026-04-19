@@ -121,6 +121,33 @@ export default function MarkdownViewer({
     [navigate, onDiagramClick],
   )
 
+  // Hoisted so both the top-level effect and the transclusion loader can
+  // process mermaid blocks — transcluded content arrives after the initial
+  // effect runs, so those diagrams would otherwise stay stuck at the loader.
+  const renderMermaidIn = useCallback(async (root) => {
+    if (!root) return
+    const blocks = root.querySelectorAll('[data-mermaid]:not([data-mermaid-rendered])')
+    if (blocks.length === 0) return
+    const isDark = document.documentElement.classList.contains('dark')
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: isDark ? 'dark' : 'default',
+      securityLevel: 'strict',
+    })
+    const stamp = Date.now()
+    blocks.forEach(async (el, i) => {
+      el.setAttribute('data-mermaid-rendered', '1')
+      const code = decodeURIComponent(el.dataset.mermaid)
+      try {
+        const id = `mermaid-${stamp}-${Math.random().toString(36).slice(2, 8)}-${i}`
+        const { svg } = await mermaid.render(id, code)
+        el.innerHTML = svg
+      } catch (err) {
+        el.innerHTML = `<pre class="mermaid-error">Mermaid error: ${escapeHtml(err.message || 'Unknown error')}</pre>`
+      }
+    })
+  }, [])
+
   // Load transclusions (disabled in publicMode: we never fetch private page
   // content anonymously; show a placeholder instead — see Q2 in to-do.md)
   useEffect(() => {
@@ -138,34 +165,17 @@ export default function MarkdownViewer({
       try {
         const res = await api.get(`/pages/${slug}`)
         el.innerHTML = DOMPurify.sanitize(renderMarkdown(res.data.content_md || ''))
+        await renderMermaidIn(el)
       } catch {
         el.innerHTML = '<em class="text-gray-400">Page not found</em>'
       }
     })
-  }, [html, publicMode])
+  }, [html, publicMode, renderMermaidIn])
 
   // Render Mermaid diagrams
   useEffect(() => {
-    if (!containerRef.current) return
-    const blocks = containerRef.current.querySelectorAll('[data-mermaid]')
-    if (blocks.length === 0) return
-    const isDark = document.documentElement.classList.contains('dark')
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: isDark ? 'dark' : 'default',
-      securityLevel: 'strict',
-    })
-    blocks.forEach(async (el, i) => {
-      const code = decodeURIComponent(el.dataset.mermaid)
-      try {
-        const id = `mermaid-${Date.now()}-${i}`
-        const { svg } = await mermaid.render(id, code)
-        el.innerHTML = svg
-      } catch (err) {
-        el.innerHTML = `<pre class="mermaid-error">Mermaid error: ${escapeHtml(err.message || 'Unknown error')}</pre>`
-      }
-    })
-  }, [html])
+    renderMermaidIn(containerRef.current)
+  }, [html, renderMermaidIn])
 
   // Load Draw.io diagram SVGs.
   //

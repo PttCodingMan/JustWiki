@@ -39,7 +39,7 @@ export default function Layout({ children }) {
       <SearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
 
       {/* Navbar */}
-      <nav className="h-12 bg-surface border-b border-border flex items-center px-4 shrink-0">
+      <nav className="h-12 bg-surface border-b border-border flex items-center px-4 shrink-0 no-print">
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           className="p-1.5 rounded hover:bg-surface-hover mr-2 text-text-secondary"
@@ -102,7 +102,7 @@ export default function Layout({ children }) {
           />
         )}
         <div
-          className={`shrink-0 overflow-hidden transition-all duration-200 ease-in-out z-40
+          className={`shrink-0 overflow-hidden transition-all duration-200 ease-in-out z-40 no-print
             max-md:fixed max-md:top-12 max-md:bottom-0 max-md:left-0 max-md:shadow-lg`}
           style={{ width: sidebarOpen ? '240px' : '0px' }}
         >

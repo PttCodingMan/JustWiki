@@ -20,66 +20,21 @@ async def test_export_page(auth_client):
     assert b"Export content" in response.content
 
 @pytest.mark.asyncio
-async def test_export_page_pdf_auto_prints(auth_client):
-    """format=pdf returns HTML that auto-opens the browser print dialog."""
-    await auth_client.post("/api/pages", json={
-        "title": "PDF Page",
-        "content_md": "PDF content body",
-        "slug": "pdf-page",
-    })
-
-    response = await auth_client.get("/api/export/page/pdf-page?format=pdf")
-    assert response.status_code == 200
-    assert response.headers["Content-Type"] == "text/html; charset=utf-8"
-    # inline (browser displays it) rather than attachment (which would download
-    # a useless .html pretending to be a PDF).
-    assert "inline" in response.headers["content-disposition"]
-
-    body = response.text
-    assert "PDF content body" in body
-    assert "window.print()" in body
-    assert "print-hint" in body
-    # Print CSS hides the hint banner in the rendered PDF.
-    assert "@media print" in body
-    assert ".print-hint { display: none; }" in body
-
-
-@pytest.mark.asyncio
-async def test_export_page_html_has_no_auto_print(auth_client):
-    """format=html must NOT auto-print — it's a plain download."""
+async def test_export_page_is_plain_download(auth_client):
+    """Page export is a plain HTML attachment — printing is handled client-side
+    via the browser's own print dialog on the live page view, so the export
+    must not ship auto-print scripts or hint banners."""
     await auth_client.post("/api/pages", json={
         "title": "Html Only",
         "content_md": "Plain html export",
         "slug": "html-only",
     })
 
-    response = await auth_client.get("/api/export/page/html-only?format=html")
+    response = await auth_client.get("/api/export/page/html-only")
     assert response.status_code == 200
     assert "attachment" in response.headers["content-disposition"]
     assert "window.print()" not in response.text
     assert "print-hint" not in response.text
-
-
-@pytest.mark.asyncio
-async def test_export_page_pdf_content_not_double_injected(auth_client):
-    """Page content containing '<body>' literal must not trigger re-injection.
-
-    md_to_simple_html escapes `<` and `>`, so user content cannot smuggle real
-    `<body>` / `</style>` tags into the template — but guard the assumption
-    with a test so regressions in the markdown escaping are caught here.
-    """
-    await auth_client.post("/api/pages", json={
-        "title": "Tricky",
-        "content_md": "Body tag test: <body> </style> </body>",
-        "slug": "tricky-tags",
-    })
-
-    response = await auth_client.get("/api/export/page/tricky-tags?format=pdf")
-    assert response.status_code == 200
-    body = response.text
-    # Exactly one auto-print script and one hint banner.
-    assert body.count("window.print()") == 1
-    assert body.count('class="print-hint"') == 1
 
 
 @pytest.mark.asyncio
@@ -110,12 +65,6 @@ async def test_export_page_inlines_media_images(auth_client):
         assert expected in body
         # Raw /api/media path must not leak through in the exported src.
         assert f'src="/api/media/{filename}"' not in body
-
-        # PDF export goes through the same inlining path.
-        pdf_response = await auth_client.get(
-            "/api/export/page/with-image?format=pdf"
-        )
-        assert expected in pdf_response.text
     finally:
         filepath.unlink(missing_ok=True)
 

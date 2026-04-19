@@ -1003,3 +1003,18 @@ mark {
 
 /* TOC dark */
 .dark .toc-rail { background: var(--color-surface); border-color: var(--color-border); }
+
+/* Print — strip chrome so Ctrl+P / "Save as PDF" produces a clean article */
+@media print {
+  .no-print { display: none !important; }
+  html, body { background: #ffffff !important; color: #000000 !important; }
+  /* Unfreeze the flex scroll container so the article flows across pages */
+  .h-screen { height: auto !important; }
+  .overflow-hidden, .overflow-auto { overflow: visible !important; }
+  main { padding: 0 !important; }
+  article { max-width: 100% !important; }
+  .bg-surface { background: transparent !important; box-shadow: none !important; border: none !important; }
+  a { color: inherit; text-decoration: none; }
+  pre, code, table, img, .mermaid-block { break-inside: avoid; page-break-inside: avoid; }
+  @page { margin: 1.5cm; }
+}

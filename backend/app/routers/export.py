@@ -103,33 +103,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </body>
 </html>"""
 
-PDF_PRINT_CSS = """
-  .print-hint { background: #fef3c7; border: 1px solid #fde68a; border-radius: 8px; padding: 0.75em 1em; margin-bottom: 1.5em; color: #78350f; font-size: 0.9em; }
-  .print-hint kbd { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 4px; padding: 0 0.35em; font-family: inherit; font-size: 0.85em; }
-  @media print {
-    body { margin: 0; max-width: 100%; }
-    @page { margin: 1.5cm; }
-    .print-hint { display: none; }
-  }
-"""
-
-PDF_HINT_BANNER = (
-    '<div class="print-hint">'
-    '已自動開啟列印對話框 — 若未彈出，請按 '
-    '<kbd>Ctrl</kbd>+<kbd>P</kbd>（Windows）或 '
-    '<kbd>⌘</kbd>+<kbd>P</kbd>（Mac），'
-    '在印表機選擇「另存為 PDF / Save as PDF」即可下載。'
-    '</div>'
-)
-
-PDF_AUTO_PRINT_SCRIPT = (
-    "<script>"
-    "window.addEventListener('load', function () { "
-    "setTimeout(function () { window.print(); }, 150); "
-    "});"
-    "</script>"
-)
-
 SITE_INDEX_TEMPLATE = """<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -269,7 +242,6 @@ def md_to_simple_html(text):
 @router.get("/page/{slug}")
 async def export_page(
     slug: str,
-    format: str = Query("html", pattern="^(html|pdf)$"),
     user=Depends(get_current_user),
 ):
     db = await get_db()
@@ -292,21 +264,6 @@ async def export_page(
         slug=_html.escape(page["slug"]),
         content=html_content,
     )
-
-    if format == "pdf":
-        # Browser-print approach: inject print CSS + user hint banner +
-        # auto-trigger window.print() on load. The user picks "Save as PDF"
-        # from the print dialog. Response stays HTML (filename .html) — we
-        # don't claim to return a real PDF.
-        pdf_html = (
-            full_html
-            .replace("</style>", PDF_PRINT_CSS + "</style>", 1)
-            .replace("<body>", "<body>" + PDF_HINT_BANNER, 1)
-            .replace("</body>", PDF_AUTO_PRINT_SCRIPT + "</body>", 1)
-        )
-        return HTMLResponse(content=pdf_html, headers={
-            "Content-Disposition": f'inline; filename="{slug}.html"',
-        })
 
     return HTMLResponse(content=full_html, headers={
         "Content-Disposition": f'attachment; filename="{slug}.html"',

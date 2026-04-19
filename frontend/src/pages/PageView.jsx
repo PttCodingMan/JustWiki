@@ -343,14 +343,16 @@ export default function PageView() {
             <button
               onClick={() => {
                 setMenuOpen(false)
-                window.open(`/api/export/page/${slug}?format=pdf`, '_blank')
+                window.print()
               }}
               className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
             >
-              <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <path d="M6 9V2h12v7" />
+                <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" />
+                <path d="M6 14h12v8H6z" />
               </svg>
-              Export PDF
+              Print / Save as PDF
             </button>
             {writable && (
               <>
@@ -387,7 +389,7 @@ export default function PageView() {
         </div>
 
         {/* Mobile: inline actions under the title. Desktop uses the right-rail dock. */}
-        <div className="mb-4 lg:hidden">
+        <div className="mb-4 lg:hidden no-print">
           {renderActions('inline')}
         </div>
 
@@ -438,7 +440,7 @@ export default function PageView() {
 
         {/* Backlinks */}
         {backlinks.length > 0 && (
-          <div className="mt-6 p-4 bg-surface rounded-xl shadow-sm border border-border">
+          <div className="mt-6 p-4 bg-surface rounded-xl shadow-sm border border-border no-print">
             <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3">
               Linked from ({backlinks.length})
             </h3>
@@ -457,11 +459,13 @@ export default function PageView() {
         )}
 
         {/* Discussion */}
-        <Comments slug={slug} />
+        <div className="no-print">
+          <Comments slug={slug} />
+        </div>
       </article>
 
       {/* Right rail: actions pinned above TOC so Edit has one consistent home */}
-      <aside className="hidden lg:block">
+      <aside className="hidden lg:block no-print">
         <div className="page-right-rail">
           <div className="page-action-dock-wrap">
             {renderActions('dock')}
