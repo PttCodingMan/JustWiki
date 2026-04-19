@@ -125,9 +125,11 @@ jobs:
     needs: [changes, backend-tests, frontend-tests]
     if: |
       always() &&
-      github.event_name != 'pull_request' && 
+      github.event_name != 'pull_request' &&
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
-      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true') &&
+      (startsWith(github.ref, 'refs/tags/v') ||
+        needs.changes.outputs.backend == 'true' ||
+        needs.changes.outputs.frontend == 'true') &&
       (needs.backend-tests.result == 'success' || needs.backend-tests.result == 'skipped') &&
       (needs.frontend-tests.result == 'success' || needs.frontend-tests.result == 'skipped')
     runs-on: ubuntu-latest
@@ -145,7 +147,11 @@ jobs:
       - name: Skip if component didn't change
         id: check
         run: |
-          if [[ "${{ matrix.component }}" == "backend" && "${{ needs.changes.outputs.backend }}" != "true" ]]; then
+          # Tag builds always publish both images so the semver tag on ghcr.io
+          # covers a full release, even if only one side actually changed.
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "skip=false" >> $GITHUB_OUTPUT
+          elif [[ "${{ matrix.component }}" == "backend" && "${{ needs.changes.outputs.backend }}" != "true" ]]; then
             echo "skip=true" >> $GITHUB_OUTPUT
           elif [[ "${{ matrix.component }}" == "frontend" && "${{ needs.changes.outputs.frontend }}" != "true" ]]; then
             echo "skip=true" >> $GITHUB_OUTPUT
