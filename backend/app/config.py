@@ -14,7 +14,18 @@ class Settings(BaseSettings):
     VITE_API_URL: str = "http://localhost:8000"
     COOKIE_SECURE: bool = False  # Set to True in production with HTTPS
 
+    # ── AI chat (optional, OpenAI-compatible) ──
+    # Default targets Gemini's OpenAI-compatible endpoint, but any provider
+    # that speaks the same wire format works (OpenAI, Ollama, Groq, DeepSeek…).
     AI_ENABLED: bool = False
+    AI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+    AI_API_KEY: str = ""
+    AI_MODEL: str = "gemini-2.0-flash"
+    AI_MAX_CONTEXT_PAGES: int = 5       # top-K pages stuffed into the prompt
+    AI_EXCERPT_CHARS: int = 1500        # max chars per page content excerpt
+    AI_RATE_LIMIT_PER_HOUR: int = 20    # per-user request cap
+    # Legacy; kept as a read-only alias so existing deployments don't break.
+    # Use AI_API_KEY instead.
     GEMINI_API_KEY: str = ""
 
     # Dashboard / updates
@@ -28,7 +39,14 @@ class Settings(BaseSettings):
     # switches without permanently storing per-user reading history.
     VIEW_DEDUP_MINUTES: int = 30
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    # Look for .env in both the cwd (docker image's /app) and the repo root
+    # one directory up (so `make dev-backend`, which cds into backend/, still
+    # picks up the project-root .env). pydantic-settings uses the first file
+    # that exists.
+    model_config = {
+        "env_file": (".env", "../.env"),
+        "env_file_encoding": "utf-8",
+    }
 
 
 settings = Settings()

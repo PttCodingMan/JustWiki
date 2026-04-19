@@ -18,6 +18,7 @@ import Admin from './pages/Admin'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import Trash from './pages/Trash'
+import Chat from './pages/Chat'
 import PublicPageView from './pages/PublicPageView'
 import PageOrPublicView from './pages/PageOrPublicView'
 
@@ -92,6 +93,7 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/trash" element={<Trash />} />
+        <Route path="/chat" element={<Chat />} />
         <Route path="/page/:slug" element={<PageOrPublicView />} />
         <Route path="/page/:slug/edit" element={<PageEdit />} />
         <Route path="/page/:slug/versions" element={<PageVersions />} />

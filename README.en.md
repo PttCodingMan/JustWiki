@@ -46,6 +46,15 @@ All your data = one `data/just-wiki.db` SQLite file + the `media/` folder. Backu
   <img src="docs/images/graph-3d.png" alt="3D knowledge graph with planet-style nodes and visible link edges" width="90%">
 </p>
 
+**AI Q&A (optional)**
+- **Grounded in your wiki** — RAG retrieves the relevant pages and cites them as links at the bottom of each answer
+- **Permission-aware** — respects ACL; the model only sees pages the current user can read
+- **Bring your own model** — any OpenAI-compatible endpoint works (OpenAI, Gemini, Ollama, Groq, DeepSeek…)
+
+<p align="center">
+  <img src="docs/images/ai-chat.png" alt="AI chat interface: streaming response with cited wiki pages shown as pills below" width="90%">
+</p>
+
 **Collaboration & permissions**
 - **Multi-user + group ACL** — per-page permission control
 - **Version history** — page revisions with diff view
@@ -92,6 +101,8 @@ Key variables:
 | `ADMIN_USER`    | Admin username                     | `admin`              |
 | `ADMIN_PASS`    | Admin password                     | `admin`              |
 | `DB_PATH`       | SQLite database path               | `./data/just-wiki.db`|
+| `AI_ENABLED`    | Enable AI chat                     | `false`              |
+| `AI_API_KEY`    | LLM provider API key (required if enabled) | —            |
 
 ## Usage
 
@@ -184,7 +195,7 @@ justwiki/
 │       ├── components/
 │       │   ├── Editor/   # Milkdown editor
 │       │   ├── Viewer/   # Markdown renderer
-│       │   ├── Search/   # Search + AI Q&A
+│       │   ├── Search/   # Search
 │       │   └── Layout/   # Sidebar, Navbar
 │       ├── pages/
 │       ├── hooks/

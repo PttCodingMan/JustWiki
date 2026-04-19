@@ -42,6 +42,15 @@
   <img src="docs/images/graph-3d.png" alt="3D 知識圖譜：以行星節點呈現頁面，連結以線條顯示" width="90%">
 </p>
 
+**AI 問答（可選）**
+- **以 wiki 為知識來源** — RAG 自動檢索相關頁面，回答底部顯示引用連結
+- **權限敏感** — 遵循 ACL，模型只讀得到使用者本身有權閱讀的頁面
+- **自選模型** — 任何 OpenAI 相容端點都可接（OpenAI、Gemini、Ollama、Groq、DeepSeek…）
+
+<p align="center">
+  <img src="docs/images/ai-chat.png" alt="AI 問答介面：串流回應並在底部顯示引用的 wiki 頁面" width="90%">
+</p>
+
 **協作與權限**
 - **多使用者 + 群組 ACL** — 頁面層級的權限控制
 - **版本歷史** — 每頁修訂紀錄與差異比對
@@ -88,6 +97,8 @@ docker-compose up -d
 | `ADMIN_USER`      | 管理員帳號                    | `admin`               |
 | `ADMIN_PASS`      | 管理員密碼                    | `admin`               |
 | `DB_PATH`         | SQLite 資料庫路徑             | `./data/just-wiki.db` |
+| `AI_ENABLED`      | 啟用 AI 問答功能              | `false`               |
+| `AI_API_KEY`      | LLM 供應商 API 金鑰（啟用時必填） | —                     |
 
 ## 使用指南
 
@@ -180,7 +191,7 @@ justwiki/
 │       ├── components/
 │       │   ├── Editor/   # Milkdown 編輯器
 │       │   ├── Viewer/   # Markdown 渲染器
-│       │   ├── Search/   # 搜尋 + AI 問答
+│       │   ├── Search/   # 搜尋
 │       │   └── Layout/   # Sidebar、Navbar
 │       ├── pages/
 │       ├── hooks/

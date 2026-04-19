@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import usePages from '../../store/usePages'
 import useBookmarks from '../../store/useBookmarks'
 import useAuth from '../../store/useAuth'
+import useChat from '../../store/useChat'
 
 function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
   const location = useLocation()
@@ -170,6 +171,11 @@ export default function Sidebar() {
   const { tree } = usePages()
   const { bookmarks } = useBookmarks()
   const { user } = useAuth()
+  const { aiStatus, checkStatus: checkAiStatus } = useChat()
+
+  useEffect(() => {
+    if (aiStatus === null) checkAiStatus()
+  }, [aiStatus, checkAiStatus])
 
   return (
     <aside className="w-60 min-w-60 bg-sidebar dark:bg-sidebar-dark border-r border-border overflow-y-auto">
@@ -197,6 +203,17 @@ export default function Sidebar() {
             </svg>
             Graph View
           </Link>
+          {aiStatus?.enabled && (
+            <Link
+              to="/chat"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover rounded-lg"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.84L3 20l1.16-3.68A7.94 7.94 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              AI Chat
+            </Link>
+          )}
           <Link
             to="/trash"
             className="flex items-center gap-2 px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover rounded-lg"
