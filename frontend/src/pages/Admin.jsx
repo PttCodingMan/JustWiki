@@ -88,15 +88,25 @@ function ExportSection() {
 }
 
 function UsersSection() {
+  const [tab, setTab] = useState('active')
   const [users, setUsers] = useState([])
+  const [deletedUsers, setDeletedUsers] = useState([])
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({ username: '', password: '', role: 'editor' })
   const [error, setError] = useState('')
+  const [busyId, setBusyId] = useState(null)
 
   const loadUsers = async () => {
     try {
       const res = await api.get('/users')
       setUsers(res.data.users || [])
+    } catch { /* ignore */ }
+  }
+
+  const loadDeleted = async () => {
+    try {
+      const res = await api.get('/users/deleted')
+      setDeletedUsers(Array.isArray(res.data) ? res.data : [])
     } catch { /* ignore */ }
   }
 
@@ -107,6 +117,10 @@ function UsersSection() {
       .catch(() => { /* ignore */ })
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => {
+    if (tab === 'deleted') loadDeleted()
+  }, [tab])
 
   const handleCreate = async (e) => {
     e.preventDefault()
@@ -121,11 +135,19 @@ function UsersSection() {
     }
   }
 
-  const handleDelete = async (userId) => {
-    if (!confirm('Delete this user?')) return
+  const handleDelete = async (u) => {
+    const label = u.username
+    if (!confirm(
+      `Delete user "${label}"?\n\nThis is a soft-delete — the account is deactivated, ` +
+      `the username "${label}" is freed for reuse, and pages they authored keep their ` +
+      `authorship. You can restore the account from the Deleted tab.`
+    )) return
     try {
-      await api.delete(`/users/${userId}`)
+      await api.delete(`/users/${u.id}`)
       loadUsers()
+      // Keep the deleted list in sync even if it hasn't been opened yet,
+      // so switching tabs later shows the fresh row without a flash.
+      loadDeleted()
     } catch (err) {
       alert(err?.response?.data?.detail || 'Failed to delete user')
     }
@@ -140,19 +162,69 @@ function UsersSection() {
     }
   }
 
+  // Try restoring to the original username; if that slot is now occupied,
+  // backend replies 409 — we prompt the admin for a replacement and retry once.
+  const handleRestore = async (u) => {
+    setBusyId(u.id)
+    try {
+      await api.post(`/users/${u.id}/restore`, {})
+      await Promise.all([loadUsers(), loadDeleted()])
+    } catch (err) {
+      if (err?.response?.status === 409) {
+        const suggestion = `${u.original_username || 'user'}-restored`
+        const alternative = prompt(
+          `Username "${u.original_username}" is already in use. ` +
+          `Enter a different username to restore the account under:`,
+          suggestion,
+        )
+        if (!alternative || !alternative.trim()) {
+          setBusyId(null)
+          return
+        }
+        try {
+          await api.post(`/users/${u.id}/restore`, { username: alternative.trim() })
+          await Promise.all([loadUsers(), loadDeleted()])
+        } catch (inner) {
+          alert(inner?.response?.data?.detail || 'Restore failed')
+        }
+      } else {
+        alert(err?.response?.data?.detail || 'Restore failed')
+      }
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const tabClass = (name) =>
+    `px-3 py-1.5 rounded-lg text-sm transition ${
+      tab === name
+        ? 'bg-primary text-primary-text'
+        : 'bg-surface-hover border border-border text-text hover:bg-surface-active'
+    }`
+
   return (
     <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <h2 className="text-lg font-semibold text-text">Users</h2>
-        <button
-          onClick={() => setShowCreate(!showCreate)}
-          className="px-3 py-1.5 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover"
-        >
-          + Add User
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button type="button" onClick={() => setTab('active')} className={tabClass('active')}>
+            Active {users.length > 0 && <span className="text-xs opacity-70">({users.length})</span>}
+          </button>
+          <button type="button" onClick={() => setTab('deleted')} className={tabClass('deleted')}>
+            Deleted {deletedUsers.length > 0 && <span className="text-xs opacity-70">({deletedUsers.length})</span>}
+          </button>
+          {tab === 'active' && (
+            <button
+              onClick={() => setShowCreate(!showCreate)}
+              className="px-3 py-1.5 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover"
+            >
+              + Add User
+            </button>
+          )}
+        </div>
       </div>
 
-      {showCreate && (
+      {tab === 'active' && showCreate && (
         <form onSubmit={handleCreate} className="mb-4 p-4 bg-surface-hover rounded-lg border border-border">
           <div className="flex flex-col sm:flex-row gap-3">
             <input
@@ -188,42 +260,87 @@ function UsersSection() {
         </form>
       )}
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="text-left py-2 px-3 text-text-secondary font-medium">Username</th>
-              <th className="text-left py-2 px-3 text-text-secondary font-medium">Role</th>
-              <th className="text-left py-2 px-3 text-text-secondary font-medium">Created</th>
-              <th className="text-right py-2 px-3 text-text-secondary font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="border-b border-border">
-                <td className="py-2 px-3 text-text">{u.username}</td>
-                <td className="py-2 px-3">
-                  <select
-                    value={u.role}
-                    onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                    className="text-sm px-2 py-1 border border-border rounded bg-surface text-text"
-                  >
-                    <option value="editor">Editor</option>
-                    <option value="viewer">Viewer</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </td>
-                <td className="py-2 px-3 text-text-secondary">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '-'}</td>
-                <td className="py-2 px-3 text-right">
-                  <button onClick={() => handleDelete(u.id)} className="text-red-500 hover:text-red-700 text-sm">
-                    Delete
-                  </button>
-                </td>
+      {tab === 'active' && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">Username</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">Role</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">Created</th>
+                <th className="text-right py-2 px-3 text-text-secondary font-medium">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} className="border-b border-border">
+                  <td className="py-2 px-3 text-text">{u.username}</td>
+                  <td className="py-2 px-3">
+                    <select
+                      value={u.role}
+                      onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                      className="text-sm px-2 py-1 border border-border rounded bg-surface text-text"
+                    >
+                      <option value="editor">Editor</option>
+                      <option value="viewer">Viewer</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </td>
+                  <td className="py-2 px-3 text-text-secondary">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '-'}</td>
+                  <td className="py-2 px-3 text-right">
+                    <button onClick={() => handleDelete(u)} className="text-red-500 hover:text-red-700 text-sm">
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tab === 'deleted' && (
+        deletedUsers.length === 0 ? (
+          <div className="text-center py-8 text-text-secondary">
+            No deleted users.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-2 px-3 text-text-secondary font-medium">Original username</th>
+                  <th className="text-left py-2 px-3 text-text-secondary font-medium">Display name</th>
+                  <th className="text-left py-2 px-3 text-text-secondary font-medium">Role</th>
+                  <th className="text-left py-2 px-3 text-text-secondary font-medium">Deleted</th>
+                  <th className="text-right py-2 px-3 text-text-secondary font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {deletedUsers.map((u) => (
+                  <tr key={u.id} className="border-b border-border">
+                    <td className="py-2 px-3 text-text">{u.original_username || `user #${u.id}`}</td>
+                    <td className="py-2 px-3 text-text-secondary">{u.display_name || '—'}</td>
+                    <td className="py-2 px-3 text-text-secondary">{u.role}</td>
+                    <td className="py-2 px-3 text-text-secondary">
+                      {u.deleted_at ? new Date(u.deleted_at).toLocaleString() : '—'}
+                    </td>
+                    <td className="py-2 px-3 text-right">
+                      <button
+                        onClick={() => handleRestore(u)}
+                        disabled={busyId === u.id}
+                        className="text-sm text-primary hover:underline disabled:opacity-50"
+                      >
+                        {busyId === u.id ? 'Restoring…' : 'Restore'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      )}
     </div>
   )
 }
