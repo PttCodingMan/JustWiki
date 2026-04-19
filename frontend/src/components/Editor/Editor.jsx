@@ -10,6 +10,7 @@ import { slashFactory, SlashProvider } from '@milkdown/kit/plugin/slash'
 import { TextSelection, Plugin, PluginKey } from '@milkdown/kit/prose/state'
 import { $prose } from '@milkdown/kit/utils'
 import api from '../../api/client'
+import { wikilink } from './wikilink'
 
 const SLASH_ITEMS = [
   { id: 'h1', label: 'Heading 1', icon: 'H1', desc: 'Big section heading' },
@@ -315,10 +316,20 @@ class WikilinkMenu {
   select(page) {
     if (!this._view || this.triggerPos == null) return
     const { state, dispatch } = this._view
-    // Replace from triggerPos (the first [) to current cursor with [[slug|title]]
     const to = state.selection.head
-    const text = `[[${page.slug}|${page.title}]]`
-    dispatch(state.tr.replaceWith(this.triggerPos, to, state.schema.text(text)))
+    const nodeType = state.schema.nodes.wikilink
+    if (!nodeType) {
+      // Schema not registered yet — fall back to plain text so typing still works.
+      const text = `[[${page.slug}|${page.title}]]`
+      dispatch(state.tr.replaceWith(this.triggerPos, to, state.schema.text(text)))
+    } else {
+      const node = nodeType.create({
+        slug: page.slug,
+        display: page.title,
+        transclusion: false,
+      })
+      dispatch(state.tr.replaceWith(this.triggerPos, to, node))
+    }
     this.hide()
   }
 
@@ -471,6 +482,7 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
         .use(clipboard)
         .use(history)
         .use(slash)
+        .use(wikilink)
         .use(wikilinkPlugin)
         .create()
 
