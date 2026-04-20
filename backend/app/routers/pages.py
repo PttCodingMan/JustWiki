@@ -355,18 +355,32 @@ async def update_page(slug: str, body: PageUpdate, user=Depends(get_current_user
             detail="You do not have write permission on this page",
         )
 
-    # Optimistic lock: if the client sent a base_version, it must match.
-    # Missing base_version is allowed for legacy API clients, but logged.
-    if body.base_version is not None and body.base_version != current["version"]:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "error": "conflict",
-                "message": "This page was modified by someone else. Reload to see the latest version.",
-                "current_version": current["version"],
-                "your_version": body.base_version,
-            },
-        )
+    # Optimistic lock. Required whenever the payload includes a content_md or
+    # title change — those are the only edits that bump the version counter
+    # and therefore the only ones that can silently clobber someone else's
+    # work. Metadata-only edits (is_public toggle, parent/sort moves) don't
+    # need it: they don't race against an open editor.
+    touches_content = body.content_md is not None or body.title is not None
+    if touches_content:
+        if body.base_version is None:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "base_version_required",
+                    "message": "base_version is required on content or title edits.",
+                    "current_version": current["version"],
+                },
+            )
+        if body.base_version != current["version"]:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "conflict",
+                    "message": "This page was modified by someone else. Reload to see the latest version.",
+                    "current_version": current["version"],
+                    "your_version": body.base_version,
+                },
+            )
 
     title = body.title if body.title is not None else current["title"]
     content = body.content_md if body.content_md is not None else current["content_md"]

@@ -89,6 +89,7 @@ async def test_update_creates_notification_for_watcher(auth_client, db):
         # First user edits — second user should get a notification
         res = await auth_client.put("/api/pages/notify-page", json={
             "content_md": "updated body",
+            "base_version": 1,
         })
         assert res.status_code == 200
 
@@ -120,6 +121,7 @@ async def test_actor_does_not_notify_self(auth_client, db):
     # Author edits
     await auth_client.put("/api/pages/self-notify", json={
         "content_md": "new",
+        "base_version": 1,
     })
 
     # Should NOT get a notification for your own edit
@@ -139,7 +141,10 @@ async def test_mark_all_read(auth_client, db):
     second = await _make_second_user(db, "watcher2")
     async with await _client_for(second) as second_client:
         await second_client.post("/api/pages/mark-read/watch")
-        await auth_client.put("/api/pages/mark-read", json={"content_md": "v2"})
+        await auth_client.put(
+            "/api/pages/mark-read",
+            json={"content_md": "v2", "base_version": 1},
+        )
 
         res = await second_client.get("/api/notifications", params={"unread_only": True})
         assert res.json()["unread_count"] >= 1

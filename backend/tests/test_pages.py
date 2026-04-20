@@ -35,7 +35,8 @@ async def test_update_page(auth_client):
 
     response = await auth_client.put("/api/pages/update-me", json={
         "title": "Updated Title",
-        "content_md": "New content"
+        "content_md": "New content",
+        "base_version": 1,
     })
     assert response.status_code == 200
     assert response.json()["title"] == "Updated Title"

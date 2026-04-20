@@ -31,7 +31,8 @@ async def test_backlinks_update(auth_client, db):
 
     # 4. Update source page (remove one link)
     await auth_client.put("/api/pages/source", json={
-        "content_md": "Link to [[t1]] only."
+        "content_md": "Link to [[t1]] only.",
+        "base_version": 1,
     })
 
     # 5. Verify backlinks updated

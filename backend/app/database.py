@@ -1089,37 +1089,12 @@ async def init_db():
             await db.execute(statement)
     await db.commit()
 
-    # Migrate: add new user columns if missing
-    cols = await db.execute_fetchall("PRAGMA table_info(users)")
-    col_names = {c["name"] for c in cols}
-    if "display_name" not in col_names:
-        await db.execute("ALTER TABLE users ADD COLUMN display_name TEXT DEFAULT ''")
-    if "email" not in col_names:
-        await db.execute("ALTER TABLE users ADD COLUMN email TEXT DEFAULT ''")
-    if "deleted_at" not in col_names:
-        await db.execute("ALTER TABLE users ADD COLUMN deleted_at TIMESTAMP")
-    if "original_username" not in col_names:
-        await db.execute("ALTER TABLE users ADD COLUMN original_username TEXT")
-    await db.execute("CREATE INDEX IF NOT EXISTS idx_users_deleted ON users(deleted_at)")
-    await db.commit()
-
-    # Migrate: add new page columns if missing
-    page_cols = await db.execute_fetchall("PRAGMA table_info(pages)")
-    page_col_names = {c["name"] for c in page_cols}
-    if "version" not in page_col_names:
-        await db.execute("ALTER TABLE pages ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
-    if "deleted_at" not in page_col_names:
-        await db.execute("ALTER TABLE pages ADD COLUMN deleted_at TIMESTAMP")
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_pages_deleted ON pages(deleted_at)")
-    if "is_public" not in page_col_names:
-        await db.execute("ALTER TABLE pages ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0")
-    # Create the partial index regardless — fresh DBs also need it, and
-    # we can't put it in SCHEMA_SQL because upgrading DBs run SCHEMA_SQL
-    # before the ALTER TABLE above.
-    await db.execute(
-        "CREATE INDEX IF NOT EXISTS idx_pages_public ON pages(slug) WHERE is_public = 1"
-    )
-    await db.commit()
+    # Versioned schema migrations. Handles both fresh DBs (nothing to do,
+    # SCHEMA_SQL already created everything) and upgrades from pre-migration
+    # deployments (backfills the ledger from observed schema). See
+    # app/migrations.py for the list and the rules for adding new ones.
+    from app.migrations import run_migrations
+    await run_migrations(db)
 
     # Ensure FTS5 index exists with the best available tokenizer.
     # If the tokenizer changed (e.g. unicode61 → trigram), the table is

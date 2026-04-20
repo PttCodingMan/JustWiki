@@ -94,7 +94,7 @@ async def test_media_reference_tracking_and_delete(admin_client):
     # Remove the reference by updating the page
     upd = await admin_client.put(
         f"/api/pages/{page['slug']}",
-        json={"content_md": "No media anymore"},
+        json={"content_md": "No media anymore", "base_version": 1},
     )
     assert upd.status_code == 200
 

@@ -207,7 +207,9 @@ async def test_diagrams_delete_blocked_when_referenced(admin_client):
     assert blocked.status_code == 409
 
     # Remove the reference and delete should succeed.
-    await admin_client.put(f"/api/pages/{slug}", json={"content_md": "no ref"})
+    await admin_client.put(
+        f"/api/pages/{slug}", json={"content_md": "no ref", "base_version": 1}
+    )
     ok = await admin_client.delete(f"/api/diagrams/{diagram_id}")
     assert ok.status_code == 204
 

@@ -1,0 +1,196 @@
+"""Versioned schema migrations for JustWiki.
+
+Why not Alembic: JustWiki's core pitch is "single SQLite file, no external
+deps." Alembic would add a CLI, a versions/ directory, an alembic.ini, and a
+separate `alembic upgrade head` step in every deploy — extra weight that buys
+us very little on a schema this small. Instead we keep the work in-process:
+migrations are plain async functions in this module, identified by a
+monotonically increasing integer version, recorded in `schema_migrations`,
+and run once on startup by init_db().
+
+Ground rules:
+  * Append-only. Never renumber or rewrite a shipped migration — existing
+    deployments have already recorded the version.
+  * Each migration must be idempotent at the SQL level (IF NOT EXISTS, column
+    probes, etc.) so partial re-runs are safe if a crash happens mid-run.
+  * Use `run_migrations` as the single entry point. It returns the list of
+    versions applied in this invocation; callers can use that signal to
+    decide whether expensive follow-up work (full-text rebuild etc.) is
+    needed.
+"""
+import logging
+from typing import Awaitable, Callable
+
+import aiosqlite
+
+logger = logging.getLogger(__name__)
+
+MigrationFn = Callable[[aiosqlite.Connection], Awaitable[None]]
+Migration = tuple[int, str, MigrationFn]
+
+
+async def _column_exists(db: aiosqlite.Connection, table: str, col: str) -> bool:
+    rows = await db.execute_fetchall(f"PRAGMA table_info({table})")
+    return any(r["name"] == col for r in rows)
+
+
+# ── Migration functions ────────────────────────────────────────────────────
+# New migrations go at the bottom. Never renumber or edit a shipped migration.
+
+
+async def _m001_user_profile_columns(db: aiosqlite.Connection) -> None:
+    if not await _column_exists(db, "users", "display_name"):
+        await db.execute("ALTER TABLE users ADD COLUMN display_name TEXT DEFAULT ''")
+    if not await _column_exists(db, "users", "email"):
+        await db.execute("ALTER TABLE users ADD COLUMN email TEXT DEFAULT ''")
+
+
+async def _m002_user_soft_delete(db: aiosqlite.Connection) -> None:
+    if not await _column_exists(db, "users", "deleted_at"):
+        await db.execute("ALTER TABLE users ADD COLUMN deleted_at TIMESTAMP")
+    if not await _column_exists(db, "users", "original_username"):
+        await db.execute("ALTER TABLE users ADD COLUMN original_username TEXT")
+
+
+async def _m003_page_version_counter(db: aiosqlite.Connection) -> None:
+    if not await _column_exists(db, "pages", "version"):
+        await db.execute(
+            "ALTER TABLE pages ADD COLUMN version INTEGER NOT NULL DEFAULT 1"
+        )
+
+
+async def _m004_page_soft_delete(db: aiosqlite.Connection) -> None:
+    if not await _column_exists(db, "pages", "deleted_at"):
+        await db.execute("ALTER TABLE pages ADD COLUMN deleted_at TIMESTAMP")
+
+
+async def _m005_page_is_public(db: aiosqlite.Connection) -> None:
+    if not await _column_exists(db, "pages", "is_public"):
+        await db.execute(
+            "ALTER TABLE pages ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0"
+        )
+
+
+MIGRATIONS: list[Migration] = [
+    (1, "user_profile_columns", _m001_user_profile_columns),
+    (2, "user_soft_delete", _m002_user_soft_delete),
+    (3, "page_version_counter", _m003_page_version_counter),
+    (4, "page_soft_delete", _m004_page_soft_delete),
+    (5, "page_is_public", _m005_page_is_public),
+]
+
+
+# ── Post-migration index invariants ────────────────────────────────────────
+# These indexes reference columns added by migrations, so they can't live in
+# SCHEMA_SQL (which runs first and would hit "no such column" on an upgrade).
+# They can't live in the migration bodies either: when a fresh DB boots,
+# every migration is detected as pre-applied and skipped, so an index baked
+# into a migration body would never run. Treating them as always-ensure
+# invariants after migrations is idempotent and covers both paths.
+_INDEX_INVARIANTS = (
+    "CREATE INDEX IF NOT EXISTS idx_users_deleted ON users(deleted_at)",
+    "CREATE INDEX IF NOT EXISTS idx_pages_deleted ON pages(deleted_at)",
+    "CREATE INDEX IF NOT EXISTS idx_pages_public ON pages(slug) WHERE is_public = 1",
+)
+
+
+async def _ensure_indexes(db: aiosqlite.Connection) -> None:
+    for stmt in _INDEX_INVARIANTS:
+        await db.execute(stmt)
+    await db.commit()
+
+
+# ── Runner ─────────────────────────────────────────────────────────────────
+
+
+async def _ensure_ledger(db: aiosqlite.Connection) -> None:
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version    INTEGER PRIMARY KEY,
+            name       TEXT    NOT NULL,
+            applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    await db.commit()
+
+
+async def _applied_versions(db: aiosqlite.Connection) -> set[int]:
+    rows = await db.execute_fetchall("SELECT version FROM schema_migrations")
+    return {r["version"] for r in rows}
+
+
+async def _detect_preexisting(db: aiosqlite.Connection) -> set[int]:
+    """Infer which shipped migrations are already effectively applied.
+
+    Needed for databases created before this module existed: the schema may
+    already carry columns added by earlier in-place ALTERs. Backfilling the
+    ledger here keeps the upgrade silent — no re-running of idempotent DDL,
+    no spurious log lines about "applying migration v3".
+
+    Only probes for artifacts the migration actually creates; anything more
+    ambitious (row counts, index options) gets fragile fast.
+    """
+    applied: set[int] = set()
+    if await _column_exists(db, "users", "display_name") and await _column_exists(
+        db, "users", "email"
+    ):
+        applied.add(1)
+    if await _column_exists(db, "users", "deleted_at") and await _column_exists(
+        db, "users", "original_username"
+    ):
+        applied.add(2)
+    if await _column_exists(db, "pages", "version"):
+        applied.add(3)
+    if await _column_exists(db, "pages", "deleted_at"):
+        applied.add(4)
+    if await _column_exists(db, "pages", "is_public"):
+        applied.add(5)
+    return applied
+
+
+async def run_migrations(db: aiosqlite.Connection) -> list[int]:
+    """Apply any pending migrations. Returns the versions applied this run.
+
+    Also ensures schema-invariant indexes (see `_INDEX_INVARIANTS`) regardless
+    of whether any migration ran, so fresh DBs get them too.
+    """
+    await _ensure_ledger(db)
+
+    applied = await _applied_versions(db)
+    # First run against a pre-existing DB: backfill the ledger from what's
+    # observable in the schema, so we don't re-announce "applying v1…v5".
+    if not applied:
+        inferred = await _detect_preexisting(db)
+        for v in sorted(inferred):
+            name = next((n for (ver, n, _) in MIGRATIONS if ver == v), f"legacy_{v}")
+            await db.execute(
+                "INSERT OR IGNORE INTO schema_migrations (version, name) VALUES (?, ?)",
+                (v, name),
+            )
+        if inferred:
+            await db.commit()
+        applied = inferred
+
+    just_applied: list[int] = []
+    for version, name, fn in MIGRATIONS:
+        if version in applied:
+            continue
+        logger.info("Applying schema migration %03d: %s", version, name)
+        try:
+            await fn(db)
+            await db.execute(
+                "INSERT INTO schema_migrations (version, name) VALUES (?, ?)",
+                (version, name),
+            )
+            await db.commit()
+        except Exception:
+            # Leave the half-applied state on disk so an operator can inspect
+            # it. The next startup will retry from this same migration.
+            logger.exception("Schema migration %03d (%s) failed", version, name)
+            raise
+        just_applied.append(version)
+
+    await _ensure_indexes(db)
+    return just_applied

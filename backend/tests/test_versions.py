@@ -12,7 +12,8 @@ async def test_versions(auth_client):
     # Update page to create a version
     await auth_client.put("/api/pages/version-page", json={
         "title": "Updated Title",
-        "content_md": "New content"
+        "content_md": "New content",
+        "base_version": 1,
     })
 
     # List versions
