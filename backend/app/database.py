@@ -36,6 +36,23 @@ CREATE TABLE IF NOT EXISTS api_tokens (
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- SSO binding per user. A user may have zero or more identities alongside
+-- a local password (or instead of one, in which case users.password_hash
+-- is set to the sentinel '!' to disable local login while keeping the
+-- column NOT NULL).
+CREATE TABLE IF NOT EXISTS auth_identities (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider      TEXT    NOT NULL,
+    subject       TEXT    NOT NULL,
+    email         TEXT,
+    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login_at TIMESTAMP,
+    UNIQUE (provider, subject)
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_identities_user ON auth_identities(user_id);
+
 CREATE TABLE IF NOT EXISTS pages (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     slug        TEXT UNIQUE NOT NULL,
@@ -187,6 +204,7 @@ CREATE TABLE IF NOT EXISTS groups (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT UNIQUE NOT NULL,
     description TEXT DEFAULT '',
+    ldap_dn     TEXT UNIQUE,           -- non-NULL marks this group as LDAP-sourced
     created_by  INTEGER REFERENCES users(id),
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -71,12 +71,59 @@ async def _m005_page_is_public(db: aiosqlite.Connection) -> None:
         )
 
 
+async def _m006_auth_identities(db: aiosqlite.Connection) -> None:
+    """Create auth_identities table to record OIDC / LDAP bindings.
+
+    Fresh DBs already have it from SCHEMA_SQL; this migration handles upgrades
+    where the CREATE TABLE would otherwise never run. The index is declared
+    inside SCHEMA_SQL for fresh DBs but only gets created here for upgrades —
+    without it, ON DELETE CASCADE becomes a full-table scan per user delete.
+    """
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS auth_identities (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            provider      TEXT    NOT NULL,
+            subject       TEXT    NOT NULL,
+            email         TEXT,
+            created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_login_at TIMESTAMP,
+            UNIQUE (provider, subject)
+        )
+        """
+    )
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_auth_identities_user ON auth_identities(user_id)"
+    )
+
+
+async def _m007_groups_ldap_dn(db: aiosqlite.Connection) -> None:
+    """Add `ldap_dn` to `groups` so LDAP-mirrored groups can be reconciled.
+
+    A group with ldap_dn IS NOT NULL is considered fully managed by the LDAP
+    sync loop — user additions/removals during sync only touch those rows;
+    manually-created groups (ldap_dn IS NULL) are never pruned.
+    """
+    if not await _column_exists(db, "groups", "ldap_dn"):
+        await db.execute("ALTER TABLE groups ADD COLUMN ldap_dn TEXT")
+        # SQLite can't add UNIQUE via ALTER. A partial unique index is the
+        # idiomatic workaround and matches the semantics we want: only non-NULL
+        # DNs must be unique (multiple manual groups with NULL dn are fine).
+        await db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_ldap_dn "
+            "ON groups(ldap_dn) WHERE ldap_dn IS NOT NULL"
+        )
+
+
 MIGRATIONS: list[Migration] = [
     (1, "user_profile_columns", _m001_user_profile_columns),
     (2, "user_soft_delete", _m002_user_soft_delete),
     (3, "page_version_counter", _m003_page_version_counter),
     (4, "page_soft_delete", _m004_page_soft_delete),
     (5, "page_is_public", _m005_page_is_public),
+    (6, "auth_identities", _m006_auth_identities),
+    (7, "groups_ldap_dn", _m007_groups_ldap_dn),
 ]
 
 
@@ -91,6 +138,15 @@ _INDEX_INVARIANTS = (
     "CREATE INDEX IF NOT EXISTS idx_users_deleted ON users(deleted_at)",
     "CREATE INDEX IF NOT EXISTS idx_pages_deleted ON pages(deleted_at)",
     "CREATE INDEX IF NOT EXISTS idx_pages_public ON pages(slug) WHERE is_public = 1",
+    # SQLite can't express "column-level UNIQUE only when non-NULL" in a
+    # plain CREATE TABLE; the partial unique index is the standard workaround
+    # and matches what groups.ldap_dn needs.
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_ldap_dn "
+    "ON groups(ldap_dn) WHERE ldap_dn IS NOT NULL",
+    # ON DELETE CASCADE on auth_identities.user_id would be a full scan
+    # without this. Declared in SCHEMA_SQL but that's skipped on upgrades
+    # where the backfill marks m006 as already applied.
+    "CREATE INDEX IF NOT EXISTS idx_auth_identities_user ON auth_identities(user_id)",
 )
 
 
@@ -147,6 +203,13 @@ async def _detect_preexisting(db: aiosqlite.Connection) -> set[int]:
         applied.add(4)
     if await _column_exists(db, "pages", "is_public"):
         applied.add(5)
+    rows = await db.execute_fetchall(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='auth_identities'"
+    )
+    if rows:
+        applied.add(6)
+    if await _column_exists(db, "groups", "ldap_dn"):
+        applied.add(7)
     return applied
 
 

@@ -4,12 +4,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.sessions import SessionMiddleware
 
 from app import __version__
 from app.config import settings
 from app.database import init_db, close_db, seed_welcome_page, get_db
 from app.auth import ensure_admin_exists
-from app.routers import auth_router, pages, media, templates, search, tags, activity, bookmarks, versions, diagrams, users, comments, backup, export, trash, notifications, watch, public, dashboard, acl, groups, ai
+from app.routers import auth_router, oauth_router, pages, media, templates, search, tags, activity, bookmarks, versions, diagrams, users, comments, backup, export, trash, notifications, watch, public, dashboard, acl, groups, ai
 
 logger = logging.getLogger("justwiki")
 
@@ -42,6 +43,18 @@ def _check_security():
             "Change it in .env before deploying to production.",
             settings.ADMIN_PASS,
         )
+    # Either SSO path issues the session cookie (OIDC state/nonce/PKCE) over
+    # the wire. Without TLS marking, a passive attacker on the path can
+    # replay the short-lived state cookie. We can't force HTTPS for the
+    # operator, but we can refuse to stay quiet about the risk.
+    if (settings.OIDC_ENABLED or settings.LDAP_ENABLED) and not settings.COOKIE_SECURE:
+        if not settings.PUBLIC_BASE_URL.startswith("https://"):
+            logger.warning(
+                "OIDC/LDAP is enabled but COOKIE_SECURE=false and PUBLIC_BASE_URL "
+                "is not https. Session cookies (OAuth state/PKCE) will travel "
+                "in plaintext. Serve the app over HTTPS and set "
+                "COOKIE_SECURE=true before exposing it."
+            )
 
 
 @asynccontextmanager
@@ -126,7 +139,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# authlib stashes OAuth state/nonce/PKCE in the signed session cookie between
+# /login and /callback. Registered before routes so the OAuth router can read it.
+#
+# https_only follows COOKIE_SECURE, but also auto-enables when PUBLIC_BASE_URL
+# is https:// — operators running behind TLS commonly forget to flip
+# COOKIE_SECURE, and we don't want to leak an OAuth state cookie over
+# plaintext just because of a config oversight.
+_session_https_only = settings.COOKIE_SECURE or settings.PUBLIC_BASE_URL.startswith("https://")
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.SECRET_KEY,
+    session_cookie="justwiki_oauth",
+    same_site="lax",
+    https_only=_session_https_only,
+    max_age=600,
+)
+
 app.include_router(auth_router.router)
+app.include_router(oauth_router.router)
 app.include_router(pages.router)
 app.include_router(media.router)
 app.include_router(templates.router)

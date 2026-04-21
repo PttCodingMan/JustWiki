@@ -39,10 +39,37 @@ async def login(body: LoginRequest, request: Request, response: Response):
         "SELECT id, username, password_hash, role, display_name, email FROM users WHERE username = ? AND deleted_at IS NULL",
         (body.username,),
     )
-    if not rows or not verify_password(body.password, rows[0]["password_hash"]):
+
+    # 1. Local password path. Shell accounts (password_hash='!') always fail
+    #    this check so bcrypt can't coincidentally accept an empty / short
+    #    password; they must sign in via SSO or LDAP instead.
+    user = None
+    if rows and rows[0]["password_hash"] != "!" and verify_password(body.password, rows[0]["password_hash"]):
+        user = dict(rows[0])
+
+    # 2. LDAP fallback. The service is imported lazily so sites without LDAP
+    #    never pay the `ldap3` import cost on every login attempt.
+    if user is None and settings.LDAP_ENABLED:
+        from app.services import ldap_auth
+        try:
+            lu = await ldap_auth.authenticate(body.username, body.password)
+        except ldap_auth.LdapError as e:
+            # Configuration/connectivity problem — log but still return 401
+            # rather than 500 so a misconfigured LDAP doesn't reveal to the
+            # world that LDAP is enabled.
+            import logging
+            logging.getLogger(__name__).error("LDAP login error: %s", e)
+            lu = None
+        if lu is not None:
+            try:
+                user = await ldap_auth.provision_ldap_user(db, lu)
+            except ldap_auth.LdapError as e:
+                # Takeover guard tripped (username collision with a local user).
+                raise HTTPException(status_code=403, detail=str(e))
+
+    if user is None:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    user = dict(rows[0])
     token = create_token(user["id"], user["username"], user["role"])
     response.set_cookie(
         key="token",

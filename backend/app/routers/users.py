@@ -1,3 +1,4 @@
+import re
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,14 +15,34 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 # references (pages.created_by, page_versions.edited_by, comments.user_id, ...).
 TOMBSTONE_PREFIX = "__deleted_"
 
+# Invited-but-not-yet-logged-in users have this sentinel hash so bcrypt can't
+# match any password. Same convention used by SSO-only accounts.
+DISABLED_PASSWORD_HASH = "!"
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_USERNAME_CLEAN = re.compile(r"[^a-zA-Z0-9._-]")
+
 
 def _is_reserved(name: str) -> bool:
     return name.startswith(TOMBSTONE_PREFIX)
 
 
+def _derive_username_from_email(email: str) -> str:
+    local = email.split("@", 1)[0]
+    cleaned = _USERNAME_CLEAN.sub("-", local).strip("-")
+    return cleaned or "user"
+
+
 class UserCreate(BaseModel):
     username: str
     password: str
+    role: str = "editor"
+
+
+class UserInvite(BaseModel):
+    email: str
+    display_name: Optional[str] = None
+    username: Optional[str] = None   # defaults to email local-part, de-duped
     role: str = "editor"
 
 
@@ -131,6 +152,71 @@ async def create_user(body: UserCreate, user=Depends(require_admin)):
     return dict(row[0])
 
 
+@router.post("/invite", status_code=201)
+async def invite_user(body: UserInvite, user=Depends(require_admin)):
+    """Pre-provision a user account for SSO-only login.
+
+    The row is created with a disabled password hash ('!') — the invitee can
+    then sign in via OIDC and will be matched to this shell by email. Safe
+    under invitation-only mode (OIDC_ALLOW_SIGNUP=false) where only pre-
+    provisioned users can reach the app.
+    """
+    email = (body.email or "").strip().lower()
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(status_code=400, detail="A valid email is required")
+    if body.role not in ALLOWED_ROLES:
+        raise HTTPException(status_code=400, detail="Role must be admin, editor, or viewer")
+
+    candidate = (body.username or "").strip() or _derive_username_from_email(email)
+    if _is_reserved(candidate):
+        raise HTTPException(status_code=400, detail="Username prefix is reserved")
+
+    db = await get_db()
+
+    # Don't silently clobber an existing account with the same email.
+    existing_email = await db.execute_fetchall(
+        "SELECT id FROM users WHERE LOWER(email) = ? AND deleted_at IS NULL",
+        (email,),
+    )
+    if existing_email:
+        raise HTTPException(status_code=409, detail="A user with this email already exists")
+
+    # If admin-chosen username collides, suffix until unique; if they passed
+    # an explicit username and it collides, reject rather than silently renaming.
+    username = candidate
+    if body.username:
+        clash = await db.execute_fetchall(
+            "SELECT id FROM users WHERE username = ?", (username,)
+        )
+        if clash:
+            raise HTTPException(status_code=409, detail="Username already exists")
+    else:
+        for suffix in [""] + [f"-{i}" for i in range(2, 100)]:
+            cand = f"{candidate}{suffix}"
+            clash = await db.execute_fetchall(
+                "SELECT id FROM users WHERE username = ?", (cand,)
+            )
+            if not clash:
+                username = cand
+                break
+        else:
+            raise HTTPException(status_code=500, detail="Could not find an available username")
+
+    display_name = (body.display_name or "").strip()
+    cursor = await db.execute(
+        """INSERT INTO users (username, password_hash, role, display_name, email)
+           VALUES (?, ?, ?, ?, ?)""",
+        (username, DISABLED_PASSWORD_HASH, body.role, display_name, email),
+    )
+    await db.commit()
+    row = await db.execute_fetchall(
+        """SELECT id, username, role, display_name, email, created_at
+           FROM users WHERE id = ?""",
+        (cursor.lastrowid,),
+    )
+    return dict(row[0])
+
+
 @router.put("/{user_id}")
 async def update_user(user_id: int, body: UserUpdate, user=Depends(require_admin)):
     db = await get_db()
@@ -200,6 +286,12 @@ async def delete_user(user_id: int, user=Depends(require_admin)):
                username = '__deleted_' || id || '_' || strftime('%s','now')
            WHERE id = ?""",
         (user_id,),
+    )
+    # Drop SSO/LDAP bindings so re-inviting the same email cleanly relinks
+    # to the new user row. Leaving them behind causes the old (provider,sub)
+    # to resolve to the tombstoned user forever, returning `user_disabled`.
+    await db.execute(
+        "DELETE FROM auth_identities WHERE user_id = ?", (user_id,),
     )
     await db.commit()
 

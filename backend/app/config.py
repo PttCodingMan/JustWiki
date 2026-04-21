@@ -19,6 +19,56 @@ class Settings(BaseSettings):
     # in production, e.g. "https://wiki.example.com".
     ALLOWED_ORIGINS: str = ""
 
+    # Public base URL the browser can reach. Used to build OIDC redirect_uri
+    # and SSO-error redirects. In dev leave as localhost:8000; in prod set to
+    # e.g. "https://wiki.example.com".
+    PUBLIC_BASE_URL: str = "http://localhost:8000"
+
+    # ── OIDC / OAuth SSO (optional) ──
+    OIDC_ENABLED: bool = False
+    OIDC_PROVIDERS: str = ""             # comma-separated: google,github,generic
+
+    # Access-control layers. Any rule that is set and does not match → 403.
+    OIDC_ALLOW_SIGNUP: bool = False      # if False, only pre-provisioned users
+    OIDC_ALLOWED_EMAILS: str = ""        # comma-separated individual whitelist
+    OIDC_ALLOWED_EMAIL_DOMAINS: str = ""  # comma-separated domain whitelist
+    OIDC_REQUIRED_GROUPS: str = ""       # IdP must return these in groups claim
+    OIDC_DEFAULT_ROLE: str = "editor"    # role for newly signed-up users
+
+    # Google
+    OIDC_GOOGLE_CLIENT_ID: str = ""
+    OIDC_GOOGLE_CLIENT_SECRET: str = ""
+    OIDC_GOOGLE_DISCOVERY: str = (
+        "https://accounts.google.com/.well-known/openid-configuration"
+    )
+
+    # GitHub (non-OIDC OAuth2; no discovery URL)
+    OIDC_GITHUB_CLIENT_ID: str = ""
+    OIDC_GITHUB_CLIENT_SECRET: str = ""
+
+    # Generic OIDC (Keycloak / Authentik / Okta / self-hosted IdP)
+    OIDC_GENERIC_NAME: str = "Company SSO"
+    OIDC_GENERIC_CLIENT_ID: str = ""
+    OIDC_GENERIC_CLIENT_SECRET: str = ""
+    OIDC_GENERIC_DISCOVERY: str = ""
+
+    # ── LDAP / Active Directory (optional) ──
+    LDAP_ENABLED: bool = False
+    LDAP_SERVER: str = ""                # must be ldaps:// unless TLS disabled
+    LDAP_TLS_VERIFY: bool = True
+    LDAP_BIND_DN: str = ""
+    LDAP_BIND_PASSWORD: str = ""
+    LDAP_USER_BASE: str = ""
+    LDAP_USER_FILTER: str = "(&(objectClass=person)(uid={username}))"
+    LDAP_ATTR_EMAIL: str = "mail"
+    LDAP_ATTR_DISPLAY_NAME: str = "displayName"
+    LDAP_DEFAULT_ROLE: str = "editor"
+
+    LDAP_SYNC_GROUPS: bool = False
+    LDAP_GROUP_BASE: str = ""
+    LDAP_GROUP_FILTER: str = "(&(objectClass=groupOfNames)(member={user_dn}))"
+    LDAP_ADMIN_GROUPS: str = ""          # CNs that grant role=admin
+
     # ── AI chat (optional, OpenAI-compatible) ──
     # Default targets Gemini's OpenAI-compatible endpoint, but any provider
     # that speaks the same wire format works (OpenAI, Ollama, Groq, DeepSeek…).

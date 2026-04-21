@@ -92,7 +92,10 @@ function UsersSection() {
   const [users, setUsers] = useState([])
   const [deletedUsers, setDeletedUsers] = useState([])
   const [showCreate, setShowCreate] = useState(false)
+  const [showInvite, setShowInvite] = useState(false)
   const [form, setForm] = useState({ username: '', password: '', role: 'editor' })
+  const [inviteForm, setInviteForm] = useState({ email: '', display_name: '', role: 'editor' })
+  const [inviteError, setInviteError] = useState('')
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState(null)
 
@@ -132,6 +135,19 @@ function UsersSection() {
       loadUsers()
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to create user')
+    }
+  }
+
+  const handleInvite = async (e) => {
+    e.preventDefault()
+    setInviteError('')
+    try {
+      await api.post('/users/invite', inviteForm)
+      setInviteForm({ email: '', display_name: '', role: 'editor' })
+      setShowInvite(false)
+      loadUsers()
+    } catch (err) {
+      setInviteError(err?.response?.data?.detail || 'Failed to invite user')
     }
   }
 
@@ -214,15 +230,62 @@ function UsersSection() {
             Deleted {deletedUsers.length > 0 && <span className="text-xs opacity-70">({deletedUsers.length})</span>}
           </button>
           {tab === 'active' && (
-            <button
-              onClick={() => setShowCreate(!showCreate)}
-              className="px-3 py-1.5 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover"
-            >
-              + Add User
-            </button>
+            <>
+              <button
+                onClick={() => { setShowInvite(!showInvite); setShowCreate(false) }}
+                className="px-3 py-1.5 bg-surface-hover border border-border text-text rounded-lg text-sm hover:bg-surface-active"
+                title="Pre-provision an SSO user by email — they sign in via OIDC."
+              >
+                Invite (SSO)
+              </button>
+              <button
+                onClick={() => { setShowCreate(!showCreate); setShowInvite(false) }}
+                className="px-3 py-1.5 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover"
+              >
+                + Add User
+              </button>
+            </>
           )}
         </div>
       </div>
+
+      {tab === 'active' && showInvite && (
+        <form onSubmit={handleInvite} className="mb-4 p-4 bg-surface-hover rounded-lg border border-border">
+          <p className="text-xs text-text-secondary mb-2">
+            Invite by email. The user signs in via SSO (Google / GitHub / Company SSO) and gets matched to this account by email.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="email"
+              placeholder="Email"
+              value={inviteForm.email}
+              onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+              required
+              className="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
+            />
+            <input
+              type="text"
+              placeholder="Display name (optional)"
+              value={inviteForm.display_name}
+              onChange={(e) => setInviteForm({ ...inviteForm, display_name: e.target.value })}
+              className="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
+            />
+            <select
+              value={inviteForm.role}
+              onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value })}
+              className="px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
+            >
+              <option value="editor">Editor</option>
+              <option value="viewer">Viewer</option>
+              <option value="admin">Admin</option>
+            </select>
+            <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
+              Invite
+            </button>
+          </div>
+          {inviteError && <p className="mt-2 text-sm text-red-600">{inviteError}</p>}
+        </form>
+      )}
 
       {tab === 'active' && showCreate && (
         <form onSubmit={handleCreate} className="mb-4 p-4 bg-surface-hover rounded-lg border border-border">
