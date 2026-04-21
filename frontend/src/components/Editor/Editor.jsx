@@ -11,6 +11,7 @@ import { TextSelection, Plugin, PluginKey } from '@milkdown/kit/prose/state'
 import { $prose } from '@milkdown/kit/utils'
 import api from '../../api/client'
 import { wikilink } from './wikilink'
+import { math, mathBlockSchema } from './math'
 
 const SLASH_ITEMS = [
   { id: 'h1', label: 'Heading 1', icon: 'H1', desc: 'Big section heading' },
@@ -56,9 +57,9 @@ function executeSlashCommand(ctx, id, view, drawioHandlerRef, mediaHandlerRef) {
 
   if (id === 'math' && view) {
     const { state, dispatch } = view
-    const { from } = state.selection
-    const text = '\n$$\nE = mc^2\n$$\n'
-    dispatch(state.tr.insertText(text, from))
+    const mathType = mathBlockSchema.type(ctx)
+    const node = mathType.create({ value: 'E = mc^2' })
+    dispatch(state.tr.replaceSelectionWith(node))
     return
   }
 
@@ -478,6 +479,7 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
         })
         .use(commonmark)
         .use(gfm)
+        .use(math)
         .use(listener)
         .use(clipboard)
         .use(history)

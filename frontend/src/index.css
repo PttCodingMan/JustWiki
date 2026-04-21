@@ -511,6 +511,67 @@ mark {
   font-size: 0.85em;
 }
 
+/* Editor math node views */
+.math-block-node {
+  display: block;
+  margin: 0.75em 0;
+  padding: 0.5em 0.75em;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.02);
+  cursor: pointer;
+  text-align: center;
+  overflow-x: auto;
+}
+.math-block-node:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+.math-inline-node {
+  cursor: pointer;
+  padding: 0 0.1em;
+  border-radius: 3px;
+}
+.math-inline-node:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+.math-empty {
+  color: #888;
+  font-style: italic;
+}
+.math-block-editor {
+  display: block;
+  width: 100%;
+  min-height: 3em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+  line-height: 1.45;
+  padding: 0.5em 0.75em;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #f6f8fa;
+  color: inherit;
+  resize: vertical;
+  outline: none;
+}
+.math-block-editor:focus {
+  border-color: #0969da;
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.2);
+}
+.math-inline-editor {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+  padding: 0 0.35em;
+  border: 1px solid #d0d7de;
+  border-radius: 3px;
+  background: #f6f8fa;
+  color: inherit;
+  min-width: 6em;
+  outline: none;
+}
+.math-inline-editor:focus {
+  border-color: #0969da;
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.2);
+}
+
 /* Draw.io embeds */
 .drawio-embed {
   margin: 1em 0;
