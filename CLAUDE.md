@@ -36,18 +36,23 @@ cd frontend && npm test -- src/path/to/file.test.jsx
 ### Backend (`backend/app/`)
 
 - **Framework**: FastAPI (async), aiosqlite for SQLite access (WAL mode)
-- **Entry**: `main.py` — app creation, CORS, lifespan hooks, router mounting
-- **Auth**: `auth.py` — JWT tokens in httpOnly cookies, bcrypt passwords, rate-limited login
+- **Entry**: `main.py` — app creation, CORS, lifespan hooks, router mounting, origin-based CSRF middleware
+- **Auth**: `auth.py` — issues and verifies credentials across three paths:
+  - **Cookie session** (web UI): JWT in httpOnly `token` cookie, bcrypt passwords, rate-limited login
+  - **Bearer API token** (`Authorization: Bearer jwk_…`): hashed SHA-256 on store, plaintext returned once at creation, revocable; managed via `routers/tokens.py`
+  - **SSO**: OIDC (Google/GitHub/generic, PKCE, authlib state stored in signed session cookie) via `routers/oauth_router.py` + `services/oidc.py`; LDAP via `services/ldap_auth.py`; invitation-only mode gates first-time signup
+  - **CSRF**: origin/referer check in `main.py` for mutating cookie-auth requests; Bearer-token and login/logout paths are exempt
 - **Config**: `config.py` — Pydantic Settings reading from `.env`
-- **Database**: `database.py` — schema DDL, migrations, FTS5 search index setup
-- **Routers**: One file per domain — `pages.py`, `search.py`, `media.py`, `versions.py`, `tags.py`, `templates.py`, `users.py`, `diagrams.py`, `comments.py`, `bookmarks.py`, `activity.py`, `backup.py`, `export.py`, `auth_router.py`, `trash.py`, `notifications.py`, `watch.py`, `public.py`, `dashboard.py`, `acl.py`, `groups.py`
-- **Services**: `search.py` (FTS5 indexing, CJK segmentation), `wikilink.py` (backlink tracking), `acl.py` (permission resolution — single source of truth, routers must use these helpers), `media_ref.py` (tracks which pages reference each media file), `diagram_ref.py`, `notifications.py` (fan-out to watchers on page events)
+- **Schemas**: `schemas.py` — shared Pydantic request/response models
+- **Database**: `database.py` — schema DDL and FTS5 search index setup; startup-time migrations live in `migrations.py` and record applied versions in the `schema_migrations` ledger so each migration runs once per DB
+- **Routers**: One file per domain — `pages.py`, `search.py`, `media.py`, `versions.py`, `tags.py`, `templates.py`, `users.py`, `diagrams.py`, `comments.py`, `bookmarks.py`, `activity.py`, `backup.py`, `export.py`, `auth_router.py`, `oauth_router.py`, `tokens.py`, `trash.py`, `notifications.py`, `watch.py`, `public.py`, `dashboard.py`, `acl.py`, `groups.py`, `ai.py`
+- **Services**: `search.py` (FTS5 indexing, CJK segmentation), `wikilink.py` (backlink tracking), `acl.py` (permission resolution — single source of truth, routers must use these helpers), `media_ref.py` (tracks which pages reference each media file), `diagram_ref.py`, `notifications.py` (fan-out to watchers on page events), `oidc.py` (OIDC client + provider config), `ldap_auth.py` (LDAP bind + attribute mapping)
 - **Deps**: Python 3.11+, managed with `uv`
 
 ### Frontend (`frontend/src/`)
 
 - **Framework**: React 19, Vite 8, Tailwind CSS 4
-- **State**: Zustand stores in `store/` — one per domain (useAuth, usePages, useTags, useBookmarks, useTheme, useSearch, useActivity, useNotifications, usePermissions, useGroups)
+- **State**: Zustand stores in `store/` — one per domain (useAuth, usePages, useTags, useBookmarks, useTheme, useSearch, useActivity, useNotifications, usePermissions, useGroups, useChat)
 - **API client**: `api/client.js` — Axios instance with interceptors, 401 redirect to login
 - **Routing**: React Router v7 in `App.jsx`, PrivateRoute wrapper for auth
 - **Keyboard shortcuts**: `hooks/useKeyboard.jsx` (Ctrl+E edit, Ctrl+K search, etc.)
@@ -66,7 +71,11 @@ Key tables: `users`, `pages` (with `parent_id` hierarchy and `slug` URL), `page_
 
 Pages use **soft-delete** (`deleted_at` column) — `DELETE /api/pages/{slug}` sets `deleted_at` rather than removing the row. Trash endpoints (`/api/trash`) handle list/restore/purge. Restore re-indexes FTS and re-parses backlinks.
 
-Schema auto-migrates on startup in `database.py`.
+Schema auto-migrates on startup — DDL lives in `database.py`, versioned migrations in `migrations.py`, and the `schema_migrations` ledger records which versions have run. Also relevant: `api_tokens` (token_hash, prefix, expires_at, revoked_at, last_used) backs personal API tokens.
+
+### Optimistic locking on page edits
+
+`PUT /api/pages/{slug}` **requires a `base_version`** in the body whenever `content` or `title` changes. If it doesn't match the current `pages.version`, the server returns **409** with `{"error": "base_version_stale" | "base_version_required", "your_version": …, "current_version": …}` so clients can resolve the conflict rather than silently clobbering a concurrent edit. New clients must send `base_version` — don't add a fallback.
 
 ### Wikilinks
 
@@ -76,12 +85,15 @@ Format: `[[slug]]` or `[[slug|display text]]`. Parsed on both backend (backlink 
 
 All endpoints under `/api/`. Vite dev server proxies `/api` to `localhost:8000`. Key routes:
 
-- Pages CRUD: `/api/pages`, `/api/pages/{slug}`, `/api/pages/tree`, `/api/pages/graph`
+- Pages CRUD: `/api/pages`, `/api/pages/{slug}`, `/api/pages/tree`, `/api/pages/graph` (content/title edits require `base_version`)
 - Versions: `/api/pages/{slug}/versions`, `/api/pages/{slug}/diff/{v1}/{v2}`
 - Permission check: `GET /api/pages/{slug}/my-permission` → `{permission: 'admin'|'write'|'read'|'none'}`
 - Search: `/api/search?q=...`
 - Media upload: `POST /api/media/upload` (20MB limit)
 - Auth: `/api/auth/login`, `/api/auth/me`
+- API tokens: `GET/POST/DELETE /api/auth/tokens` — personal Bearer tokens (plaintext returned only on create)
+- SSO: `GET /api/auth/providers`, `GET /api/auth/oauth/{provider}/login`, `GET /api/auth/oauth/{provider}/callback`
+- AI chat: `/api/ai/*` — RAG over the wiki, scoped to the caller's ACL (only pages they can read are retrievable)
 - ACL: `/api/acl/pages/{page_id}` (GET/PUT page-level access rules)
 - Groups: `/api/groups` (admin-only CRUD + membership)
 - Trash: `/api/trash` (list/restore/purge soft-deleted pages)
