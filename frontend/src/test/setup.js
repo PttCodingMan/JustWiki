@@ -24,6 +24,12 @@ Object.defineProperty(window, 'localStorage', {
   value: localStorageMock,
 })
 
+// jsdom ships without a canvas implementation — calling `getContext('2d')`
+// prints a noisy "Not implemented" warning even though our code handles the
+// null return. Stub it so the mindmap layout's measureText falls back to the
+// char-count estimator cleanly.
+HTMLCanvasElement.prototype.getContext = () => null
+
 // Mock any global browser APIs if needed
 Object.defineProperty(window, 'matchMedia', {
   writable: true,

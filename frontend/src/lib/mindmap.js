@@ -1,30 +1,22 @@
 /**
- * Deterministic markdown → Mermaid tree renderer.
+ * Deterministic markdown → tree parser for `page_type='mindmap'` pages.
  *
- * Pages with page_type = 'mindmap' are plain markdown documents; this module
- * produces a Mermaid `flowchart LR` from heading hierarchy (or bullet lists
- * as fallback). The resulting diagram is an orthogonal left-to-right tree,
- * not Mermaid's built-in `mindmap` type — flowchart with `curve: stepBefore`
- * draws right-angle edges so siblings align vertically in columns, matching
- * the org-chart / dendrogram style the wiki's UX calls for.
- *
- * Layout responsibilities:
- *   - Node shape / text wrapping     → this module
- *   - Per-level class assignment     → this module (level-0..level-4)
- *   - Concrete colors for each class → MindmapView (reads CSS vars at
- *     render time so the mindmap follows the active wiki theme)
- *   - Edge routing                   → Mermaid's `flowchart.curve` init
+ * The layout + SVG rendering lives in `mindmapLayout.js` and `MindmapView`;
+ * this module's only job is to turn markdown prose into a nested
+ * `{ text, children }` tree, choosing between the heading strategy and the
+ * bullet-list fallback, clamping level jumps, and sanitizing node text.
  */
 import MarkdownIt from 'markdown-it'
 
 const MAX_BULLET_DEPTH = 4
 const MAX_NODE_TEXT = 30
 
-// Mermaid label grammar is brittle around these characters; strip them so
-// `["…"]` labels always parse. CJK quote marks render poorly in boxed nodes,
-// so they go too. We deliberately do NOT strip `<>&=` — Mermaid's strict
-// securityLevel runs DOMPurify over labels and handles script injection.
-const SANITIZE_STRIP_CHARS = /[()[\]{}":;,、。「」『』]/g
+// Node labels render inside an SVG <text> element, so there is no HTML/Mermaid
+// grammar to escape. We still normalize a few characters for visual cleanliness:
+// paired CJK quotes and typographic brackets usually belong in prose, not in a
+// mindmap node. Left untouched: parentheses, ASCII brackets, braces, commas,
+// and anything else a reader might legitimately want in a node label.
+const SANITIZE_STRIP_CHARS = /[「」『』]/g
 
 export class MindmapParseError extends Error {
   constructor(message) {
@@ -52,13 +44,6 @@ export function sanitize(text) {
   let out = String(text).replace(/\s+/g, ' ').replace(SANITIZE_STRIP_CHARS, '').trim()
   if (out.length > MAX_NODE_TEXT) out = `${out.slice(0, MAX_NODE_TEXT - 1)}…`
   return out
-}
-
-function escapeLabel(text) {
-  // Flowchart labels accept `["text"]`. Double-quotes inside need HTML
-  // entity encoding because Mermaid's parser does not have a backslash
-  // escape for `"` inside the brackets form.
-  return `["${text.replace(/"/g, '&quot;')}"]`
 }
 
 function collectHeadings(tokens) {
@@ -97,18 +82,18 @@ function collectBullets(tokens) {
 }
 
 /**
- * Given items with a `level` field (higher = deeper), assign each one a
- * parent index using a stack, and clamp level jumps so that no child is
- * more than one level deeper than the running top-of-stack. Returns a list
- * of `{ text, parent }` entries (`parent` is null for the first item).
+ * Given items with a `level` field (higher = deeper), return a list of
+ * `{ text, level, parent }` entries with each item's parent index resolved via
+ * a stack. Level jumps are clamped so no child is more than one level deeper
+ * than the running top-of-stack (prevents phantom intermediate levels when
+ * authors skip from H2 to H4).
  */
-function buildTree(items) {
+function buildLinearTree(items) {
   if (items.length === 0) return []
   const minLevel = Math.min(...items.map((i) => i.level))
   const tree = []
   const stack = [] // entries: { index, level }
   for (const item of items) {
-    // Normalize + clamp so skip-level headings don't create phantom levels.
     const normalized = item.level - minLevel
     const lvl = stack.length === 0 ? 0 : Math.min(normalized, stack[stack.length - 1].level + 1)
     while (stack.length > 0 && stack[stack.length - 1].level >= lvl) stack.pop()
@@ -121,26 +106,17 @@ function buildTree(items) {
 }
 
 /**
- * Emit the final `flowchart LR` source from a tree with a fixed root.
- * Nodes are assigned ids `n0..nK` and level-based classes (`lv0..lv4+`)
- * so MindmapView can style them from the wiki theme at render time.
+ * Attach a list of `{text, level, parent}` nodes as descendants of `root`,
+ * producing the nested `{ text, children }` shape the layout walker expects.
  */
-function emitFlowchart(rootText, children) {
-  const lines = [
-    '%%{init: {"flowchart":{"curve":"stepBefore","htmlLabels":true}}}%%',
-    'flowchart LR',
-    `  n0${escapeLabel(rootText)}:::lv0`,
-  ]
-  const edges = []
-  for (let i = 0; i < children.length; i++) {
-    const c = children[i]
-    const id = `n${i + 1}`
-    const cls = `lv${Math.min(c.level + 1, 4)}`
-    lines.push(`  ${id}${escapeLabel(c.text)}:::${cls}`)
-    const parentId = c.parent == null ? 'n0' : `n${c.parent + 1}`
-    edges.push(`  ${parentId} --> ${id}`)
+function attachToRoot(rootText, nodes) {
+  const root = { text: rootText, children: [] }
+  const refs = nodes.map((n) => ({ text: n.text, children: [] }))
+  for (let i = 0; i < nodes.length; i++) {
+    const parent = nodes[i].parent == null ? root : refs[nodes[i].parent]
+    parent.children.push(refs[i])
   }
-  return [...lines, ...edges].join('\n')
+  return root
 }
 
 function buildFromHeadings(headings, title) {
@@ -156,7 +132,7 @@ function buildFromHeadings(headings, title) {
     rest = headings
   }
   if (rest.length === 0) return null
-  return emitFlowchart(root, buildTree(rest))
+  return attachToRoot(root, buildLinearTree(rest))
 }
 
 function buildFromBullets(bullets, title) {
@@ -165,9 +141,14 @@ function buildFromBullets(bullets, title) {
   if (capped.length === 0) return null
   const rootTitle = sanitize(title || '') || 'Mindmap'
   const items = capped.map((b) => ({ level: b.depth, text: b.text }))
-  return emitFlowchart(rootTitle, buildTree(items))
+  return attachToRoot(rootTitle, buildLinearTree(items))
 }
 
+/**
+ * Parse markdown into a nested mindmap tree. Returns `{ text, children }`;
+ * throws `MindmapParseError` when the document has no heading or bullet
+ * structure to map onto a tree.
+ */
 export function renderMindmap(content, title = '') {
   const tokens = md.parse(content || '', {})
   const headings = collectHeadings(tokens)

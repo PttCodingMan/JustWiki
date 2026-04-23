@@ -1,293 +1,311 @@
 # Mindmap — 心智圖頁面類型
 
-> Status: Planned  ·  Effort: **M**（~2.5 工作日）
-> 相依：無（Mermaid 已整合於 `frontend/src/lib/markdown.js:367`）
+> Status: v1 shipped · v2 proposed  ·  Effort (v2): **M**（~1.5–2 工作日）
+> v1 commit：`e18da9c feat: add mindmap page type rendered as a left-to-right Mermaid tree.`
 
-## 1. 摘要
+## 0. 版本
 
-引入 `pages.page_type` 欄位，`page_type = 'mindmap'` 的頁面仍然是 markdown 文件，差別在於 viewer 走專屬 renderer：把 heading 階層／bullet list 結構確定性映射成 Mermaid mindmap。
+- **v1（已上線）**：`page_type='mindmap'` 的頁面用 markdown 寫，viewer 走 Mermaid `flowchart LR` + SVG post-processing（`curve:step` → 邊線 90° 轉折圓角 → 同層 rect 寬度對齊）渲染。
+- **v2（本計劃）**：把 tree → SVG 的 render pipeline 從 Mermaid 換成自寫 layout + SVG JSX。tree parser、`page_type` 後端、頁面路由、編輯器 split view 完全保留不動。
 
-不做 AI、不做專屬編輯器、不做快取。使用者寫 markdown，看到心智圖。
+## 1. 摘要（v2）
 
-## 2. 為何這樣切
+v1 的 Mermaid 管線已經疊了三層 SVG post-processing 補丁才勉強靠近 XMind 的 logic-chart 樣式。要再進一步（per-parent 寬度對齊、可控的 elbow 幾何、column 間距公差、節點陰影／hover 細節）需要 dagre 的 layout metadata，而 SVG 根本抽不到。
 
-Markdown heading 與 bullet list 本身就是嚴格樹狀結構；要渲染成心智圖不需要 AI 也不需要猜測，只需要一個確定性 parser。被否決的替代方案：
+`frontend/src/lib/mindmap.js` 已經產出乾淨的 `{text, level, parent}` tree —— 缺的只有一個 LR 樹狀 layout 和 SVG renderer。自寫之後 render pipeline 純函式、可單測、樣式 100% 由 wiki 控制，不再被 Mermaid 版本鎖住。
 
-- ❌ AI 重組（成本高、有幻覺風險、離線不可用）
-- ❌ 獨立 `mindmaps` 資料表（失去 FTS5、wikilinks、transclusion、ACL）
-- ❌ 專屬拖拉編輯器（維護成本翻倍，偏離「用 markdown 管理知識」的核心）
-- ❌ `mindmap_cache` 表（parser < 1ms，快取是 over-engineering）
+## 2. 為什麼換（v1 做不到的事）
 
-## 3. 關鍵架構決策
+| 目標 | v1（Mermaid + SVG post-process） | v2（自寫 layout） |
+|------|----------------------------------|-------------------|
+| 同層寬度對齊 | ✅（widenig post-pass） | ✅ native |
+| Per-parent 寬度對齊 | ❌（SVG 沒有 parent/child 資訊） | ✅ |
+| 連線從節點邊緣中點出 | ⚠️（Mermaid 預設，無法微調） | ✅ |
+| 圓角 elbow 半徑可調 | ✅（post-pass） | ✅ native |
+| Column 間距隨最大節點寬度自適應 | ❌ | ✅ |
+| 懸停／選取樣式 | 難（要跟 Mermaid class 搶） | ✅ native |
+| Mermaid 版本升級不踩雷 | ❌ | ✅（無此依賴） |
+| 匯出 PNG／SVG | ⚠️（Mermaid 產的 SVG） | ✅（自產 SVG 乾淨） |
 
-### D1：parser 放前端，不是後端
+## 3. 目標（v2 驗收條件）
 
-原本反射性地想把 parser 放後端，對齊 codebase 後發現前端明顯更合適：
+1. 同一位母節點底下的所有子節點 rect 寬度相等（以群組最寬為準）。
+2. 連線從母節點右側中點出、在母／子節點中點處 elbow、到子節點左側中點止，轉折處半徑約 6px。
+3. LR 排版：每個深度的欄位 x 座標 = 前一欄 x + 前一欄實際最大節點寬 + rank gap。
+4. 節點顏色與 wiki 主題同步，主題切換即時生效（目前 v1 就是這樣，繼續保持）。
+5. 現有 `mindmap.test.js` 的 17 個 heading/bullet/clamp/error 案例全綠（assertion 調整為樹狀結構，不再對 Mermaid 字串做 substring check）。
 
-| 面向 | 後端 parser | 前端 parser |
-|------|------------|------------|
-| 新依賴 | `markdown-it-py` | 無（`markdown-it` 已裝） |
-| 預覽延遲 | 需 debounce + round trip | 即時 |
-| 預覽端點 | 需 `POST /preview/mindmap` | 不需要 |
-| 與 viewer 一致 | 另寫一套 | 直接重用 `lib/markdown.js` 的 token stream |
+## 4. 架構決策
 
-後端只負責：儲存 `content_md`、把 `page_type` 跟著回吐。**不解析任何東西**。
+### D1：tree parser 完全保留
 
-### D2：不抽 renderer registry
+`lib/mindmap.js` 的 `buildTree`、`collectHeadings`、`collectBullets`、`sanitize` 邏輯 v1 就已經是乾淨的 pure function。v2 只改 export 形狀：
 
-目前後端沒有 render pipeline（`content_md` 原封不動回給前端），registry 沒有棲息地。若未來真要加 slides / kanban 再抽，YAGNI。
+- v1：`renderMindmap(md, title): string`（Mermaid source）
+- v2：`renderMindmap(md, title): { text, children: [...] }`（純資料樹）
 
-### D3：改 `page_type` 是 metadata 變更
+所有字元清洗、heading/bullet 策略、clamp、error 路徑不動。既有測試大部分可以直接改 assertion 復用。
 
-不需要 `base_version`、不 bump `version`、不建 version snapshot、不 rebuild FTS、不重算 backlinks。內容完全沒動，渲染方式改變不屬於「內容編輯」。與 `is_public` 切換等價。
+### D2：layout 用手寫 LR tree walker，不引入 d3-hierarchy
 
-### D4：搜尋不特殊處理，但搜尋結果 UI 要標示類型
+LR 樹狀 layout 其實很簡單：
 
-FTS5 索引照 `content_md` 建，與 document 無差異。前端搜尋結果卡片顯示 `page_type` icon，避免「預期是文章，點進去變圖」的困惑。
+- `measure(node)`：遞迴算 subtree 的視覺高度 `nodeHeight + (子節點視覺高度總和) + (子節點之間的 gap)`。
+- `position(node, x, topY)`：依序放置子節點，父節點 y = 子節點視覺 bounding box 的中點。
 
-### D5：`page_type` 用 TEXT + Pydantic Literal 把關
+大約 40–60 行，比引入 d3-hierarchy（+ 8KB 依賴、外加 coord 系統翻譯）划算。d3-hierarchy.tree() 本來就不支援變動寬度的節點，我們還是要自己處理。
 
-不用 SQLite CHECK 約束。未來加新類型純 Python 改動，不必再開 migration。
+### D3：節點寬度用 canvas `measureText` 量
 
-## 4. 資料模型
-
-### 4.1 Migration
-
-`backend/app/migrations.py` 追加第 9 號（append-only，不可重編號）：
-
-```python
-async def _m009_page_type(db: aiosqlite.Connection) -> None:
-    if not await _column_exists(db, "pages", "page_type"):
-        await db.execute(
-            "ALTER TABLE pages ADD COLUMN page_type TEXT NOT NULL DEFAULT 'document'"
-        )
-
-MIGRATIONS.append((9, "page_type", _m009_page_type))
+```js
+const ctx = document.createElement('canvas').getContext('2d')
+ctx.font = '13px system-ui, sans-serif'
+const w = ctx.measureText(text).width + padX * 2
 ```
 
-`_detect_preexisting()` 對應加：
+- 字型 context 跟節點實際 render 用的 CSS 保持一致（抽常數）。
+- 結果 cache 在模組變數的 `Map<text, width>`；同樣字串命中率高。
+- SSR fallback：canvas 不可得時用 `text.length * avgCharWidth`（CJK 視為 2 寬度單位），讓 server render 不爆。
 
-```python
-if await _column_exists(db, "pages", "page_type"):
-    applied.add(9)
-```
+### D4：renderer 用 React JSX 直接吐 SVG，不走 DOMParser
 
-`_INDEX_INVARIANTS` 加：
-
-```python
-"CREATE INDEX IF NOT EXISTS idx_pages_type ON pages(page_type)",
-```
-
-### 4.2 Pydantic schema（`backend/app/schemas.py`）
-
-```python
-from typing import Literal
-PageType = Literal["document", "mindmap"]
-```
-
-- `PageCreate`：加 `page_type: PageType = "document"`
-- `PageUpdate`：加 `page_type: Optional[PageType] = None`
-- `PageResponse`、`PublicPageResponse`：加 `page_type: PageType = "document"`
-
-## 5. 後端改動
-
-### 5.1 `routers/pages.py`
-
-- `create_page`：INSERT 多塞 `page_type`；回應走 `SELECT *` 自然帶出
-- `update_page`：在 `is_public` 的 metadata 分支旁邊加 `page_type`，不 bump version、不需要 `base_version`
-- `get_page`：不用改（`SELECT *` 已帶出）
-
-### 5.2 `routers/search.py`
-
-`_search_fts` 與 `_search_like` 的 SELECT 列加 `p.page_type`，result dict 加 `"page_type": row["page_type"]`。
-
-### 5.3 其他 router
-
-- `routers/public.py`：`PublicPageResponse` 帶 `page_type`（匿名訪客也能看心智圖）
-- `routers/versions.py`：不動（version snapshot 不存 `page_type`；改類型不建 snapshot）
-- `routers/export.py`：不動（直接匯出 `content_md`，markdown 本來就能讀）
-
-### 5.4 **完全不做**
-
-- 沒有 `mindmap.py` router
-- 沒有 `render_mindmap()` Python 函式
-- 沒有 `renderers/` 目錄
-- 沒有 `markdown-it-py` 依賴
-- 沒有預覽端點
-
-## 6. 前端改動
-
-### 6.1 新檔：`frontend/src/lib/mindmap.js`
-
-確定性 parser。關鍵實作點：
-
-- 用 `markdown-it` 的 token stream（非 tree API，JS 版不提供）
-- `inlineText(inlineToken)`：遞迴抽 `text` / `code_inline`，正確處理 `em` / `strong` / `link` 混合 inline children（這是原設計 Python 版的 bug）
-- `fromHeadings`：先過濾 nonRoot 再算 minLevel，避免空 array `Math.min()` 爆 `-Infinity`（原設計 bug）
-- `fromBulletList`：上限 4 層深度
-- `sanitize`：移除 `()[]{}":;,、「」『』`，截 30 字
-- 兩條策略都失敗拋 `MindmapParseError('心智圖頁面需要至少包含 heading 或 bullet list 結構')`
-
-### 6.2 新檔：`frontend/src/components/MindmapView.jsx`
+v1 是「Mermaid 產字串 → DOMParser 解 → 改 DOM → 序列化」。v2 直接 JSX：
 
 ```jsx
-import { useEffect, useRef } from 'react'
-import mermaid from 'mermaid'
+<svg viewBox={...}>
+  {nodes.map((n) => (
+    <g key={n.id} transform={`translate(${n.x},${n.y})`}>
+      <rect x={-n.w/2} y={-n.h/2} width={n.w} height={n.h} rx={6} ry={6} />
+      <text>{n.text}</text>
+    </g>
+  ))}
+  {edges.map((e) => <path key={e.id} d={e.d} />)}
+</svg>
+```
 
-export default function MindmapView({ mermaidCode, error }) {
-  const ref = useRef(null)
-  useEffect(() => {
-    if (error || !mermaidCode || !ref.current) return
-    const id = `mm-${Math.random().toString(36).slice(2)}`
-    mermaid.render(id, mermaidCode)
-      .then(({ svg }) => { if (ref.current) ref.current.innerHTML = svg })
-      .catch(err => { if (ref.current) ref.current.innerHTML = `<pre class="text-red-500">${err.message}</pre>` })
-  }, [mermaidCode, error])
-  if (error) return <div className="p-4 text-amber-700 bg-amber-50 rounded">{error}</div>
-  return <div ref={ref} className="mindmap-container overflow-auto" />
+好處：React 控制 update / key / hover state、不需要 `dangerouslySetInnerHTML`、不需要 DOMPurify（因為文字走 React 自動轉譯）。
+
+### D5：edge 路徑直接產乾淨的 rounded elbow
+
+給定 `(x0, y0)` 母右邊中點、`(x1, y1)` 子左邊中點、中點 `mx = (x0+x1)/2`：
+
+```
+M x0,y0
+L (mx - r),y0
+Q mx,y0 mx,(y0 + sign·r)
+L mx,(y1 - sign·r)
+Q mx,y1 (mx + r),y1
+L x1,y1
+```
+
+`sign = y1 > y0 ? 1 : -1`。半徑 `r` clamp 到 `min(|mx-x0|, |mx-x1|, |y1-y0|/2)` 避免超過段長。跟 v1 的 `roundPolyline` 邏輯一致，只是現在直接生成，不是後處理。
+
+直段（`y0 === y1`，例如獨生子女）退化成 `M x0,y0 L x1,y1`。
+
+### D6：per-parent 寬度對齊 vs per-depth 對齊
+
+**v2 採 per-parent**（要求 3 之外的擴充目標）：同一位母節點的所有子節點共用「該群組最大寬度」。不同母節點的同深度節點可以有不同寬度 —— 這也是 XMind logic chart 實際的行為。
+
+**欄位 x 座標**依「**該深度全域最大節點寬**」累加（不是 per-parent），確保同深度節點還是垂直對齊在同一 column —— 這樣視覺上最接近 XMind 那張圖。
+
+白話：**y 方向** per-parent 擠緊，**x 方向** per-depth 對齊。
+
+### D7：刪除 Mermaid 依賴（僅 mindmap 頁面）
+
+`MindmapView.jsx` 不再 import `mermaidBootstrap`。`MarkdownViewer` 裡的 mermaid code fence 照舊走 Mermaid（那條管線跟心智圖無關，不動）。
+
+`lib/mindmapEdges.js` 的 `roundPolyline` 輔助邏輯**抽精華**搬進 `mindmapLayout.js` 的 edge builder，整個 `mindmapEdges.js` 連同它的測試一起刪。
+
+## 5. 檔案異動
+
+**改**
+- `frontend/src/lib/mindmap.js`
+  - 移除 `emitFlowchart`、`escapeLabel`、`SANITIZE_STRIP_CHARS` 中 Mermaid 專用的字元剝除（`()`、`[]`、`{}` 保留；Mermaid label grammar 限制不再適用）
+  - `renderMindmap` 改回樹狀物件 `{ text, children: [...] }`，錯誤路徑保留
+  - 頂檔註解改寫
+- `frontend/src/lib/mindmap.test.js`
+  - Heading/bullet/clamp/error 案例保留，assertion 改成對 tree 物件的結構斷言
+  - 去掉對 `"flowchart LR"` / `"curve":"step"` / `n0 --> n1` 的 substring check
+- `frontend/src/components/MindmapView.jsx`
+  - 移除 mermaid、DOMParser、dangerouslySetInnerHTML
+  - 改吃 `renderMindmap` 的樹 + 呼叫 `layoutMindmap` + 直接 JSX SVG
+  - 主題讀取改走 CSS var（不用再讀計算值塞進 Mermaid classDef）：直接在 SVG 的 `fill`/`stroke` 用 `var(--color-primary)` 等
+- `frontend/src/pages/PageEdit.jsx`（`LiveMindmap`）
+  - 同樣改用新的 `MindmapView`（signature 不變，只換內部實作）
+
+**新增**
+- `frontend/src/lib/mindmapLayout.js`
+  - `layoutMindmap(tree): { nodes: [...], edges: [...], viewBox }`
+  - `measureText(text)`（canvas 量 + cache + SSR fallback）
+  - `buildEdgePath({ from, to, radius })`（rounded elbow）
+- `frontend/src/lib/mindmapLayout.test.js`
+  - 單節點：root 放在 (padding, padding)
+  - 線性鏈：深度 3 → 3 欄 x 依最大寬度累加
+  - 寬度對齊：兩個兄弟字長差異 → 兩個 rect 等寬
+  - Per-parent 分組：不同 parent 下同深度的節點寬度可不同，但 x 欄位對齊
+  - Edge path：直段 degenerate、elbow 圓角 clamp、上下左右方向
+
+**刪**
+- `frontend/src/lib/mindmapEdges.js`
+- `frontend/src/lib/mindmapEdges.test.js`
+
+**不動**
+- 所有後端檔案（`migrations.py`、`schemas.py`、`routers/*.py`、`tests/test_pages.py`）
+- `frontend/src/lib/mermaidBootstrap.js`（MarkdownViewer 還在用）
+- `frontend/src/pages/{PageView,NewPage,SearchResults}.jsx`
+- `frontend/src/store/usePages.js`
+
+## 6. layout 演算法細節
+
+### 6.1 量測階段
+
+對 tree 做 post-order DFS：
+
+```js
+function measure(node) {
+  node.textW = measureText(node.text)
+  node.rectW = node.textW + PAD_X * 2
+  node.rectH = NODE_H  // 固定
+  for (const c of node.children) measure(c)
+  // per-parent width alignment: children 共用群組最大寬
+  if (node.children.length > 0) {
+    const maxChildW = Math.max(...node.children.map((c) => c.rectW))
+    for (const c of node.children) c.rectW = maxChildW
+  }
+  // 子樹視覺高度：子節點總高 + 子節點間 gap；葉節點取自身高
+  node.subtreeH = node.children.length === 0
+    ? node.rectH
+    : node.children.reduce((s, c) => s + c.subtreeH, 0)
+      + GAP_Y * (node.children.length - 1)
 }
 ```
 
-**Mermaid init 要集中**：抽 `frontend/src/lib/mermaidBootstrap.js`，全 app 只 init 一次。現行 `lib/markdown.js` 的 mermaid 初始化也要移過去，避免競態。
+### 6.2 欄位 x 計算
 
-### 6.3 `PageView.jsx` — 檢視分支
+以深度為 index：`colX[d] = colX[d-1] + colMaxW[d-1] / 2 + RANK_GAP + colMaxW[d] / 2`，`colX[0] = PAD_L + colMaxW[0] / 2`。
 
-```jsx
-{page.page_type === 'mindmap'
-  ? <MindmapRender content={page.content_md} title={page.title} />
-  : <MarkdownViewer markdown={page.content_md} />}
+一次 BFS 計 `colMaxW`，再線性推 `colX`。
+
+### 6.3 y 位置
+
+pre-order DFS，用「目前子樹頂部 y」一路傳：
+
+```js
+function position(node, topY) {
+  node.x = colX[node.depth]
+  node.y = topY + node.subtreeH / 2
+  let cursor = topY
+  for (const c of node.children) {
+    position(c, cursor)
+    cursor += c.subtreeH + GAP_Y
+  }
+}
 ```
 
-`MindmapRender` 包 `useMemo(() => renderMindmap(content, title))` + try/catch → `<MindmapView>`。
+### 6.4 常數（初值，可調）
 
-### 6.4 `NewPage.jsx` — 類型選擇器
-
-多一個 `pageType` state，純 Tailwind 按鈕（不引入 shadcn、不引入 `<Select>`）：
-
-```jsx
-<div className="flex gap-2 mb-4">
-  <button type="button" onClick={() => setPageType('document')}
-    className={`px-3 py-2 rounded ${pageType === 'document' ? 'bg-blue-500 text-white' : 'bg-gray-100'}`}>
-    📄 文件
-  </button>
-  <button type="button" onClick={() => setPageType('mindmap')}
-    className={`px-3 py-2 rounded ${pageType === 'mindmap' ? 'bg-blue-500 text-white' : 'bg-gray-100'}`}>
-    🧠 心智圖
-  </button>
-</div>
+```js
+const NODE_H = 28
+const PAD_X = 12
+const GAP_Y = 10      // 兄弟節點間 vertical gap
+const RANK_GAP = 48   // column 間橫向 gap
+const PAD_L = 16      // 整張圖左側 padding
+const PAD_T = 16      // 整張圖上側 padding
+const CORNER_R = 6    // edge elbow 圓角
+const FONT = '13px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
 ```
 
-選到 `mindmap` 且 content 為空 → 預填範本。`usePages.createPage` 對應傳 `page_type`。
+## 7. 主題整合
 
-### 6.5 `PageEdit.jsx` — Split View（最簡版）
-
-mindmap 類型時兩欄：
+SVG 元素直接用 CSS 變數：
 
 ```jsx
-{page.page_type === 'mindmap' ? (
-  <div className="flex flex-col md:flex-row gap-4 h-full">
-    <div className="flex-1 min-w-0"><Editor value={content} onChange={setContent} /></div>
-    <div className="flex-1 min-w-0 overflow-auto border-l pl-4">
-      <LiveMindmap content={content} title={title} />
-    </div>
-  </div>
-) : <Editor value={content} onChange={setContent} />}
+<rect fill="var(--color-surface)" stroke="var(--color-border)" />
+<text fill="var(--color-text)" />
+<path stroke="var(--color-border)" />
 ```
 
-`LiveMindmap` 用 `useMemo` 直跑 parser，parser < 1ms 不需要 debounce。
-
-**不引入** `react-resizable-panels`。行動裝置靠 `flex-col` 自動堆疊，先不做 tab switch；有使用者抱怨再加。
-
-### 6.6 `SearchResults.jsx` — 類型 icon
+Root 和 lv1 節點用 `--color-primary` / `--color-primary-soft`（跟 v1 相同配色）。Level-based fill 用 class 條件：
 
 ```jsx
-const TYPE_ICONS = { document: '📄', mindmap: '🧠' }
-<span className="mr-2">{TYPE_ICONS[result.page_type] ?? '📄'}</span>
+<rect className={`mindmap-node mindmap-node-lv${Math.min(node.depth, 4)}`} />
 ```
 
-點擊照常連 `/pages/{slug}`，`PageView` 內部依 `page_type` 分支，不需要 query param。
+搭配 `index.css` 裡的規則（跟 v1 的 classDef 一一對應搬過去）。
 
-## 7. 測試
+主題切換自動生效，不需要 re-render → `useTheme` 不再是 MindmapView 的 dep。
 
-### 7.1 Parser 單元測試（vitest）
+## 8. 測試策略
 
-`frontend/src/lib/mindmap.test.js`：
-- heading：H1→H2→H3；缺 H1 用 title；單 H1 落到 bullet 路線
-- bullet：平、兩層、超出 max_depth 截斷
-- sanitize：全形半形混用、`「」『』，。`、長度截斷
-- 錯誤：空、純 paragraph、純 code block → `MindmapParseError`
-- 回歸：`em`／`strong`／`link` 混入 heading 的 inline children
+### 8.1 layout unit tests（新）
 
-### 7.2 真實 fixture
+`frontend/src/lib/mindmapLayout.test.js` — 純函式、jsdom 即可（不跑 Mermaid）：
 
-`frontend/src/lib/fixtures/mindmap/*.md`：3 篇真實 markdown（CJK 混英、含 code fence、含 table），確認 parser 不爆。
+- 單節點 tree：nodes[0] 在 `(PAD_L + w/2, PAD_T + h/2)`
+- 線性 A→B→C：三個 x 遞增、y 相同
+- 雙子樹：兩個 child 等寬、等深度 x 對齊、y 間距 = GAP_Y
+- 深度 3 per-parent：A 底下有 B、C，B 底下有 D，C 底下有 E。B.rectW === C.rectW，D.x === E.x，D.rectW 可以和 E.rectW 不同（per-parent）
+- viewBox 覆蓋所有節點 + padding
 
-### 7.3 後端測試
+### 8.2 tree parser tests（沿用）
 
-`backend/tests/test_pages.py` 加 case：
-- `POST /api/pages` 帶 `page_type: "mindmap"` 建立成功，回應帶 `page_type`
-- `PUT /api/pages/{slug}` 只改 `page_type`，不需 `base_version`，`version` 不變
-- `PUT /api/pages/{slug}` 同時改 `page_type` + `content_md`，後者仍要 `base_version`
+`mindmap.test.js` 17 個案例改 assertion 為：
 
-### 7.4 Migration 測試
+```js
+const tree = renderMindmap('# A\n\n## B\n')
+expect(tree.text).toBe('A')
+expect(tree.children[0].text).toBe('B')
+```
 
-在沒有 `page_type` 欄位的舊 DB 跑 `run_migrations`，確認欄位加上、default 正確、index 建立。
+錯誤路徑（`MindmapParseError`）完全不動。
 
-### 7.5 前端整合
+### 8.3 renderer integration tests
 
-`PageView.test.jsx`、`PageEdit.test.jsx` 各加 `page_type: 'mindmap'` 的 render case，mock `mermaid` module（jsdom 跑不起來 Mermaid render）。
+`MindmapView.test.jsx`（新）— React Testing Library：
 
-## 8. 要動／要新增的檔案
+- 渲染 3 節點 tree：找得到 3 個 `rect` 和 2 個 `path`
+- 樣式：root rect 的 class 含 `mindmap-node-lv0`
+- 錯誤 fallback：傳 parser 會爆的 markdown，呈現紅色錯誤 panel
 
-**改**
-- `backend/app/migrations.py`（加 m009）
-- `backend/app/schemas.py`（PageType Literal + 三個 schema 加欄位）
-- `backend/app/routers/pages.py`（create/update 認識 `page_type`）
-- `backend/app/routers/search.py`（SELECT + result 帶 `page_type`）
-- `backend/app/routers/public.py`（回應帶 `page_type`）
-- `backend/tests/test_pages.py`（加 case）
-- `frontend/src/lib/markdown.js`（mermaid init 移走，或保留並確保不重複）
-- `frontend/src/pages/NewPage.jsx`（類型選擇器 + 範本）
-- `frontend/src/pages/PageView.jsx`（依類型分支渲染）
-- `frontend/src/pages/PageEdit.jsx`（split view）
-- `frontend/src/pages/SearchResults.jsx`（類型 icon）
-- `frontend/src/store/usePages.js`（`createPage`/`updatePage` 帶 `page_type`）
+不 mock mermaid（不需要了）。
 
-**新增**
-- `frontend/src/lib/mindmap.js`（parser）
-- `frontend/src/lib/mindmap.test.js`
-- `frontend/src/lib/fixtures/mindmap/*.md`
-- `frontend/src/lib/mermaidBootstrap.js`（集中 init）
-- `frontend/src/components/MindmapView.jsx`
+## 9. 遷移步驟（reviewer 友善的切法）
 
-## 9. 風險表
+建議以 4 個 commit 逐步替換：
+
+1. **tree shape 改 export**：`renderMindmap` 改回傳物件；更新 tree parser tests。此時 `MindmapView` 跟 `LiveMindmap` 會壞 —— 當場在同 commit 改它們去 import 一個 stub `layoutMindmap` 先 throw，讓 build 通過但執行會報錯（寫測試保護）。
+2. **實作 `mindmapLayout.js`**：layout + measure + edge builder + 單測，獨立提交。
+3. **重寫 `MindmapView.jsx`**：改用新 layout、移除 mermaid import，加 integration test。
+4. **清理**：刪 `mindmapEdges.{js,test.js}`、刪 `mindmap.js` 的 `emitFlowchart` dead code、CSS 變數調整。
+
+每個 commit 都能 `make test` 全綠（第 1 個會暫時跳過 MindmapView 的 runtime 路徑，但單元層還是通過）。
+
+## 10. 風險表
 
 | 風險 | 對策 |
 |------|------|
-| Milkdown 輸出的 markdown 跟 `markdown-it` 解析不一致 | parser 用 `markdown-it`，與 viewer 同源。驗收時跑「Milkdown 輸入 → 儲存 → viewer 渲染」一條龍 |
-| Mermaid init 衝突（`markdown.js` 已 init vs `MindmapView` 再 init） | 抽 `lib/mermaidBootstrap.js`，全 app 只 init 一次 |
-| 散文內容導致 parse 錯 | 清楚錯誤訊息 + 不 fallback。error path unit test 涵蓋 |
-| 長 CJK 節點 Mermaid 換行醜 | sanitize 截 30 字，CSS 控制節點寬度 |
-| 舊 DB 升級時沒有 `page_type` 欄位的 race | `run_migrations` 在 startup 前跑完，init 只發生一次 |
+| canvas `measureText` 在 jsdom 下回 0 | 測試環境偵測 → fallback 到 char-count 估算；整合測試只斷結構、不斷絕對像素 |
+| 字型渲染跨平台差 → 節點寬度不一致 | 節點 rect 寬 = textW + 2·PAD_X，誤差 < 2px 視覺可忽略；多給一點 PAD_X 吸收 |
+| Per-parent 寬度下大 tree 視覺失衡 | 常數 `RANK_GAP` 和 `PAD_X` 開頭就留寬一點；實際試跑真實頁面再 tune |
+| 主題切換 CSS var 不即時 | 直接用 `var(--…)` 就是 CSS 原生行為，不需要額外處理；手動在瀏覽器切主題驗 |
+| 極深 tree 單頁畫面過寬 | overflow-auto（v1 就有）保留；未來可考慮 zoom slider（v2.1） |
+| 長 CJK 字串 `measureText` 慢 | cache `Map<text,width>`；典型頁面 < 200 節點，不會是瓶頸 |
 
-## 10. 不做（v1.5 / v2 再談）
+## 11. 不做（留到 v2.1）
 
-- AI 從 document 生 mindmap
-- 匯出 PNG／SVG（Mermaid 本身已提供右鍵存圖）
-- 深度／節點數 slider（YAGNI）
-- 專屬拖拉編輯器
-- `mindmap_cache` 表
-- Slides／kanban 類型（那時候再抽 registry）
-- 手機版 tab 切換（先靠 `flex-col` 堆疊，有人抱怨再做）
+- 拖拉編輯、節點展開／摺疊
+- 匯出 PNG（SVG → Canvas → blob 是另一條線，先不疊）
+- 縮放 / 平移手勢（先靠 overflow-auto 滿足）
+- 多主題預設（lv0–lv4 的色票照 v1 配，不增色）
+- 動畫（進／出節點、hover 變色 transition）
 
-## 11. Effort
+## 12. Effort
 
-**M** — ~2.5 工作日：
+**M** — ~1.5–2 工作日：
 
 | Phase | 內容 | 工時 |
 |-------|------|------|
-| P0 | migration + schema + pages router | 0.4d |
-| P1 | 前端 parser + 測試 | 0.6d |
-| P2 | `MindmapView` + `PageView` 分支 + SearchResults icon | 0.4d |
-| P3 | `NewPage` 類型選擇 + `PageEdit` split view | 0.6d |
-| P4 | search router 帶 `page_type` + 收尾測試 + Gemini review | 0.5d |
+| P0 | `mindmap.js` 改回 tree、parser tests 改 assertion | 0.3d |
+| P1 | `mindmapLayout.js` + 單測 | 0.6d |
+| P2 | 重寫 `MindmapView.jsx` + integration test + CSS 搬家 | 0.5d |
+| P3 | 清理 `mindmapEdges.*`、真實頁面目視調參、Gemini review | 0.4d |

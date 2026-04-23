@@ -1079,3 +1079,29 @@ mark {
   pre, code, table, img, .mermaid-block { break-inside: avoid; page-break-inside: avoid; }
   @page { margin: 1.5cm; }
 }
+
+/* ── Mindmap (classic palette) ──────────────────────────────────────────
+ * The `classic` mindmap palette inherits from the active wiki theme via
+ * these CSS variables; the other palettes in `useMindmapTheme.js` paint
+ * inline colors directly and do not read these vars.
+ *
+ * lv0 is the root (primary), lv1 uses the soft-primary tint, lv2..lv4
+ * fade through surface / surface-hover for visual depth. */
+:root {
+  --mindmap-lv0-fill: var(--color-primary);
+  --mindmap-lv0-stroke: var(--color-primary);
+  --mindmap-lv0-text: var(--color-primary-text);
+  --mindmap-lv1-fill: var(--color-primary-soft);
+  --mindmap-lv1-stroke: var(--color-accent);
+  --mindmap-lv1-text: var(--color-text);
+  --mindmap-lv2-fill: var(--color-surface);
+  --mindmap-lv2-stroke: var(--color-border);
+  --mindmap-lv2-text: var(--color-text);
+  --mindmap-lv3-fill: var(--color-surface-hover);
+  --mindmap-lv3-stroke: var(--color-border);
+  --mindmap-lv3-text: var(--color-text);
+  --mindmap-lv4-fill: var(--color-surface-hover);
+  --mindmap-lv4-stroke: var(--color-border);
+  --mindmap-lv4-text: var(--color-text-secondary);
+  --mindmap-edge: var(--color-border);
+}

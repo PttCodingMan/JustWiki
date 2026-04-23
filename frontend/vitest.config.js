@@ -12,6 +12,12 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.js'],
   },
+  // The automatic JSX runtime lets components (and `.test.jsx` tests) write
+  // JSX without importing React. `@vitejs/plugin-react` handles this for the
+  // dev/build pipeline; esbuild needs the same hint for test transforms.
+  esbuild: {
+    jsx: 'automatic',
+  },
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),

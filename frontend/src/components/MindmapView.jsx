@@ -1,127 +1,200 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import useTheme from '../store/useTheme'
 import { renderMindmap, MindmapParseError } from '../lib/mindmap'
-import { ensureMermaid } from '../lib/mermaidBootstrap'
+import { layoutMindmap, LAYOUT } from '../lib/mindmapLayout'
+import useMindmapTheme, { mindmapThemes } from '../store/useMindmapTheme'
 
 /**
- * Read the active wiki theme into concrete hex / rgb values.
+ * XMind-style left-to-right mindmap renderer.
  *
- * Mermaid classDef cannot reference CSS variables directly — the Mermaid
- * SVG lives in its own style tree and `var(--...)` would not resolve
- * against the wiki's `:root`. We snapshot the computed values at render
- * time and embed them into the classDef block, so the diagram picks up
- * theme switches on its next render.
+ * Pipeline:
+ *   markdown → `renderMindmap` → tree → `layoutMindmap` → SVG JSX
+ *
+ * The renderer has no Mermaid / DOMParser / dangerouslySetInnerHTML: the text
+ * goes straight into React's `<text>` element so XSS is impossible, and the
+ * layout functions are pure so theme / palette changes re-render instantly.
+ *
+ * Palettes (see `useMindmapTheme`) can be chosen per-reader via the dropdown
+ * at the top-right of the diagram. `classic` defers to the wiki theme; other
+ * palettes override node fill/stroke/text with their own color scale.
  */
-function readTheme() {
-  if (typeof document === 'undefined') return null
-  const cs = getComputedStyle(document.documentElement)
-  const read = (name, fallback) => cs.getPropertyValue(name).trim() || fallback
-  return {
-    primary: read('--color-primary', '#7ea7d8'),
-    primaryText: read('--color-primary-text', '#ffffff'),
-    primarySoft: read('--color-primary-soft', '#eef4fb'),
-    accent: read('--color-accent', '#a8c5e4'),
-    surface: read('--color-surface', '#ffffff'),
-    surfaceHover: read('--color-surface-hover', '#f2f6fa'),
-    text: read('--color-text', '#3e4b5e'),
-    textSecondary: read('--color-text-secondary', '#7a8798'),
-    border: read('--color-border', '#e6ecf4'),
+
+function levelStyle(palette, depth) {
+  if (palette.useWikiTheme) {
+    const n = Math.min(depth, 4)
+    return {
+      fill: `var(--mindmap-lv${n}-fill)`,
+      stroke: `var(--mindmap-lv${n}-stroke)`,
+      text: `var(--mindmap-lv${n}-text)`,
+    }
   }
+  const levels = palette.levels
+  const idx = Math.min(depth, levels.length - 1)
+  return levels[idx]
 }
 
-/**
- * Append per-level classDef rules so nodes inherit wiki colors.
- *
- * - lv0 is the root (primary fill, white text)
- * - lv1 uses the soft-primary tint (so top-level branches pop)
- * - lv2..lv4 fade through surface/surface-hover for depth
- *
- * Link styling picks up `border` so edges look like part of the card.
- */
-function withThemeStyles(code, theme) {
-  if (!theme) return code
-  const levels = [
-    ['lv0', theme.primary, theme.primaryText, theme.primary],
-    ['lv1', theme.primarySoft, theme.text, theme.accent],
-    ['lv2', theme.surface, theme.text, theme.border],
-    ['lv3', theme.surfaceHover, theme.text, theme.border],
-    ['lv4', theme.surfaceHover, theme.textSecondary, theme.border],
-  ]
-  const defs = levels.map(
-    ([name, fill, color, stroke]) =>
-      `  classDef ${name} fill:${fill},color:${color},stroke:${stroke},stroke-width:1.5px,rx:6,ry:6`,
+function ThemeDropdown({ value, onChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handleClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    const handleKey = (e) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [open])
+
+  const current = mindmapThemes[value] || mindmapThemes.classic
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 px-2 py-1 text-xs rounded-lg border border-border bg-surface hover:bg-surface-hover text-text-secondary"
+        title="Mindmap theme"
+        aria-label="Mindmap theme"
+      >
+        <span className="flex gap-0.5">
+          {current.preview.map((c, i) => (
+            <span
+              key={i}
+              className="w-2.5 h-2.5 rounded-full border border-border"
+              style={{ background: c }}
+            />
+          ))}
+        </span>
+        <span>{current.name}</span>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+          <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-20 bg-surface border border-border rounded-xl shadow-lg p-1.5 min-w-[220px]">
+          <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider px-2 py-1">
+            Mindmap theme
+          </div>
+          {Object.entries(mindmapThemes).map(([id, t]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => {
+                onChange(id)
+                setOpen(false)
+              }}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-left transition-colors ${
+                value === id
+                  ? 'bg-surface-hover text-text font-medium'
+                  : 'text-text-secondary hover:bg-surface-hover'
+              }`}
+            >
+              <span className="flex gap-0.5 shrink-0">
+                {t.preview.map((c, i) => (
+                  <span
+                    key={i}
+                    className="w-3 h-3 rounded-full border border-border"
+                    style={{ background: c }}
+                  />
+                ))}
+              </span>
+              <span className="flex-1">{t.name}</span>
+              {value === id && <span className="text-primary text-xs">&#10003;</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
-  return [code, ...defs, `  linkStyle default stroke:${theme.border},stroke-width:1.5px`].join('\n')
 }
 
 export default function MindmapView({ content, title }) {
-  const ref = useRef(null)
-  const [svg, setSvg] = useState('')
-  const [renderError, setRenderError] = useState('')
-  // Theme identifier is a proxy for "CSS vars changed": the store updates
-  // `data-theme` on <html>, which swaps `--color-*` values. Include it in
-  // the useMemo deps so a theme switch re-computes the embedded classDef.
-  const themeId = useTheme((s) => s.theme)
+  const mindmapTheme = useMindmapTheme((s) => s.theme)
+  const setMindmapTheme = useMindmapTheme((s) => s.setTheme)
 
-  const { code, parseError } = useMemo(() => {
+  const parsed = useMemo(() => {
     try {
-      const base = renderMindmap(content || '', title || '')
-      return { code: withThemeStyles(base, readTheme()), parseError: '' }
+      return { tree: renderMindmap(content || '', title || ''), error: '' }
     } catch (e) {
-      if (e instanceof MindmapParseError) return { code: '', parseError: e.message }
+      if (e instanceof MindmapParseError) return { tree: null, error: e.message }
       throw e
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, title, themeId])
+  }, [content, title])
 
-  useEffect(() => {
-    if (parseError || !code) return
-    const mermaid = ensureMermaid()
-    const id = `mm-${Math.random().toString(36).slice(2)}`
-    let cancelled = false
-    mermaid
-      .render(id, code)
-      .then((res) => {
-        if (!cancelled) {
-          // Mermaid is initialized with `securityLevel: 'strict'`, which
-          // runs DOMPurify over the generated SVG internally. Wrapping
-          // again with `USE_PROFILES: { svg: true }` strips foreignObject
-          // children and the labels vanish — matches MarkdownViewer.
-          setSvg(res.svg)
-          setRenderError('')
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setSvg('')
-          setRenderError(err?.message || 'Mermaid render failed')
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [code, parseError])
+  const layout = useMemo(
+    () => (parsed.tree ? layoutMindmap(parsed.tree) : null),
+    [parsed.tree],
+  )
 
-  if (parseError) {
+  if (parsed.error) {
     return (
       <div className="p-4 text-amber-800 bg-amber-50 border border-amber-200 rounded-lg">
-        {parseError}
+        {parsed.error}
       </div>
     )
   }
-  if (renderError) {
-    return (
-      <div className="p-4 text-red-700 bg-red-50 border border-red-200 rounded-lg">
-        <div className="font-medium mb-1">Mermaid render error</div>
-        <pre className="text-sm whitespace-pre-wrap">{renderError}</pre>
-      </div>
-    )
-  }
+  if (!layout) return null
+
+  const palette = mindmapThemes[mindmapTheme] || mindmapThemes.classic
+  const edgeStroke = palette.useWikiTheme ? 'var(--mindmap-edge)' : palette.edge
+
   return (
-    <div
-      ref={ref}
-      className="mindmap-container overflow-auto"
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
+    <div className="mindmap-container" data-mindmap-theme={mindmapTheme}>
+      {/* Toolbar sits above the SVG in normal flow so it never covers the
+          mindmap — absolute positioning over the diagram obscured root nodes
+          on narrow screens. */}
+      <div className="flex justify-end mb-3">
+        <ThemeDropdown value={mindmapTheme} onChange={setMindmapTheme} />
+      </div>
+      <svg
+        role="img"
+        aria-label={title ? `Mindmap: ${title}` : 'Mindmap'}
+        viewBox={layout.viewBox.join(' ')}
+        width={layout.viewBox[2]}
+        height={layout.viewBox[3]}
+        style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
+      >
+        <g className="mindmap-edges" fill="none" stroke={edgeStroke} strokeWidth="1.5">
+          {layout.edges.map((e) => (
+            <path key={e.id} d={e.d} />
+          ))}
+        </g>
+        <g className="mindmap-nodes" fontFamily={LAYOUT.FONT_FAMILY} fontSize={LAYOUT.FONT_SIZE}>
+          {layout.nodes.map((n) => {
+            const s = levelStyle(palette, n.depth)
+            return (
+              <g key={n.id} transform={`translate(${n.x},${n.y})`}>
+                <rect
+                  x={-n.w / 2}
+                  y={-n.h / 2}
+                  width={n.w}
+                  height={n.h}
+                  rx="6"
+                  ry="6"
+                  fill={s.fill}
+                  stroke={s.stroke}
+                  strokeWidth="1.5"
+                />
+                <text
+                  x="0"
+                  y="0"
+                  fill={s.text}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                >
+                  {n.text}
+                </text>
+              </g>
+            )
+          })}
+        </g>
+      </svg>
+    </div>
   )
 }
