@@ -1,6 +1,12 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
+
+
+# ── Page types ──
+# Free-form TEXT in SQLite; Pydantic Literal is the source of truth for validation.
+# Add new types here (plus a frontend renderer) — no migration required.
+PageType = Literal["document", "mindmap"]
 
 
 # ── Auth ──
@@ -26,6 +32,7 @@ class PageCreate(BaseModel):
     sort_order: int = 0
     template_id: Optional[int] = None
     slug: Optional[str] = None
+    page_type: PageType = "document"
 
 
 class PageUpdate(BaseModel):
@@ -34,6 +41,7 @@ class PageUpdate(BaseModel):
     parent_id: Optional[int] = None
     sort_order: Optional[int] = None
     is_public: Optional[bool] = None
+    page_type: Optional[PageType] = None
     base_version: Optional[int] = None  # for optimistic locking
 
 
@@ -52,6 +60,7 @@ class PageResponse(BaseModel):
     view_count: int = 0
     version: int = 1
     is_public: bool = False
+    page_type: PageType = "document"
     created_by: Optional[int] = None
     author_name: Optional[str] = None
     created_at: Optional[str] = None
@@ -63,6 +72,7 @@ class PublicPageResponse(BaseModel):
     slug: str
     title: str
     content_md: str
+    page_type: PageType = "document"
     updated_at: Optional[str] = None
     author_name: Optional[str] = None
     diagrams: dict[str, str] = {}

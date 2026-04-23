@@ -1,16 +1,10 @@
 import React, { useMemo, useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import mermaid from 'mermaid'
 import DOMPurify from 'dompurify'
 import 'katex/dist/katex.min.css'
 import { renderMarkdown } from '../../lib/markdown'
+import { ensureMermaid } from '../../lib/mermaidBootstrap'
 import api from '../../api/client'
-
-mermaid.initialize({
-  startOnLoad: false,
-  theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
-  securityLevel: 'strict',
-})
 
 function escapeHtml(text) {
   return String(text)
@@ -128,12 +122,7 @@ export default function MarkdownViewer({
     if (!root) return
     const blocks = root.querySelectorAll('[data-mermaid]:not([data-mermaid-rendered])')
     if (blocks.length === 0) return
-    const isDark = document.documentElement.classList.contains('dark')
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: isDark ? 'dark' : 'default',
-      securityLevel: 'strict',
-    })
+    const mermaid = ensureMermaid()
     const stamp = Date.now()
     blocks.forEach(async (el, i) => {
       el.setAttribute('data-mermaid-rendered', '1')

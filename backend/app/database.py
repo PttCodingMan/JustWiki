@@ -27,14 +27,24 @@ CREATE TABLE IF NOT EXISTS users (
     created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Personal API tokens for programmatic access. Plaintext is shown once on
+-- creation and never stored. Only sha256(token) is persisted for lookup.
+-- `prefix` stores the first 8 chars of the plaintext so the UI can
+-- identify a specific token without revealing it. `expires_at` and
+-- `revoked_at` let a token be invalidated without losing the audit trail.
 CREATE TABLE IF NOT EXISTS api_tokens (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name        TEXT NOT NULL,
     token_hash  TEXT UNIQUE NOT NULL,
+    prefix      TEXT,
+    expires_at  TIMESTAMP,
+    revoked_at  TIMESTAMP,
     last_used   TIMESTAMP,
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id);
 
 -- SSO binding per user. A user may have zero or more identities alongside
 -- a local password (or instead of one, in which case users.password_hash
@@ -63,6 +73,7 @@ CREATE TABLE IF NOT EXISTS pages (
     view_count  INTEGER DEFAULT 0,
     version     INTEGER NOT NULL DEFAULT 1,
     is_public   INTEGER NOT NULL DEFAULT 0,
+    page_type   TEXT NOT NULL DEFAULT 'document',
     deleted_at  TIMESTAMP,
     created_by  INTEGER REFERENCES users(id),
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

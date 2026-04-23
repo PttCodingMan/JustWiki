@@ -79,7 +79,7 @@ async def _search_fts(db, fts_query, tag, readable_json, per_page, offset):
         total = count_rows[0]["cnt"]
 
         search_sql = """
-            SELECT DISTINCT p.id, p.slug, p.title, p.content_md, p.updated_at, p.view_count
+            SELECT DISTINCT p.id, p.slug, p.title, p.content_md, p.updated_at, p.view_count, p.page_type
             FROM search_index
             JOIN pages p ON CAST(search_index.page_id AS INTEGER) = p.id
             JOIN page_tags pt ON pt.page_id = p.id
@@ -104,7 +104,7 @@ async def _search_fts(db, fts_query, tag, readable_json, per_page, offset):
         total = count_rows[0]["cnt"]
 
         search_sql = """
-            SELECT p.id, p.slug, p.title, p.content_md, p.updated_at, p.view_count
+            SELECT p.id, p.slug, p.title, p.content_md, p.updated_at, p.view_count, p.page_type
             FROM search_index
             JOIN pages p ON CAST(search_index.page_id AS INTEGER) = p.id
             WHERE search_index MATCH ? AND p.deleted_at IS NULL
@@ -150,7 +150,7 @@ async def _search_like(db, words, tag, readable_json, per_page, offset):
         total = count_rows[0]["cnt"]
 
         search_sql = f"""
-            SELECT DISTINCT p.id, p.slug, p.title, p.content_md, p.updated_at, p.view_count
+            SELECT DISTINCT p.id, p.slug, p.title, p.content_md, p.updated_at, p.view_count, p.page_type
             FROM pages p
             JOIN page_tags pt ON pt.page_id = p.id
             JOIN tags t ON t.id = pt.tag_id
@@ -175,7 +175,7 @@ async def _search_like(db, words, tag, readable_json, per_page, offset):
         total = count_rows[0]["cnt"]
 
         search_sql = f"""
-            SELECT p.id, p.slug, p.title, p.content_md, p.updated_at, p.view_count
+            SELECT p.id, p.slug, p.title, p.content_md, p.updated_at, p.view_count, p.page_type
             FROM pages p
             WHERE {like_clauses} AND p.deleted_at IS NULL
               AND p.id IN (SELECT value FROM json_each(?))
@@ -234,6 +234,7 @@ async def search_pages(
             "snippet": make_snippet(row["content_md"], q),
             "updated_at": row["updated_at"],
             "view_count": row["view_count"],
+            "page_type": row["page_type"],
         })
 
     return {"results": results, "total": total, "page": page, "per_page": per_page}

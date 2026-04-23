@@ -7,6 +7,7 @@ import { canEdit } from '../store/usePermissions'
 import Editor from '../components/Editor/Editor'
 import MediaPickerModal from '../components/Editor/MediaPickerModal'
 import MarkdownViewer from '../components/Viewer/MarkdownViewer'
+import MindmapView from '../components/MindmapView'
 import DrawioModal from '../components/DrawioModal'
 import useUnsavedWarning from '../hooks/useUnsavedWarning'
 import { stripBrTags } from '../lib/markdown'
@@ -29,7 +30,9 @@ export default function PageEdit() {
 
   const dirty = !!page && (title !== original.title || content !== original.content)
 
-  // Preview state
+  // Preview state. Document pages default to off; mindmap pages default to
+  // on (set inside the page load effect below, so the initial render of a
+  // doc never triggers a split layout).
   const [showPreview, setShowPreview] = useState(false)
 
   // Draw.io state
@@ -62,6 +65,11 @@ export default function PageEdit() {
       setContent(p.content_md)
       setOriginal({ title: p.title, content: p.content_md })
       baseVersionRef.current = p.version
+      // React Router keeps PageEdit mounted across slug transitions, so
+      // ALWAYS reset preview to the per-page default — not just the mindmap
+      // branch — otherwise opening a mindmap and then a doc leaves the doc
+      // stuck in split view.
+      setShowPreview(p.page_type === 'mindmap')
     }).catch(() => {
       navigate('/')
     })
@@ -328,8 +336,14 @@ export default function PageEdit() {
         {showPreview && (
           <div className="edit-split-preview">
             <div className="bg-surface rounded-xl shadow-sm border border-border min-h-[500px] p-6 overflow-auto">
-              <div className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-4 pb-2 border-b border-border">Preview</div>
-              <MarkdownViewer content={content} />
+              <div className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-4 pb-2 border-b border-border">
+                {page?.page_type === 'mindmap' ? 'Mindmap preview' : 'Preview'}
+              </div>
+              {page?.page_type === 'mindmap' ? (
+                <MindmapView content={content} title={title} />
+              ) : (
+                <MarkdownViewer content={content} />
+              )}
             </div>
           </div>
         )}

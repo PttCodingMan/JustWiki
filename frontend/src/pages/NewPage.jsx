@@ -8,6 +8,7 @@ import MediaPickerModal from '../components/Editor/MediaPickerModal'
 import DrawioModal from '../components/DrawioModal'
 import useUnsavedWarning from '../hooks/useUnsavedWarning'
 import { stripBrTags } from '../lib/markdown'
+import { MINDMAP_TEMPLATE } from '../lib/mindmap'
 
 function findNodeById(nodes, id) {
   for (const node of nodes) {
@@ -40,6 +41,7 @@ export default function NewPage() {
   )
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
+  const [pageType, setPageType] = useState('document')
   const [templates, setTemplates] = useState([])
   const [selectedTemplate, setSelectedTemplate] = useState(null)
   const [showTemplates, setShowTemplates] = useState(true)
@@ -113,7 +115,10 @@ export default function NewPage() {
 
   const skipTemplates = () => {
     setSelectedTemplate(null)
-    setContent('')
+    // Mindmaps without a starter skeleton are easy to get wrong (the
+    // parser requires at least one heading or bullet). Prefilling gives
+    // new users a working page they can edit away from.
+    setContent(pageType === 'mindmap' ? MINDMAP_TEMPLATE : '')
     setEditorKey((k) => k + 1)
     setShowTemplates(false)
   }
@@ -132,6 +137,7 @@ export default function NewPage() {
         content_md: stripBrTags(content),
         template_id: selectedTemplate?.id,
         parent_id: parentMissing ? null : parentId,
+        page_type: pageType,
       })
       await fetchTree()
       setSaved(true)
@@ -141,7 +147,7 @@ export default function NewPage() {
       setError(err?.response?.data?.detail || err.message || 'Create failed')
       setSaving(false)
     }
-  }, [title, content, saving, selectedTemplate, parentId, parentMissing, createPage, fetchTree, navigate])
+  }, [title, content, saving, selectedTemplate, parentId, parentMissing, pageType, createPage, fetchTree, navigate])
 
   // Ctrl+S
   useEffect(() => {
@@ -199,16 +205,50 @@ export default function NewPage() {
       <div className="max-w-2xl mx-auto">
         <h1 className="text-2xl font-bold text-text mb-6">New Page</h1>
         {parentHint}
-        <p className="text-text-secondary mb-4">Start from a template or blank page</p>
+
+        <div className="flex gap-2 mb-4">
+          <button
+            type="button"
+            onClick={() => setPageType('document')}
+            className={`px-3 py-2 rounded-lg text-sm ${
+              pageType === 'document'
+                ? 'bg-primary text-primary-text'
+                : 'bg-surface border border-border text-text-secondary hover:border-primary'
+            }`}
+          >
+            📄 Document
+          </button>
+          <button
+            type="button"
+            onClick={() => setPageType('mindmap')}
+            className={`px-3 py-2 rounded-lg text-sm ${
+              pageType === 'mindmap'
+                ? 'bg-primary text-primary-text'
+                : 'bg-surface border border-border text-text-secondary hover:border-primary'
+            }`}
+          >
+            🧠 Mindmap
+          </button>
+        </div>
+
+        <p className="text-text-secondary mb-4">
+          {pageType === 'mindmap'
+            ? 'Write markdown with headings or bullets — the viewer renders a mindmap.'
+            : 'Start from a template or blank page'}
+        </p>
         <div className="grid grid-cols-2 gap-3 mb-4">
           <button
             onClick={skipTemplates}
             className="p-4 bg-surface rounded-xl border-2 border-dashed border-border hover:border-primary text-left transition-colors"
           >
-            <div className="font-medium text-text">Blank Page</div>
-            <div className="text-sm text-text-secondary mt-1">Start from scratch</div>
+            <div className="font-medium text-text">
+              {pageType === 'mindmap' ? 'Mindmap starter' : 'Blank Page'}
+            </div>
+            <div className="text-sm text-text-secondary mt-1">
+              {pageType === 'mindmap' ? 'Prefilled with a template outline' : 'Start from scratch'}
+            </div>
           </button>
-          {templates.map((tmpl) => (
+          {pageType === 'document' && templates.map((tmpl) => (
             <button
               key={tmpl.id}
               onClick={() => selectTemplate(tmpl)}

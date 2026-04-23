@@ -6,6 +6,7 @@ import useBookmarks from '../store/useBookmarks'
 import useAuth from '../store/useAuth'
 import usePermissions, { canEdit, canManageAcl } from '../store/usePermissions'
 import MarkdownViewer from '../components/Viewer/MarkdownViewer'
+import MindmapView from '../components/MindmapView'
 import TableOfContents from '../components/Viewer/TableOfContents'
 import Comments from '../components/Comments'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -435,7 +436,11 @@ export default function PageView() {
           {watcherCount > 0 && <> &middot; {watcherCount} watching</>}
         </div>
         <div className="bg-surface rounded-xl shadow-sm border border-border p-8">
-          <MarkdownViewer content={page.content_md} onHeadings={handleHeadings} />
+          {page.page_type === 'mindmap' ? (
+            <MindmapView content={page.content_md} title={page.title} />
+          ) : (
+            <MarkdownViewer content={page.content_md} onHeadings={handleHeadings} />
+          )}
         </div>
 
         {/* Backlinks */}

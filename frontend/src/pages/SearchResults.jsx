@@ -9,6 +9,10 @@ import useTags from '../store/useTags'
 // escape path can't reach dangerouslySetInnerHTML with arbitrary HTML.
 const SNIPPET_SANITIZE_CONFIG = { ALLOWED_TAGS: ['mark'], ALLOWED_ATTR: [] }
 
+// Keep this list in sync with backend `PageType`. Unknown types fall back to
+// the document icon so a client ahead of / behind the server still renders.
+const TYPE_ICONS = { document: '📄', mindmap: '🧠' }
+
 export default function SearchResults() {
   const [searchParams] = useSearchParams()
   const q = searchParams.get('q') || ''
@@ -73,7 +77,10 @@ export default function SearchResults() {
               to={`/page/${r.slug}`}
               className="block bg-surface rounded-xl shadow-sm border border-border px-5 py-4 hover:border-primary/30 transition-colors"
             >
-              <div className="font-medium text-text">{r.title}</div>
+              <div className="font-medium text-text">
+                <span className="mr-2" aria-hidden="true">{TYPE_ICONS[r.page_type] ?? TYPE_ICONS.document}</span>
+                {r.title}
+              </div>
               <div
                 className="text-sm text-text-secondary mt-1 line-clamp-2"
                 dangerouslySetInnerHTML={{

@@ -98,6 +98,36 @@ async def _m006_auth_identities(db: aiosqlite.Connection) -> None:
     )
 
 
+async def _m008_api_tokens_extend(db: aiosqlite.Connection) -> None:
+    """Extend api_tokens with prefix / expires_at / revoked_at.
+
+    The earlier shape only tracked the hash and a `last_used` timestamp. The
+    three new columns let the UI show a non-revealing identifier, let tokens
+    expire automatically (30-day default), and let users revoke without
+    losing the audit trail. All three are nullable so existing rows (if any)
+    keep working — they'll read as "never expires, never revoked, no prefix".
+    """
+    if not await _column_exists(db, "api_tokens", "prefix"):
+        await db.execute("ALTER TABLE api_tokens ADD COLUMN prefix TEXT")
+    if not await _column_exists(db, "api_tokens", "expires_at"):
+        await db.execute("ALTER TABLE api_tokens ADD COLUMN expires_at TIMESTAMP")
+    if not await _column_exists(db, "api_tokens", "revoked_at"):
+        await db.execute("ALTER TABLE api_tokens ADD COLUMN revoked_at TIMESTAMP")
+
+
+async def _m009_page_type(db: aiosqlite.Connection) -> None:
+    """Add `page_type` to pages so viewer can branch by rendering strategy.
+
+    Value is a free-form TEXT (not CHECK-constrained) so we can introduce new
+    types purely in Python (Pydantic Literal does the validation). Default
+    'document' matches the pre-existing behavior for every row on upgrade.
+    """
+    if not await _column_exists(db, "pages", "page_type"):
+        await db.execute(
+            "ALTER TABLE pages ADD COLUMN page_type TEXT NOT NULL DEFAULT 'document'"
+        )
+
+
 async def _m007_groups_ldap_dn(db: aiosqlite.Connection) -> None:
     """Add `ldap_dn` to `groups` so LDAP-mirrored groups can be reconciled.
 
@@ -124,6 +154,8 @@ MIGRATIONS: list[Migration] = [
     (5, "page_is_public", _m005_page_is_public),
     (6, "auth_identities", _m006_auth_identities),
     (7, "groups_ldap_dn", _m007_groups_ldap_dn),
+    (8, "api_tokens_extend", _m008_api_tokens_extend),
+    (9, "page_type", _m009_page_type),
 ]
 
 
@@ -147,6 +179,7 @@ _INDEX_INVARIANTS = (
     # without this. Declared in SCHEMA_SQL but that's skipped on upgrades
     # where the backfill marks m006 as already applied.
     "CREATE INDEX IF NOT EXISTS idx_auth_identities_user ON auth_identities(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_pages_type ON pages(page_type)",
 )
 
 
@@ -210,6 +243,10 @@ async def _detect_preexisting(db: aiosqlite.Connection) -> set[int]:
         applied.add(6)
     if await _column_exists(db, "groups", "ldap_dn"):
         applied.add(7)
+    if await _column_exists(db, "api_tokens", "prefix"):
+        applied.add(8)
+    if await _column_exists(db, "pages", "page_type"):
+        applied.add(9)
     return applied
 
 
