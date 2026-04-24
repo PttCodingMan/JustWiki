@@ -128,4 +128,4 @@ After completing any development task, always run the following before reporting
 
 1. **Tests** — run `make test` (or the relevant subset: `make test-backend` / `make test-frontend`) and make sure everything passes.
 2. **Lint** — run `make lint` for frontend changes.
-3. **Code review** — perform a self-review of the diff, then run a second-opinion review with Gemini CLI for non-trivial changes.
+3. **Code review** — perform a self-review of the diff for non-trivial changes.

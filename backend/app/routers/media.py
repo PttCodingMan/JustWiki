@@ -1,10 +1,10 @@
+import re
 import uuid
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
-from jose import JWTError, jwt
 from app.schemas import MediaResponse, MediaListItem
-from app.auth import get_current_user, require_admin, ALGORITHM
+from app.auth import get_current_user, require_admin, get_optional_user
 from app.config import settings
 from app.database import get_db
 from app.services.acl import can_read_media, list_readable_page_ids
@@ -18,6 +18,50 @@ ALLOWED_TYPES = {
 
 MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20 MB
 
+# SVG can carry embedded scripts. We keep SVG uploads in the allow-list for
+# diagrams/icons but refuse anything that contains executable markup — and we
+# still force `Content-Disposition: attachment` + `X-Content-Type-Options:
+# nosniff` when serving SVG, so a crafted file can never run as HTML in the
+# app's origin even if it slips through this filter.
+_SVG_SCRIPT_RE = re.compile(
+    rb"<\s*script|on[a-z]+\s*=|javascript:|<\s*foreignObject|<\s*iframe",
+    re.IGNORECASE,
+)
+
+
+def _sniff_mime(content: bytes) -> str | None:
+    """Return a best-effort MIME type inferred from the first bytes.
+
+    We don't pull in `python-magic` (libmagic C dep) — a short header table
+    covers the types in ALLOWED_TYPES. Returns None when we can't tell, in
+    which case the caller falls back to trust the client header only for
+    plain-text formats. The goal is to catch obvious content-type lies
+    (PNG header declared as `image/jpeg`; shell script declared as
+    `image/png`), not to be exhaustive.
+    """
+    if not content:
+        return None
+    head = content[:32]
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if head.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if head.startswith(b"GIF87a") or head.startswith(b"GIF89a"):
+        return "image/gif"
+    if head[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "image/webp"
+    if head.startswith(b"%PDF-"):
+        return "application/pdf"
+    # SVG: skip a BOM/whitespace and check for '<svg' or an XML prolog that
+    # contains '<svg'.
+    lead = content[:512].lstrip().lower()
+    if lead.startswith(b"<?xml"):
+        lead = lead.split(b"?>", 1)[-1].lstrip()
+    if lead.startswith(b"<svg"):
+        return "image/svg+xml"
+    # text/plain and text/markdown have no reliable magic; leave as None.
+    return None
+
 
 @router.post("/upload", response_model=MediaResponse, status_code=201)
 async def upload_media(
@@ -29,14 +73,35 @@ async def upload_media(
     if file.content_type not in ALLOWED_TYPES:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type}")
 
-    ext = Path(file.filename or "file").suffix
-    filename = f"{uuid.uuid4().hex}{ext}"
-    filepath = Path(settings.MEDIA_DIR) / filename
-
     content = await file.read()
     size = len(content)
     if size > MAX_UPLOAD_SIZE:
         raise HTTPException(status_code=413, detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024*1024)} MB")
+
+    # Client-declared Content-Type is untrusted — verify against magic bytes
+    # for formats we can recognise. Mismatches almost always indicate a
+    # polyglot / mislabelled upload trying to dodge the allow-list.
+    sniffed = _sniff_mime(content)
+    if sniffed is not None and sniffed != file.content_type:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File contents do not match declared type {file.content_type}",
+        )
+
+    # SVG is an XML format that can carry <script> / event handlers. We still
+    # store it (diagrams use SVG), but refuse anything that contains
+    # executable markup. The serve path additionally forces an attachment
+    # disposition + nosniff so the browser never parses it as active content.
+    if file.content_type == "image/svg+xml" and _SVG_SCRIPT_RE.search(content):
+        raise HTTPException(
+            status_code=400,
+            detail="SVG upload contains scripting or event handlers",
+        )
+
+    ext = Path(file.filename or "file").suffix
+    filename = f"{uuid.uuid4().hex}{ext}"
+    filepath = Path(settings.MEDIA_DIR) / filename
+
     filepath.write_bytes(content)
 
     db = await get_db()
@@ -161,38 +226,22 @@ async def delete_media(media_id: int, user=Depends(require_admin)):
     await db.commit()
 
 
-async def _authenticated_user_from_request(request: Request) -> dict | None:
-    """Best-effort credential check without raising.
-
-    Returns the user dict (id, username, role) if the token is valid and
-    the user exists; otherwise None. Used by the media file route so
-    anonymous public-page readers keep working.
-    """
-    token = None
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        token = auth_header[7:]
-    if not token:
-        token = request.cookies.get("token")
-    if not token:
-        return None
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = int(payload["sub"])
-    except (JWTError, KeyError, ValueError):
-        return None
-    db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id, username, role FROM users WHERE id = ?", (user_id,)
-    )
-    if not rows:
-        return None
-    return dict(rows[0])
-
-
 # logo.png ships with the install and is referenced from the login page and
 # the default welcome content, so it must be fetchable without auth.
 _ALWAYS_PUBLIC_FILENAMES = {"logo.png"}
+
+
+def _safe_media_response(filepath: Path) -> FileResponse:
+    """FileResponse hardened against browsers inferring active-content from SVG.
+
+    SVG is the only format in the allow-list that can execute script; even
+    after upload-time filtering we serve it as an attachment with nosniff so
+    a polyglot slip-through can never run inline in the app's origin.
+    """
+    headers = {"X-Content-Type-Options": "nosniff"}
+    if filepath.suffix.lower() in {".svg", ".svgz"}:
+        headers["Content-Disposition"] = f'attachment; filename="{filepath.name}"'
+    return FileResponse(filepath, headers=headers)
 
 
 async def _media_is_public(db, filename: str) -> bool:
@@ -225,20 +274,20 @@ async def get_media(filename: str, request: Request):
 
     # Bundled-with-install files (e.g. logo.png) are always fetchable.
     if filename in _ALWAYS_PUBLIC_FILENAMES:
-        return FileResponse(filepath)
+        return _safe_media_response(filepath)
 
     db = await get_db()
-    user = await _authenticated_user_from_request(request)
+    user = await get_optional_user(request)
 
     if user is None:
         # Anonymous: public-page referenced media only.
         if not await _media_is_public(db, filename):
             raise HTTPException(status_code=404, detail="File not found")
-        return FileResponse(filepath)
+        return _safe_media_response(filepath)
 
     # Authenticated: admin short-circuits, otherwise run the ACL check.
     if user.get("role") == "admin":
-        return FileResponse(filepath)
+        return _safe_media_response(filepath)
 
     media_rows = await db.execute_fetchall(
         "SELECT id FROM media WHERE filename = ?", (filename,)
@@ -250,4 +299,4 @@ async def get_media(filename: str, request: Request):
     if not await can_read_media(db, user, media_rows[0]["id"]):
         raise HTTPException(status_code=404, detail="File not found")
 
-    return FileResponse(filepath)
+    return _safe_media_response(filepath)

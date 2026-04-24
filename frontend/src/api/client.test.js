@@ -22,10 +22,12 @@ describe('API Client', () => {
     expect(api.defaults.withCredentials).toBe(true)
   })
 
-  it('redirects to /login on 401 response', async () => {
+  it('redirects to /login on 401 response, preserving the return path', async () => {
     // We can't easily trigger the interceptor without a real request,
     // but we can mock the behavior of axios or use the interceptors directly.
-    
+    window.location.pathname = '/page/my-slug'
+    window.location.search = '?x=1'
+
     const error401 = {
       response: {
         status: 401
@@ -39,7 +41,10 @@ describe('API Client', () => {
       // expected: interceptor rejects after redirect
     }
 
-    expect(window.location.href).toBe('/login')
+    // Preserves the current URL so the login page can bounce back afterward.
+    expect(window.location.href).toBe(
+      `/login?redirect=${encodeURIComponent('/page/my-slug?x=1')}`,
+    )
   })
 
   it('does not redirect on 401 if already on /login', async () => {

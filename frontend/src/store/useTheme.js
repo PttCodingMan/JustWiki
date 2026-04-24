@@ -55,18 +55,38 @@ function applyTheme(themeId) {
   root.classList.toggle('dark', theme.dark)
 }
 
+// Some privacy modes (Safari in private browsing, sandboxed iframes) throw on
+// localStorage access. A throw at module-import time would crash the whole
+// app before React ever renders, so we swallow the error and fall back to the
+// default theme.
+function safeGet(key) {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function safeSet(key, value) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // Ignore — user can still switch themes in-memory for this session.
+  }
+}
+
 const useTheme = create((set) => ({
-  theme: localStorage.getItem('theme') || 'light',
+  theme: safeGet('theme') || 'light',
   dark: false,
 
   setTheme: (themeId) => {
-    localStorage.setItem('theme', themeId)
+    safeSet('theme', themeId)
     applyTheme(themeId)
     set({ theme: themeId, dark: themes[themeId]?.dark ?? false })
   },
 
   init: () => {
-    const saved = localStorage.getItem('theme')
+    const saved = safeGet('theme')
     const themeId = saved && themes[saved] ? saved : 'light'
     applyTheme(themeId)
     set({ theme: themeId, dark: themes[themeId]?.dark ?? false })

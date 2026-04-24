@@ -62,13 +62,19 @@ def _enabled_provider_ids() -> list[str]:
 
 def _provider_configured(pid: str) -> bool:
     if pid == "google":
-        return bool(settings.OIDC_GOOGLE_CLIENT_ID and settings.OIDC_GOOGLE_CLIENT_SECRET)
+        return bool(
+            settings.OIDC_GOOGLE_CLIENT_ID
+            and settings.OIDC_GOOGLE_CLIENT_SECRET.get_secret_value()
+        )
     if pid == "github":
-        return bool(settings.OIDC_GITHUB_CLIENT_ID and settings.OIDC_GITHUB_CLIENT_SECRET)
+        return bool(
+            settings.OIDC_GITHUB_CLIENT_ID
+            and settings.OIDC_GITHUB_CLIENT_SECRET.get_secret_value()
+        )
     if pid == "generic":
         return bool(
             settings.OIDC_GENERIC_CLIENT_ID
-            and settings.OIDC_GENERIC_CLIENT_SECRET
+            and settings.OIDC_GENERIC_CLIENT_SECRET.get_secret_value()
             and settings.OIDC_GENERIC_DISCOVERY
         )
     return False
@@ -113,7 +119,7 @@ def get_oauth() -> OAuth:
             oauth.register(
                 name="google",
                 client_id=settings.OIDC_GOOGLE_CLIENT_ID,
-                client_secret=settings.OIDC_GOOGLE_CLIENT_SECRET,
+                client_secret=settings.OIDC_GOOGLE_CLIENT_SECRET.get_secret_value(),
                 server_metadata_url=settings.OIDC_GOOGLE_DISCOVERY,
                 client_kwargs={"scope": "openid email profile"},
             )
@@ -123,7 +129,7 @@ def get_oauth() -> OAuth:
             oauth.register(
                 name="github",
                 client_id=settings.OIDC_GITHUB_CLIENT_ID,
-                client_secret=settings.OIDC_GITHUB_CLIENT_SECRET,
+                client_secret=settings.OIDC_GITHUB_CLIENT_SECRET.get_secret_value(),
                 access_token_url="https://github.com/login/oauth/access_token",
                 authorize_url="https://github.com/login/oauth/authorize",
                 api_base_url="https://api.github.com/",
@@ -133,7 +139,7 @@ def get_oauth() -> OAuth:
             oauth.register(
                 name="generic",
                 client_id=settings.OIDC_GENERIC_CLIENT_ID,
-                client_secret=settings.OIDC_GENERIC_CLIENT_SECRET,
+                client_secret=settings.OIDC_GENERIC_CLIENT_SECRET.get_secret_value(),
                 server_metadata_url=settings.OIDC_GENERIC_DISCOVERY,
                 client_kwargs={"scope": "openid email profile"},
             )
@@ -357,8 +363,12 @@ async def exchange_and_resolve(provider: str, request: Request) -> dict:
     try:
         token = await client.authorize_access_token(request)
     except OAuthError as e:
+        # The authlib message can carry IdP-specific detail (endpoint URLs,
+        # scopes, client IDs). Log it server-side so operators can debug,
+        # but do NOT forward it into the redirect URL where it would end up
+        # in browser history and proxy logs.
         logger.warning("OAuth token exchange failed for %s: %s", provider, e)
-        raise OAuthAccessError("oauth_failed", str(e))
+        raise OAuthAccessError("oauth_failed", "")
 
     if provider == "github":
         info = await _fetch_github_userinfo(client, token)

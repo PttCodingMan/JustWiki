@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
+from pydantic import SecretStr
 
 from app.auth import create_token
 from app.config import settings
@@ -97,7 +98,7 @@ def _mock_httpx_client(status_code=200, lines=None):
 def ai_enabled(monkeypatch):
     """Turn the feature on with a dummy key for the duration of a test."""
     monkeypatch.setattr(settings, "AI_ENABLED", True)
-    monkeypatch.setattr(settings, "AI_API_KEY", "test-key")
+    monkeypatch.setattr(settings, "AI_API_KEY", SecretStr("test-key"))
     monkeypatch.setattr(settings, "AI_MODEL", "test-model")
     # Reset the rate-limit bucket between tests so they don't interfere.
     from app.routers import ai as ai_router
@@ -129,7 +130,7 @@ async def test_status_reports_enabled(auth_client, ai_enabled):
 @pytest.mark.asyncio
 async def test_status_disabled_when_key_missing(auth_client, monkeypatch):
     monkeypatch.setattr(settings, "AI_ENABLED", True)
-    monkeypatch.setattr(settings, "AI_API_KEY", "")
+    monkeypatch.setattr(settings, "AI_API_KEY", SecretStr(""))
     resp = await auth_client.get("/api/ai/status")
     assert resp.json()["enabled"] is False
 
@@ -147,7 +148,7 @@ async def test_chat_disabled_returns_404(auth_client, monkeypatch):
 @pytest.mark.asyncio
 async def test_chat_missing_key_returns_503(auth_client, monkeypatch):
     monkeypatch.setattr(settings, "AI_ENABLED", True)
-    monkeypatch.setattr(settings, "AI_API_KEY", "")
+    monkeypatch.setattr(settings, "AI_API_KEY", SecretStr(""))
     resp = await auth_client.post("/api/ai/chat", json={"message": "hi"})
     assert resp.status_code == 503
 

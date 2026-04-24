@@ -14,7 +14,9 @@ import PageVersions from './pages/PageVersions'
 // GraphView pulls in react-force-graph + three.js (~600 KB min / ~150 KB
 // gzip). Lazy-load it so the bundle only downloads when /graph is visited.
 const GraphView = lazy(() => import('./pages/GraphView'))
-import Admin from './pages/Admin'
+// Admin.jsx is large (~50 KB) and only usable by admins; lazy-load so viewers
+// and editors never pull it down.
+const Admin = lazy(() => import('./pages/Admin'))
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import Trash from './pages/Trash'
@@ -61,6 +63,22 @@ function AuthGate() {
   return <Navigate to={`/login?redirect=${encodeURIComponent(back)}`} replace />
 }
 
+/**
+ * Role-gated route. Rendered inside <AuthGate> so the user is guaranteed
+ * to be authenticated; this layer additionally checks role before the
+ * child renders. Guarding at the route boundary (instead of in the page
+ * component) means the lazy chunk for the gated page doesn't even
+ * download for users who can't use it, and any top-of-file fetch added
+ * later can't fire a 401 before the role check.
+ */
+function RoleRoute({ role }) {
+  const { user } = useAuth()
+  if (!user || user.role !== role) {
+    return <Navigate to="/" replace />
+  }
+  return <Outlet />
+}
+
 export default function App() {
   const { checkAuth } = useAuth()
   const initTheme = useTheme((s) => s.init)
@@ -89,8 +107,17 @@ export default function App() {
             </Suspense>
           }
         />
-        <Route path="/admin" element={<Admin />} />
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route element={<RoleRoute role="admin" />}>
+          <Route
+            path="/admin"
+            element={
+              <Suspense fallback={<div className="text-text-secondary">Loading admin…</div>}>
+                <Admin />
+              </Suspense>
+            }
+          />
+          <Route path="/dashboard" element={<Dashboard />} />
+        </Route>
         <Route path="/profile" element={<Profile />} />
         <Route path="/trash" element={<Trash />} />
         <Route path="/chat" element={<Chat />} />

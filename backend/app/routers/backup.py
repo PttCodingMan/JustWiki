@@ -151,8 +151,11 @@ async def restore_backup(
         if name.startswith("media/") and not name.endswith("/"):
             fname = name.split("/", 1)[1]
             target = (media_dir / fname).resolve()
-            # Prevent path traversal: target must stay within media_dir
-            if not str(target).startswith(str(resolved_media) + "/"):
+            # Prevent path traversal: target must stay strictly within
+            # media_dir. `is_relative_to` handles edge cases like adjacent
+            # dirs that share a prefix (`/data/med` vs `/data/media`),
+            # which a naive string startswith would miss.
+            if not target.is_relative_to(resolved_media):
                 continue  # skip malicious entries silently
             target.parent.mkdir(parents=True, exist_ok=True)
             with zf.open(name) as src, open(target, "wb") as dst:

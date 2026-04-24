@@ -31,3 +31,26 @@ async def test_comments(auth_client):
     # Verify deleted
     response = await auth_client.get("/api/pages/comment-page/comments")
     assert not any(c["id"] == comment_id for c in response.json()["comments"])
+
+
+@pytest.mark.asyncio
+async def test_comments_on_soft_deleted_page_returns_404(auth_client):
+    """Soft-deleted pages are invisible via the normal API, so their
+    comment collection must also be unreachable. A previous version of
+    the endpoint looked the page up without `deleted_at IS NULL` and
+    happily served comments from trashed pages.
+    """
+    await auth_client.post(
+        "/api/pages",
+        json={"title": "Trashable", "content_md": "bye", "slug": "trashable"},
+    )
+    # Move the page to trash (soft-delete).
+    res = await auth_client.delete("/api/pages/trashable")
+    assert res.status_code == 200
+
+    r_list = await auth_client.get("/api/pages/trashable/comments")
+    assert r_list.status_code == 404
+    r_post = await auth_client.post(
+        "/api/pages/trashable/comments", json={"content": "sneak"}
+    )
+    assert r_post.status_code == 404

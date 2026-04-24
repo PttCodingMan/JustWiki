@@ -14,6 +14,48 @@ function escapeHtml(text) {
     .replace(/"/g, '&quot;')
 }
 
+// Single DOMPurify config shared between the top-level sanitize and the
+// transclusion sanitize. Previously the transclusion path used the default
+// config, which stripped our custom data-* attributes (data-mermaid,
+// data-transclude, data-diagram-id) so transcluded Mermaid and Draw.io
+// diagrams silently failed to render.
+//
+// We explicitly list the attributes we emit rather than enabling
+// ALLOW_DATA_ATTR: true, which would let any future feature reading
+// user-controlled data-* attributes become an XSS sink. Dangerous
+// container tags that could smuggle active content are forbidden.
+const MARKDOWN_SANITIZE_CONFIG = {
+  ADD_TAGS: ['div', 'input', 'svg', 'path', 'line', 'circle', 'polygon'],
+  ADD_ATTR: [
+    'data-mermaid',
+    'data-transclude',
+    'data-diagram-id',
+    'checked',
+    'disabled',
+    'type',
+    'viewBox',
+    'fill',
+    'stroke',
+    'stroke-width',
+    'stroke-linecap',
+    'stroke-linejoin',
+    'x1',
+    'y1',
+    'x2',
+    'y2',
+    'cx',
+    'cy',
+    'r',
+    'd',
+    'points',
+  ],
+  FORBID_TAGS: ['style', 'iframe', 'object', 'embed', 'form', 'noscript'],
+}
+
+function sanitizeMarkdownHtml(dirty) {
+  return DOMPurify.sanitize(dirty, MARKDOWN_SANITIZE_CONFIG)
+}
+
 // Stable default so non-publicMode callers don't retrigger effects every render.
 const EMPTY_DIAGRAMS = Object.freeze({})
 
@@ -25,37 +67,7 @@ export default function MarkdownViewer({
   onHeadings,
 }) {
   const html = useMemo(
-    () =>
-      DOMPurify.sanitize(renderMarkdown(content || ''), {
-        ADD_TAGS: ['div', 'input', 'svg', 'path', 'line', 'circle', 'polygon'],
-        ADD_ATTR: [
-          'data-mermaid',
-          'data-transclude',
-          'data-diagram-id',
-          'class',
-          'checked',
-          'disabled',
-          'type',
-          'target',
-          'rel',
-          'viewBox',
-          'fill',
-          'stroke',
-          'stroke-width',
-          'stroke-linecap',
-          'stroke-linejoin',
-          'x1',
-          'y1',
-          'x2',
-          'y2',
-          'cx',
-          'cy',
-          'r',
-          'd',
-          'points',
-        ],
-        ALLOW_DATA_ATTR: true,
-      }),
+    () => sanitizeMarkdownHtml(renderMarkdown(content || '')),
     [content],
   )
   const containerRef = useRef(null)
@@ -153,7 +165,7 @@ export default function MarkdownViewer({
       const slug = el.dataset.transclude
       try {
         const res = await api.get(`/pages/${slug}`)
-        el.innerHTML = DOMPurify.sanitize(renderMarkdown(res.data.content_md || ''))
+        el.innerHTML = sanitizeMarkdownHtml(renderMarkdown(res.data.content_md || ''))
         await renderMermaidIn(el)
       } catch {
         el.innerHTML = '<em class="text-gray-400">Page not found</em>'

@@ -23,6 +23,8 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
+import aiosqlite
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -113,7 +115,7 @@ def _ldap_authenticate_sync(username: str, password: str) -> Optional[LdapUser]:
         svc = ldap3.Connection(
             server,
             user=settings.LDAP_BIND_DN,
-            password=settings.LDAP_BIND_PASSWORD,
+            password=settings.LDAP_BIND_PASSWORD.get_secret_value(),
             auto_bind=True,
         )
     except LDAPException as e:
@@ -241,16 +243,17 @@ async def _sync_groups(db, user_id: int, group_dns: list[str]) -> None:
                 "INSERT INTO groups (name, description, ldap_dn) VALUES (?, '', ?)",
                 (cn, dn),
             )
-            id_by_dn[dn] = cursor.lastrowid
-        except Exception:
+        except aiosqlite.IntegrityError as exc:
             # Name collision with an existing manual group. Fall back to a
             # suffixed name so the two groups stay distinct; admins can rename
-            # via the UI later.
+            # via the UI later. Other integrity errors (e.g. ldap_dn uniqueness)
+            # fall through via the same retry — logged so ops can diagnose.
+            logger.warning("ldap group INSERT collided for cn=%s dn=%s: %s", cn, dn, exc)
             cursor = await db.execute(
                 "INSERT INTO groups (name, description, ldap_dn) VALUES (?, 'Auto-imported from LDAP', ?)",
                 (f"{cn}-ldap", dn),
             )
-            id_by_dn[dn] = cursor.lastrowid
+        id_by_dn[dn] = cursor.lastrowid
 
     # Current LDAP-sourced memberships for this user.
     rows = await db.execute_fetchall(

@@ -18,7 +18,11 @@ api.interceptors.response.use(
       const path = window.location.pathname
       const isAuthMe = err.config?.url === '/auth/me'
       if (path !== '/login' && !path.startsWith('/public/') && !isAuthMe) {
-        window.location.href = '/login'
+        // Preserve the current URL so login can bounce the user back.
+        // Without this, a session that expires mid-read silently drops
+        // the user on the home page after signing in again.
+        const back = window.location.pathname + window.location.search
+        window.location.href = `/login?redirect=${encodeURIComponent(back)}`
       }
     }
     return Promise.reject(err)

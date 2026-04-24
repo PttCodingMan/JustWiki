@@ -1,3 +1,4 @@
+import logging
 import time
 from collections import defaultdict
 from fastapi import APIRouter, HTTPException, Response, Depends, Request
@@ -7,6 +8,9 @@ from pydantic import BaseModel
 from app.auth import verify_password, create_token, get_current_user, hash_password
 from app.config import settings
 from app.database import get_db
+from app.services.client_ip import client_ip
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -31,8 +35,7 @@ def _check_rate_limit(ip: str):
 
 @router.post("/login")
 async def login(body: LoginRequest, request: Request, response: Response):
-    client_ip = request.client.host if request.client else "unknown"
-    _check_rate_limit(client_ip)
+    _check_rate_limit(client_ip(request))
 
     db = await get_db()
     rows = await db.execute_fetchall(
@@ -68,8 +71,12 @@ async def login(body: LoginRequest, request: Request, response: Response):
                 raise HTTPException(status_code=403, detail=str(e))
 
     if user is None:
+        logger.warning(
+            "login failed for user=%r ip=%s", body.username, client_ip(request)
+        )
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    logger.info("login ok user=%s role=%s", user["username"], user["role"])
     token = create_token(user["id"], user["username"], user["role"])
     response.set_cookie(
         key="token",
@@ -158,7 +165,16 @@ async def change_password(body: ChangePasswordRequest, user=Depends(get_current_
     rows = await db.execute_fetchall(
         "SELECT password_hash FROM users WHERE id = ?", (user["id"],)
     )
-    if not rows or not verify_password(body.old_password, rows[0]["password_hash"]):
+    if not rows:
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    # SSO/LDAP-only accounts carry the sentinel hash '!'; bcrypt raises on
+    # that value, which would surface as a 500. Block the path cleanly.
+    if rows[0]["password_hash"] == "!":
+        raise HTTPException(
+            status_code=400,
+            detail="This account is managed by SSO/LDAP; password cannot be changed here.",
+        )
+    if not verify_password(body.old_password, rows[0]["password_hash"]):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
     await db.execute(

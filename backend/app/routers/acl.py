@@ -69,21 +69,37 @@ async def _get_page_row(db, slug: str) -> dict:
     return dict(rows[0])
 
 
-async def _principal_label(db, principal_type: str, principal_id: int) -> Optional[str]:
-    if principal_type == "user":
+async def _principal_labels(
+    db, principals: list[tuple[str, int]]
+) -> dict[tuple[str, int], str]:
+    """Return `{(type, id): label}` for the given principals in 1 or 2 queries.
+
+    Replaces a per-row lookup that issued N individual SELECTs on every ACL
+    page load. Callers feed in an unordered, possibly-duplicate list of
+    principal refs; we de-dupe, split by type, and batch-fetch each type.
+    """
+    user_ids = {pid for ptype, pid in principals if ptype == "user"}
+    group_ids = {pid for ptype, pid in principals if ptype == "group"}
+    out: dict[tuple[str, int], str] = {}
+    if user_ids:
+        placeholders = ",".join("?" * len(user_ids))
         rows = await db.execute_fetchall(
-            """SELECT CASE WHEN display_name IS NOT NULL AND display_name != ''
-                        THEN display_name ELSE username END AS label
-               FROM users WHERE id = ?""",
-            (principal_id,),
+            f"""SELECT id, CASE WHEN display_name IS NOT NULL AND display_name != ''
+                                THEN display_name ELSE username END AS label
+                FROM users WHERE id IN ({placeholders})""",
+            list(user_ids),
         )
-        return rows[0]["label"] if rows else None
-    if principal_type == "group":
+        for r in rows:
+            out[("user", r["id"])] = r["label"]
+    if group_ids:
+        placeholders = ",".join("?" * len(group_ids))
         rows = await db.execute_fetchall(
-            "SELECT name FROM groups WHERE id = ?", (principal_id,)
+            f"SELECT id, name FROM groups WHERE id IN ({placeholders})",
+            list(group_ids),
         )
-        return rows[0]["name"] if rows else None
-    return None
+        for r in rows:
+            out[("group", r["id"])] = r["name"]
+    return out
 
 
 @router.get("/{slug}/acl", response_model=AclResponse)
@@ -103,13 +119,7 @@ async def get_page_acl(slug: str, user=Depends(get_current_user)):
            ORDER BY principal_type, principal_id""",
         (page["id"],),
     )
-    explicit = []
-    for r in explicit_rows:
-        d = dict(r)
-        d["principal_name"] = await _principal_label(
-            db, d["principal_type"], d["principal_id"]
-        )
-        explicit.append(d)
+    explicit = [dict(r) for r in explicit_rows]
 
     # Walk the parent chain to find inherited rows. Stop at the first
     # ancestor that has any ACL rows — that is the "anchor" the resolver
@@ -133,9 +143,6 @@ async def get_page_acl(slug: str, user=Depends(get_current_user)):
         )
         for r in acl_rows:
             d = dict(r)
-            d["principal_name"] = await _principal_label(
-                db, d["principal_type"], d["principal_id"]
-            )
             d["source_page_id"] = anc["id"]
             d["source_page_slug"] = anc["slug"]
             d["source_page_title"] = anc["title"]
@@ -143,6 +150,15 @@ async def get_page_acl(slug: str, user=Depends(get_current_user)):
         if acl_rows:
             break  # anchor found — deeper ancestors are shadowed
         ancestor_id = anc["parent_id"]
+
+    # Batch-load all principal labels in at most two queries (one for users,
+    # one for groups) instead of two per row.
+    all_principals = [(r["principal_type"], r["principal_id"]) for r in explicit + inherited]
+    labels = await _principal_labels(db, all_principals) if all_principals else {}
+    for r in explicit:
+        r["principal_name"] = labels.get((r["principal_type"], r["principal_id"]))
+    for r in inherited:
+        r["principal_name"] = labels.get((r["principal_type"], r["principal_id"]))
 
     return {"explicit": explicit, "inherited": inherited}
 

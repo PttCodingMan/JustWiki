@@ -4,13 +4,68 @@ Fires outbound webhooks and in-app notifications when pages change. Designed to
 never block the request — failures are logged but do not raise.
 """
 import asyncio
+import ipaddress
 import json
 import logging
+import socket
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
 logger = logging.getLogger("justwiki.notifications")
+
+
+def _is_private_address(host: str) -> bool:
+    """True if `host` resolves to a non-public address.
+
+    Blocks RFC1918, loopback, link-local, multicast, reserved, and the
+    cloud IMDS address (169.254.169.254 is already link-local). Also
+    blocks IPv6 equivalents.
+    """
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except OSError:
+        # Unresolvable host — let httpx surface the connection error.
+        # We treat unresolvable as "not obviously private"; the request
+        # simply fails at send time.
+        return False
+    for info in infos:
+        raw = info[4][0]
+        try:
+            addr = ipaddress.ip_address(raw)
+        except ValueError:
+            continue
+        if (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_multicast
+            or addr.is_reserved
+            or addr.is_unspecified
+        ):
+            return True
+    return False
+
+
+def validate_webhook_url(url: str) -> None:
+    """Raise ValueError if the URL points at a private/loopback/link-local host.
+
+    Called at webhook-create/update time so a compromised admin account
+    can't point a webhook at cloud IMDS, a sidecar container, or another
+    internal service to exfiltrate or pivot. Runtime dispatch does a
+    second check in case DNS changed after the webhook was stored.
+    """
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https"):
+        raise ValueError("Webhook URL must use http:// or https://")
+    host = parts.hostname
+    if not host:
+        raise ValueError("Webhook URL must include a host")
+    if _is_private_address(host):
+        raise ValueError(
+            "Webhook URL resolves to a private/loopback address, which is not allowed"
+        )
 
 
 async def notify_page_updated(db, page: dict, actor: dict, changes: dict) -> None:
@@ -86,7 +141,9 @@ async def _dispatch(db, event: str, page: dict, actor: dict, changes: dict) -> N
 
 
 async def _post_many(urls: list[str], payload: dict) -> None:
-    async with httpx.AsyncClient(timeout=5.0) as client:
+    # follow_redirects=False so a stored hook whose host later issues a 302
+    # to an internal address can't escape the validation we did at store time.
+    async with httpx.AsyncClient(timeout=5.0, follow_redirects=False) as client:
         await asyncio.gather(
             *(_post_one(client, url, payload) for url in urls),
             return_exceptions=True,
@@ -94,6 +151,14 @@ async def _post_many(urls: list[str], payload: dict) -> None:
 
 
 async def _post_one(client: httpx.AsyncClient, url: str, payload: dict) -> None:
+    # Re-check at dispatch time — the stored URL's hostname may have started
+    # resolving to an internal address since it was saved. Silently drop
+    # rather than contribute to the attacker's oracle.
+    try:
+        validate_webhook_url(url)
+    except ValueError as exc:
+        logger.warning("webhook %s rejected at dispatch: %s", url, exc)
+        return
     try:
         await client.post(url, json=payload)
     except Exception as exc:

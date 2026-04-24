@@ -95,7 +95,10 @@ export default function AclManager({ slug, open, onClose }) {
     setError('')
     try {
       await api.put(`/pages/${slug}/acl`, { rows })
-      invalidatePermission(slug)
+      // Clearing the whole cache (not just this slug): changing this page's
+      // ACL may shadow or expose permissions for every descendant that
+      // currently inherits through it. Cache is small; flushing is cheap.
+      invalidatePermission()
       onClose?.()
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to save ACL')
@@ -109,7 +112,10 @@ export default function AclManager({ slug, open, onClose }) {
     setSaving(true)
     try {
       await api.delete(`/pages/${slug}/acl`)
-      invalidatePermission(slug)
+      // Clearing the whole cache (not just this slug): changing this page's
+      // ACL may shadow or expose permissions for every descendant that
+      // currently inherits through it. Cache is small; flushing is cheap.
+      invalidatePermission()
       onClose?.()
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to clear ACL')

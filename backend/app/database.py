@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 import sqlite3
@@ -13,6 +14,10 @@ _TRIGRAM_MIN_VERSION = (3, 43, 0)
 _TOKENIZE_RE = re.compile(r"""tokenize\s*=\s*['"](\w+)['"]""", re.IGNORECASE)
 
 _db: aiosqlite.Connection | None = None
+# Serialise the first-touch connection setup so two concurrent `get_db()`
+# calls (e.g. racing lifespan/boot-time tasks) can't both open a connection
+# and leak the loser.
+_db_lock = asyncio.Lock()
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS users (
@@ -973,11 +978,17 @@ async def _ensure_fts5_index(db) -> bool:
 
 async def get_db() -> aiosqlite.Connection:
     global _db
-    if _db is None:
-        _db = await aiosqlite.connect(settings.DB_PATH)
-        _db.row_factory = aiosqlite.Row
-        await _db.execute("PRAGMA journal_mode=WAL")
-        await _db.execute("PRAGMA foreign_keys=ON")
+    if _db is not None:
+        return _db
+    async with _db_lock:
+        # Re-check after acquiring: another coroutine may have finished
+        # opening the connection while we were blocked on the lock.
+        if _db is None:
+            conn = await aiosqlite.connect(settings.DB_PATH)
+            conn.row_factory = aiosqlite.Row
+            await conn.execute("PRAGMA journal_mode=WAL")
+            await conn.execute("PRAGMA foreign_keys=ON")
+            _db = conn
     return _db
 
 
@@ -1065,9 +1076,10 @@ async def seed_welcome_page(db):
             shutil.copy2(logo_src, logo_dst)
             # Make sure it's readable
             os.chmod(logo_dst, 0o644)
-            print(f"Successfully seeded logo from {logo_src} to {logo_dst}")
-        except Exception as e:
-            print(f"Error seeding logo: {e}")
+            logger.info("Seeded logo from %s to %s", logo_src, logo_dst)
+        except OSError:
+            # Best-effort — missing/broken source file shouldn't block boot.
+            logger.warning("Logo seeding failed", exc_info=True)
 
     rows = await db.execute_fetchall("SELECT COUNT(*) as cnt FROM pages")
     if rows[0]["cnt"] > 0:

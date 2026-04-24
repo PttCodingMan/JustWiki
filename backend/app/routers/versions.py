@@ -2,21 +2,13 @@ import difflib
 from fastapi import APIRouter, HTTPException, Depends, Query
 from app.auth import get_current_user
 from app.database import get_db
-from app.services.acl import resolve_page_permission
+from app.services.acl import require_page_read
 from app.services.search import rebuild_search_index
 from app.services.wikilink import parse_and_update_backlinks
 from app.services.media_ref import parse_and_update_media_refs
 from app.routers.activity import log_activity
 
 router = APIRouter(prefix="/api/pages", tags=["versions"])
-
-
-async def _require_page_read(db, user, page_id: int) -> str:
-    """Gate: 404 if user can't read this page, else return the permission."""
-    perm = await resolve_page_permission(db, user, page_id)
-    if perm == "none":
-        raise HTTPException(status_code=404, detail="Page not found")
-    return perm
 
 
 async def save_version(db, page_id: int, title: str, content_md: str, user_id: int):
@@ -48,7 +40,7 @@ async def list_versions(
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = rows[0]["id"]
-    await _require_page_read(db, user, page_id)
+    await require_page_read(db, user, page_id)
 
     offset = (page - 1) * per_page
     count_row = await db.execute_fetchall(
@@ -82,7 +74,7 @@ async def get_version(slug: str, num: int, user=Depends(get_current_user)):
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = rows[0]["id"]
-    await _require_page_read(db, user, page_id)
+    await require_page_read(db, user, page_id)
 
     version = await db.execute_fetchall(
         """SELECT v.*, u.username, u.display_name FROM page_versions v
@@ -109,7 +101,7 @@ async def diff_versions(
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = rows[0]["id"]
-    await _require_page_read(db, user, page_id)
+    await require_page_read(db, user, page_id)
 
     ver1 = await db.execute_fetchall(
         "SELECT title, content_md FROM page_versions WHERE page_id = ? AND version_num = ?",
@@ -146,7 +138,7 @@ async def revert_to_version(slug: str, num: int, user=Depends(get_current_user))
         raise HTTPException(status_code=404, detail="Page not found")
     current = dict(rows[0])
 
-    perm = await _require_page_read(db, user, current["id"])
+    perm = await require_page_read(db, user, current["id"])
     if perm == "read":
         raise HTTPException(
             status_code=403,

@@ -25,7 +25,7 @@ _INSECURE_SECRETS = {"change-me-to-random-string", "secret", ""}
 
 def _check_security():
     """Warn loudly about insecure defaults on startup."""
-    if settings.SECRET_KEY in _INSECURE_SECRETS:
+    if settings.SECRET_KEY.get_secret_value() in _INSECURE_SECRETS:
         safe_key = secrets.token_urlsafe(32)
         logger.critical(
             "\n"
@@ -37,11 +37,11 @@ def _check_security():
             "╚══════════════════════════════════════════════════════╝",
             safe_key[:44],
         )
-    if settings.ADMIN_PASS in {"admin", "password", "123456", ""}:
+    admin_pass = settings.ADMIN_PASS.get_secret_value()
+    if admin_pass in {"admin", "password", "123456", ""}:
         logger.warning(
-            "ADMIN_PASS is set to a weak default ('%s'). "
+            "ADMIN_PASS is set to a weak default. "
             "Change it in .env before deploying to production.",
-            settings.ADMIN_PASS,
         )
     # Either SSO path issues the session cookie (OIDC state/nonce/PKCE) over
     # the wire. Without TLS marking, a passive attacker on the path can
@@ -54,6 +54,38 @@ def _check_security():
                 "is not https. Session cookies (OAuth state/PKCE) will travel "
                 "in plaintext. Serve the app over HTTPS and set "
                 "COOKIE_SECURE=true before exposing it."
+            )
+
+    # Fail loudly if the SSO toggles are on but no usable provider is
+    # configured. Previously this surfaced only on the first login attempt
+    # as an opaque 500; catching it here saves operators a debugging loop.
+    if settings.OIDC_ENABLED:
+        providers = [p.strip() for p in settings.OIDC_PROVIDERS.split(",") if p.strip()]
+        if not providers:
+            logger.error(
+                "OIDC_ENABLED=true but OIDC_PROVIDERS is empty. "
+                "Login page will show no SSO buttons."
+            )
+        else:
+            any_configured = False
+            if "google" in providers and settings.OIDC_GOOGLE_CLIENT_ID and settings.OIDC_GOOGLE_CLIENT_SECRET.get_secret_value():
+                any_configured = True
+            if "github" in providers and settings.OIDC_GITHUB_CLIENT_ID and settings.OIDC_GITHUB_CLIENT_SECRET.get_secret_value():
+                any_configured = True
+            if "generic" in providers and settings.OIDC_GENERIC_CLIENT_ID and settings.OIDC_GENERIC_CLIENT_SECRET.get_secret_value() and settings.OIDC_GENERIC_DISCOVERY:
+                any_configured = True
+            if not any_configured:
+                logger.error(
+                    "OIDC_ENABLED=true but no provider is fully configured. "
+                    "Set the matching OIDC_{provider}_CLIENT_ID and _SECRET "
+                    "(and _DISCOVERY for 'generic')."
+                )
+
+    if settings.LDAP_ENABLED:
+        if not settings.LDAP_SERVER or not settings.LDAP_BIND_DN or not settings.LDAP_USER_BASE:
+            logger.error(
+                "LDAP_ENABLED=true but LDAP_SERVER/LDAP_BIND_DN/LDAP_USER_BASE "
+                "is missing. LDAP login will fail."
             )
 
 
@@ -94,15 +126,17 @@ async def csrf_guard(request: Request, call_next):
     if request.url.path.rstrip("/") in _CSRF_EXEMPT_PATHS:
         return await call_next(request)
 
-    # Bearer-token requests don't ride on the browser-ambient cookie, so CSRF
-    # doesn't reach them. Skip the check.
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        return await call_next(request)
-
     # If there's no session cookie, there's nothing to protect: any request
     # without credentials will be rejected by the route's auth dependency,
-    # and CSRF only matters for ambient-credential flows.
+    # and CSRF only matters for ambient-credential flows. This branch also
+    # covers legitimate Bearer-token clients (API tokens, tests), which never
+    # attach the session cookie.
+    #
+    # We deliberately do NOT exempt based on the Authorization header alone:
+    # `get_current_user` falls back to the cookie when a Bearer token is
+    # invalid, so a cross-origin attacker could otherwise pair a bogus
+    # `Authorization: Bearer xyz` with the victim's session cookie to skip
+    # CSRF protection on every mutating endpoint.
     if not request.cookies.get("token"):
         return await call_next(request)
 
@@ -149,7 +183,7 @@ app.add_middleware(
 _session_https_only = settings.COOKIE_SECURE or settings.PUBLIC_BASE_URL.startswith("https://")
 app.add_middleware(
     SessionMiddleware,
-    secret_key=settings.SECRET_KEY,
+    secret_key=settings.SECRET_KEY.get_secret_value(),
     session_cookie="justwiki_oauth",
     same_site="lax",
     https_only=_session_https_only,

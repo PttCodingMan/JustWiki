@@ -7,6 +7,7 @@ for business logic: `authenticate_and_provision(UserInfo)` and
 mode, email linking, signup, and each allowlist/group gate.
 """
 import pytest
+from pydantic import SecretStr
 
 from app.config import settings
 from app.services.oidc import (
@@ -259,13 +260,13 @@ def test_providers_filtered_by_configuration(monkeypatch):
     monkeypatch.setattr(settings, "OIDC_ENABLED", True)
     monkeypatch.setattr(settings, "OIDC_PROVIDERS", "google,github,generic")
     monkeypatch.setattr(settings, "OIDC_GOOGLE_CLIENT_ID", "google-id")
-    monkeypatch.setattr(settings, "OIDC_GOOGLE_CLIENT_SECRET", "google-secret")
+    monkeypatch.setattr(settings, "OIDC_GOOGLE_CLIENT_SECRET", SecretStr("google-secret"))
     # GitHub missing a secret → excluded
     monkeypatch.setattr(settings, "OIDC_GITHUB_CLIENT_ID", "gh-id")
-    monkeypatch.setattr(settings, "OIDC_GITHUB_CLIENT_SECRET", "")
+    monkeypatch.setattr(settings, "OIDC_GITHUB_CLIENT_SECRET", SecretStr(""))
     # Generic missing discovery → excluded
     monkeypatch.setattr(settings, "OIDC_GENERIC_CLIENT_ID", "gen-id")
-    monkeypatch.setattr(settings, "OIDC_GENERIC_CLIENT_SECRET", "gen-secret")
+    monkeypatch.setattr(settings, "OIDC_GENERIC_CLIENT_SECRET", SecretStr("gen-secret"))
     monkeypatch.setattr(settings, "OIDC_GENERIC_DISCOVERY", "")
 
     ids = [p["id"] for p in list_enabled_providers()]

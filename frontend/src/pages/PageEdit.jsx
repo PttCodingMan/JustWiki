@@ -210,18 +210,34 @@ export default function PageEdit() {
   }, [getPage, slug])
 
   const handleOverwrite = useCallback(async () => {
-    if (!confirm('Overwrite the newer server version with your changes?')) return
-    // Fetch to get latest version number, then retry save with it.
+    // Fetch latest so we can show the user what they're about to lose —
+    // "yes/no" with no preview invites silent data loss when a third
+    // writer has landed between the conflict and the retry.
+    let latest
     try {
-      const latest = await getPage(slug)
-      baseVersionRef.current = latest.version
-      setConflict(null)
-      // Defer to next tick so baseVersionRef has settled before save.
-      setTimeout(() => handleSave(), 0)
+      latest = await getPage(slug)
     } catch (e) {
-      console.error('Failed to overwrite:', e)
+      console.error('Failed to fetch latest page state:', e)
+      setError('Could not fetch latest server version. Try again.')
+      return
     }
-  }, [getPage, slug, handleSave])
+    const serverContent = latest.content_md || ''
+    const localContent = content || ''
+    const summary =
+      serverContent === localContent
+        ? 'Server content matches yours; only metadata (title or structure) will change.'
+        : `You are about to overwrite ${serverContent.length} chars of server content ` +
+          `with ${localContent.length} chars of your edits.`
+    if (!confirm(`${summary}\n\nContinue and overwrite?`)) return
+
+    baseVersionRef.current = latest.version
+    setConflict(null)
+    // baseVersionRef is synchronous — no need to defer. If the save still
+    // returns 409 (yet another concurrent writer landed between these two
+    // lines), handleSave will re-render the conflict banner rather than
+    // silently loop here.
+    await handleSave()
+  }, [getPage, slug, handleSave, content])
 
   // Ctrl+S handler
   useEffect(() => {

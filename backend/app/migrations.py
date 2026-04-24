@@ -98,6 +98,24 @@ async def _m006_auth_identities(db: aiosqlite.Connection) -> None:
     )
 
 
+async def _m007_groups_ldap_dn(db: aiosqlite.Connection) -> None:
+    """Add `ldap_dn` to `groups` so LDAP-mirrored groups can be reconciled.
+
+    A group with ldap_dn IS NOT NULL is considered fully managed by the LDAP
+    sync loop — user additions/removals during sync only touch those rows;
+    manually-created groups (ldap_dn IS NULL) are never pruned.
+    """
+    if not await _column_exists(db, "groups", "ldap_dn"):
+        await db.execute("ALTER TABLE groups ADD COLUMN ldap_dn TEXT")
+        # SQLite can't add UNIQUE via ALTER. A partial unique index is the
+        # idiomatic workaround and matches the semantics we want: only non-NULL
+        # DNs must be unique (multiple manual groups with NULL dn are fine).
+        await db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_ldap_dn "
+            "ON groups(ldap_dn) WHERE ldap_dn IS NOT NULL"
+        )
+
+
 async def _m008_api_tokens_extend(db: aiosqlite.Connection) -> None:
     """Extend api_tokens with prefix / expires_at / revoked_at.
 
@@ -125,24 +143,6 @@ async def _m009_page_type(db: aiosqlite.Connection) -> None:
     if not await _column_exists(db, "pages", "page_type"):
         await db.execute(
             "ALTER TABLE pages ADD COLUMN page_type TEXT NOT NULL DEFAULT 'document'"
-        )
-
-
-async def _m007_groups_ldap_dn(db: aiosqlite.Connection) -> None:
-    """Add `ldap_dn` to `groups` so LDAP-mirrored groups can be reconciled.
-
-    A group with ldap_dn IS NOT NULL is considered fully managed by the LDAP
-    sync loop — user additions/removals during sync only touch those rows;
-    manually-created groups (ldap_dn IS NULL) are never pruned.
-    """
-    if not await _column_exists(db, "groups", "ldap_dn"):
-        await db.execute("ALTER TABLE groups ADD COLUMN ldap_dn TEXT")
-        # SQLite can't add UNIQUE via ALTER. A partial unique index is the
-        # idiomatic workaround and matches the semantics we want: only non-NULL
-        # DNs must be unique (multiple manual groups with NULL dn are fine).
-        await db.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_ldap_dn "
-            "ON groups(ldap_dn) WHERE ldap_dn IS NOT NULL"
         )
 
 

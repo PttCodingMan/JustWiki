@@ -4,6 +4,7 @@ import random
 import re
 import time
 import unicodedata
+import aiosqlite
 from fastapi import APIRouter, HTTPException, Depends, Query
 from app.config import settings
 from app.schemas import PageCreate, PageUpdate, PageResponse, PageListResponse, PageMoveRequest
@@ -31,7 +32,7 @@ async def _should_count_view(db, user_id: int, page_id: int) -> bool:
     now = int(time.time())
     cutoff = now - cooldown
     dedup_key = hashlib.sha256(
-        f"u:{user_id}|{page_id}|{settings.SECRET_KEY}".encode()
+        f"u:{user_id}|{page_id}|{settings.SECRET_KEY.get_secret_value()}".encode()
     ).hexdigest()
 
     # Single-statement UPSERT so two concurrent views for the same key can't
@@ -258,8 +259,6 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
     # Retry on the rare race where two concurrent create_page calls resolve the
     # same slug before either INSERT commits. unique_slug makes the collision
     # window small, and the UNIQUE constraint backstops correctness.
-    import aiosqlite as _aiosqlite
-
     page_id = None
     slug = None
     for _attempt in range(5):
@@ -273,7 +272,7 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
             slug = candidate
             page_id = cursor.lastrowid
             break
-        except _aiosqlite.IntegrityError:
+        except aiosqlite.IntegrityError:
             # Another request grabbed the slug first; try the next candidate.
             continue
     if page_id is None:

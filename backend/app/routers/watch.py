@@ -5,8 +5,29 @@ from pydantic import BaseModel
 
 from app.auth import get_current_user, require_admin
 from app.database import get_db
+from app.services.acl import resolve_page_permission
+from app.services.notifications import validate_webhook_url
 
 router = APIRouter(tags=["watch"])
+
+
+async def _require_readable_page(db, user, slug: str) -> int:
+    """Resolve slug → page_id, 404 if missing/deleted or not readable.
+
+    Collapsing "denied" and "not found" into the same 404 keeps the normal
+    ACL policy intact — a user without read permission must not be able to
+    probe whether a slug exists via /watch, nor subscribe to notifications
+    on a page they can't read.
+    """
+    rows = await db.execute_fetchall(
+        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Page not found")
+    page_id = rows[0]["id"]
+    if await resolve_page_permission(db, user, page_id) == "none":
+        raise HTTPException(status_code=404, detail="Page not found")
+    return page_id
 
 
 # ── Watching ──────────────────────────────────────────────────────────
@@ -14,12 +35,7 @@ router = APIRouter(tags=["watch"])
 @router.get("/api/pages/{slug}/watch")
 async def get_watch_status(slug: str, user=Depends(get_current_user)):
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = rows[0]["id"]
+    page_id = await _require_readable_page(db, user, slug)
 
     watching = await db.execute_fetchall(
         "SELECT 1 FROM page_watchers WHERE user_id = ? AND page_id = ?",
@@ -34,12 +50,7 @@ async def get_watch_status(slug: str, user=Depends(get_current_user)):
 @router.post("/api/pages/{slug}/watch")
 async def watch_page(slug: str, user=Depends(get_current_user)):
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = rows[0]["id"]
+    page_id = await _require_readable_page(db, user, slug)
 
     await db.execute(
         "INSERT OR IGNORE INTO page_watchers (user_id, page_id) VALUES (?, ?)",
@@ -52,6 +63,8 @@ async def watch_page(slug: str, user=Depends(get_current_user)):
 @router.delete("/api/pages/{slug}/watch")
 async def unwatch_page(slug: str, user=Depends(get_current_user)):
     db = await get_db()
+    # Unwatch is always safe: even if ACL changed after subscribing, let
+    # users clean up. Still require the page exists and isn't deleted.
     rows = await db.execute_fetchall(
         "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
     )
@@ -94,8 +107,10 @@ async def list_webhooks(user=Depends(require_admin)):
 
 @router.post("/api/webhooks", status_code=201)
 async def create_webhook(body: WebhookCreate, user=Depends(require_admin)):
-    if not body.url.startswith(("http://", "https://")):
-        raise HTTPException(status_code=400, detail="Webhook URL must start with http(s)://")
+    try:
+        validate_webhook_url(body.url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     db = await get_db()
     cursor = await db.execute(
         "INSERT INTO webhooks (name, url, events, is_active) VALUES (?, ?, ?, ?)",
@@ -122,8 +137,10 @@ async def update_webhook(webhook_id: int, body: WebhookUpdate, user=Depends(requ
         updates.append("name = ?")
         params.append(body.name)
     if body.url is not None:
-        if not body.url.startswith(("http://", "https://")):
-            raise HTTPException(status_code=400, detail="Webhook URL must start with http(s)://")
+        try:
+            validate_webhook_url(body.url)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
         updates.append("url = ?")
         params.append(body.url)
     if body.events is not None:

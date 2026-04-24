@@ -48,7 +48,11 @@ async def restore_page(slug: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Viewers cannot restore pages")
     db = await get_db()
     rows = await db.execute_fetchall(
-        "SELECT * FROM pages WHERE slug = ? AND deleted_at IS NOT NULL", (slug,)
+        """SELECT id, slug, title, content_md, parent_id, sort_order, page_type,
+                  version, view_count, is_public, created_by, deleted_at,
+                  created_at, updated_at
+           FROM pages WHERE slug = ? AND deleted_at IS NOT NULL""",
+        (slug,),
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Page not found in trash")
@@ -99,9 +103,14 @@ async def restore_page(slug: str, user=Depends(get_current_user)):
     await db.commit()
     invalidate_readable_cache()
 
-    # Return the fully re-hydrated page
+    # Return the fully re-hydrated page. Explicit column list so any future
+    # `pages` column (e.g. an `internal_notes`) doesn't silently leak here.
     rows = await db.execute_fetchall(
-        "SELECT * FROM pages WHERE id = ?", (page["id"],)
+        """SELECT id, slug, title, content_md, parent_id, sort_order, page_type,
+                  version, view_count, is_public, created_by,
+                  created_at, updated_at
+           FROM pages WHERE id = ?""",
+        (page["id"],),
     )
     return dict(rows[0])
 

@@ -46,12 +46,12 @@ async def auth_user(db):
     if not rows:
         pw_hash = hash_password("testpass")
         cursor = await db.execute(
-            "INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'user')",
+            "INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'editor')",
             ("testuser", pw_hash),
         )
         await db.commit()
         user_id = cursor.lastrowid
-        user = {"id": user_id, "username": "testuser", "role": "user"}
+        user = {"id": user_id, "username": "testuser", "role": "editor"}
     else:
         user = dict(rows[0])
 

@@ -9,23 +9,39 @@ export default function KeyboardShortcuts({ onOpenSearch }) {
 
   useEffect(() => {
     const handler = (e) => {
+      // Always require a bare Ctrl/Cmd — Ctrl+Shift+N etc. are reserved for
+      // the browser and accidentally grabbing them is a usability regression.
+      const plainCtrl = (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey
+      if (!plainCtrl) return
+
+      // Let the editor keep focus: Milkdown/ProseMirror needs Ctrl+E for
+      // emphasis in some locales, and generally a shortcut shouldn't yank
+      // the user out of an input they're actively typing into.
+      const target = e.target
+      const inEditor =
+        target?.isContentEditable ||
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA'
+
+      // Ctrl+K — open search modal (works even from inside an input).
+      if (e.key === 'k') {
+        e.preventDefault()
+        onOpenSearch?.()
+        return
+      }
+
+      if (inEditor) return
+
       // Ctrl+N — new page (viewers can't create pages)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+      if (e.key === 'n') {
         if (user?.role === 'viewer') return
         e.preventDefault()
         navigate('/new')
         return
       }
 
-      // Ctrl+K — open search modal
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault()
-        onOpenSearch?.()
-        return
-      }
-
       // Ctrl+E — toggle edit/view
-      if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+      if (e.key === 'e') {
         e.preventDefault()
         const match = location.pathname.match(/^\/page\/([^/]+)/)
         if (match) {

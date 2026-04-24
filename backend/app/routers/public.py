@@ -10,6 +10,7 @@ from collections import defaultdict
 from fastapi import APIRouter, HTTPException, Request
 
 from app.database import get_db
+from app.services.client_ip import client_ip
 from app.services.diagram_ref import DRAWIO_ID_RE as _DRAWIO_ID_RE
 
 router = APIRouter(prefix="/api/public", tags=["public"])
@@ -35,8 +36,7 @@ def _check_rate_limit(ip: str):
 
 @router.get("/pages/{slug}")
 async def get_public_page(slug: str, request: Request):
-    client_ip = request.client.host if request.client else "unknown"
-    _check_rate_limit(client_ip)
+    _check_rate_limit(client_ip(request))
 
     db = await get_db()
     rows = await db.execute_fetchall(

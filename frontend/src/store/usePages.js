@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import api from '../api/client'
+import usePermissions from './usePermissions'
 
 const usePages = create((set) => ({
   pages: [],
@@ -57,6 +58,10 @@ const usePages = create((set) => ({
 
   movePage: async (slug, parentId, sortOrder) => {
     await api.patch(`/pages/${slug}/move`, { parent_id: parentId, sort_order: sortOrder })
+    // Moving changes the page's ACL anchor chain, which may invalidate cached
+    // permissions for this page and every descendant. The cache is tiny —
+    // clearing it whole is cheaper than tracking the subtree.
+    usePermissions.getState().invalidate()
     // Refresh tree after move
     const res = await api.get('/pages/tree')
     set({ tree: res.data })

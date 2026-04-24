@@ -1,11 +1,15 @@
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 from pathlib import Path
 
 
 class Settings(BaseSettings):
-    SECRET_KEY: str = "change-me-to-random-string"
+    # Secrets use SecretStr so `repr(settings)` / a debug dump / a stray
+    # log line can't leak them. Read the plaintext at the point of use
+    # via `.get_secret_value()`.
+    SECRET_KEY: SecretStr = SecretStr("change-me-to-random-string")
     ADMIN_USER: str = "admin"
-    ADMIN_PASS: str = "admin"
+    ADMIN_PASS: SecretStr = SecretStr("admin")
 
     DATA_DIR: str = "./data"
     DB_PATH: str = "./data/just-wiki.db"
@@ -18,6 +22,14 @@ class Settings(BaseSettings):
     # always-included localhost dev origins. Set this to your public URL(s)
     # in production, e.g. "https://wiki.example.com".
     ALLOWED_ORIGINS: str = ""
+
+    # When deployed behind a reverse proxy (nginx/Caddy/ALB/Traefik), the
+    # direct TCP peer is the proxy — rate limiters keyed on `request.client.host`
+    # then see every client as the same IP and either deny everyone or no-one.
+    # Setting this to True makes the rate limiters trust the left-most
+    # `X-Forwarded-For` entry. Only enable this when a trusted proxy is
+    # actually in front of the app; otherwise a client can spoof the header.
+    TRUST_PROXY: bool = False
 
     # Public base URL the browser can reach. Used to build OIDC redirect_uri
     # and SSO-error redirects. In dev leave as localhost:8000; in prod set to
@@ -37,19 +49,19 @@ class Settings(BaseSettings):
 
     # Google
     OIDC_GOOGLE_CLIENT_ID: str = ""
-    OIDC_GOOGLE_CLIENT_SECRET: str = ""
+    OIDC_GOOGLE_CLIENT_SECRET: SecretStr = SecretStr("")
     OIDC_GOOGLE_DISCOVERY: str = (
         "https://accounts.google.com/.well-known/openid-configuration"
     )
 
     # GitHub (non-OIDC OAuth2; no discovery URL)
     OIDC_GITHUB_CLIENT_ID: str = ""
-    OIDC_GITHUB_CLIENT_SECRET: str = ""
+    OIDC_GITHUB_CLIENT_SECRET: SecretStr = SecretStr("")
 
     # Generic OIDC (Keycloak / Authentik / Okta / self-hosted IdP)
     OIDC_GENERIC_NAME: str = "Company SSO"
     OIDC_GENERIC_CLIENT_ID: str = ""
-    OIDC_GENERIC_CLIENT_SECRET: str = ""
+    OIDC_GENERIC_CLIENT_SECRET: SecretStr = SecretStr("")
     OIDC_GENERIC_DISCOVERY: str = ""
 
     # ── LDAP / Active Directory (optional) ──
@@ -57,7 +69,7 @@ class Settings(BaseSettings):
     LDAP_SERVER: str = ""                # must be ldaps:// unless TLS disabled
     LDAP_TLS_VERIFY: bool = True
     LDAP_BIND_DN: str = ""
-    LDAP_BIND_PASSWORD: str = ""
+    LDAP_BIND_PASSWORD: SecretStr = SecretStr("")
     LDAP_USER_BASE: str = ""
     LDAP_USER_FILTER: str = "(&(objectClass=person)(uid={username}))"
     LDAP_ATTR_EMAIL: str = "mail"
@@ -74,14 +86,14 @@ class Settings(BaseSettings):
     # that speaks the same wire format works (OpenAI, Ollama, Groq, DeepSeek…).
     AI_ENABLED: bool = False
     AI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai"
-    AI_API_KEY: str = ""
+    AI_API_KEY: SecretStr = SecretStr("")
     AI_MODEL: str = "gemini-2.0-flash"
     AI_MAX_CONTEXT_PAGES: int = 5       # top-K pages stuffed into the prompt
     AI_EXCERPT_CHARS: int = 1500        # max chars per page content excerpt
     AI_RATE_LIMIT_PER_HOUR: int = 20    # per-user request cap
     # Legacy; kept as a read-only alias so existing deployments don't break.
     # Use AI_API_KEY instead.
-    GEMINI_API_KEY: str = ""
+    GEMINI_API_KEY: SecretStr = SecretStr("")
 
     # Dashboard / updates
     # Off by default so air-gapped installs never make an outbound call.

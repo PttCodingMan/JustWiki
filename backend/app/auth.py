@@ -44,7 +44,7 @@ def create_token(user_id: int, username: str, role: str) -> str:
         "role": role,
         "exp": expire,
     }
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(payload, settings.SECRET_KEY.get_secret_value(), algorithm=ALGORITHM)
 
 
 async def _resolve_api_token(token: str) -> dict | None:
@@ -98,43 +98,32 @@ async def _resolve_api_token(token: str) -> dict | None:
     }
 
 
-async def get_current_user(request: Request):
-    token = None
+async def _resolve_request_credentials(request: Request) -> dict | None:
+    """Decode whichever credential the request carries, or return None.
 
-    # Check Authorization header
+    Recognises both personal API tokens (prefixed with `jwk_`) and JWT
+    session tokens, read from `Authorization: Bearer` first and falling
+    back to the `token` cookie. Returns the resolved user dict on success
+    and None on any failure (no token, invalid token, missing user). The
+    caller decides whether to raise 401 or treat it as anonymous.
+    """
+    token = None
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header[7:]
-
-    # Check cookie
     if not token:
         token = request.cookies.get("token")
-
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
+        return None
 
-    # Personal API tokens are distinguished by a fixed prefix so we don't
-    # have to guess-and-fall-back. Anything else must parse as a JWT.
     if token.startswith(API_TOKEN_PREFIX):
-        user = await _resolve_api_token(token)
-        if user is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token",
-            )
-        return user
+        return await _resolve_api_token(token)
 
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.SECRET_KEY.get_secret_value(), algorithms=[ALGORITHM])
         user_id = int(payload["sub"])
     except (JWTError, KeyError, ValueError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+        return None
 
     db = await get_db()
     row = await db.execute_fetchall(
@@ -142,11 +131,26 @@ async def get_current_user(request: Request):
         (user_id,),
     )
     if not row:
+        return None
+    return dict(row[0])
+
+
+async def get_current_user(request: Request):
+    user = await _resolve_request_credentials(request)
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+            detail="Not authenticated",
         )
-    return dict(row[0])
+    return user
+
+
+async def get_optional_user(request: Request) -> dict | None:
+    """Same credential resolution as `get_current_user` but returns None
+    instead of raising on missing/invalid credentials. Use for endpoints
+    that serve both authenticated and anonymous traffic (e.g. media
+    files referenced by public pages)."""
+    return await _resolve_request_credentials(request)
 
 
 async def require_admin(user=Depends(get_current_user)):
@@ -159,7 +163,7 @@ async def ensure_admin_exists():
     db = await get_db()
     rows = await db.execute_fetchall("SELECT id FROM users WHERE role = 'admin'")
     if not rows:
-        pw_hash = hash_password(settings.ADMIN_PASS)
+        pw_hash = hash_password(settings.ADMIN_PASS.get_secret_value())
         await db.execute(
             "INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'admin')",
             (settings.ADMIN_USER, pw_hash),

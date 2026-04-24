@@ -4,27 +4,10 @@ from typing import Optional
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.services.acl import resolve_page_permission
+from app.services.acl import require_page_read, require_page_write
 from app.routers.activity import log_activity
 
 router = APIRouter(prefix="/api/pages/{slug}/comments", tags=["comments"])
-
-
-async def _require_page_read(db, user, page_id: int):
-    """Read-or-better permission is enough to list comments."""
-    perm = await resolve_page_permission(db, user, page_id)
-    if perm == "none":
-        raise HTTPException(status_code=404, detail="Page not found")
-    return perm
-
-
-async def _require_page_write(db, user, page_id: int):
-    """Write-or-better permission is required to post comments."""
-    perm = await resolve_page_permission(db, user, page_id)
-    if perm == "none":
-        raise HTTPException(status_code=404, detail="Page not found")
-    if perm == "read":
-        raise HTTPException(status_code=403, detail="You do not have write permission on this page")
 
 
 class CommentCreate(BaseModel):
@@ -43,11 +26,13 @@ async def list_comments(
     user=Depends(get_current_user),
 ):
     db = await get_db()
-    page_rows = await db.execute_fetchall("SELECT id FROM pages WHERE slug = ?", (slug,))
+    page_rows = await db.execute_fetchall(
+        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    )
     if not page_rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = page_rows[0]["id"]
-    await _require_page_read(db, user, page_id)
+    await require_page_read(db, user, page_id)
 
     offset = (page - 1) * per_page
     count_rows = await db.execute_fetchall(
@@ -78,12 +63,14 @@ async def create_comment(slug: str, body: CommentCreate, user=Depends(get_curren
     if not body.content.strip():
         raise HTTPException(status_code=400, detail="Comment content cannot be empty")
     db = await get_db()
-    page_rows = await db.execute_fetchall("SELECT id, title FROM pages WHERE slug = ?", (slug,))
+    page_rows = await db.execute_fetchall(
+        "SELECT id, title FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    )
     if not page_rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = page_rows[0]["id"]
     page_title = page_rows[0]["title"]
-    await _require_page_write(db, user, page_id)
+    await require_page_write(db, user, page_id)
 
     cursor = await db.execute(
         "INSERT INTO comments (page_id, user_id, content) VALUES (?, ?, ?)",
@@ -112,11 +99,13 @@ async def update_comment(
 ):
     db = await get_db()
     # Verify the comment exists AND belongs to the page in the URL
-    page_rows = await db.execute_fetchall("SELECT id FROM pages WHERE slug = ?", (slug,))
+    page_rows = await db.execute_fetchall(
+        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    )
     if not page_rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = page_rows[0]["id"]
-    await _require_page_write(db, user, page_id)
+    await require_page_write(db, user, page_id)
     rows = await db.execute_fetchall(
         "SELECT id, user_id, page_id FROM comments WHERE id = ?", (comment_id,)
     )
@@ -148,11 +137,13 @@ async def update_comment(
 async def delete_comment(slug: str, comment_id: int, user=Depends(get_current_user)):
     db = await get_db()
     # Verify the comment exists AND belongs to the page in the URL
-    page_rows = await db.execute_fetchall("SELECT id FROM pages WHERE slug = ?", (slug,))
+    page_rows = await db.execute_fetchall(
+        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    )
     if not page_rows:
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = page_rows[0]["id"]
-    await _require_page_write(db, user, page_id)
+    await require_page_write(db, user, page_id)
     rows = await db.execute_fetchall(
         "SELECT id, user_id, page_id FROM comments WHERE id = ?", (comment_id,)
     )

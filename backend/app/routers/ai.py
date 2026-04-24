@@ -184,7 +184,7 @@ async def _stream_llm(messages: list[dict]):
     """
     url = f"{settings.AI_BASE_URL.rstrip('/')}/chat/completions"
     headers = {
-        "Authorization": f"Bearer {settings.AI_API_KEY}",
+        "Authorization": f"Bearer {settings.AI_API_KEY.get_secret_value()}",
         "Content-Type": "application/json",
     }
     payload = {
@@ -227,7 +227,7 @@ async def status(user=Depends(get_current_user)):
     is configured, so users don't see a link that always 503s.
     """
     return {
-        "enabled": bool(settings.AI_ENABLED and settings.AI_API_KEY),
+        "enabled": bool(settings.AI_ENABLED and settings.AI_API_KEY.get_secret_value()),
         "model": settings.AI_MODEL if settings.AI_ENABLED else None,
     }
 
@@ -236,7 +236,7 @@ async def status(user=Depends(get_current_user)):
 async def chat(req: ChatRequest, user=Depends(get_current_user)):
     if not settings.AI_ENABLED:
         raise HTTPException(status_code=404, detail="AI feature is not enabled")
-    if not settings.AI_API_KEY:
+    if not settings.AI_API_KEY.get_secret_value():
         raise HTTPException(status_code=503, detail="AI API key not configured")
     if not _rate_limit_ok(user["id"]):
         raise HTTPException(
