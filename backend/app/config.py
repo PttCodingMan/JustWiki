@@ -15,7 +15,6 @@ class Settings(BaseSettings):
     DB_PATH: str = "./data/just-wiki.db"
     MEDIA_DIR: str = "./data/media"
 
-    VITE_API_URL: str = "http://localhost:8000"
     COOKIE_SECURE: bool = False  # Set to True in production with HTTPS
 
     # Comma-separated list of origins allowed for CSRF/CORS on top of the
@@ -110,9 +109,13 @@ class Settings(BaseSettings):
     # one directory up (so `make dev-backend`, which cds into backend/, still
     # picks up the project-root .env). pydantic-settings uses the first file
     # that exists.
+    #
+    # extra='ignore' so renaming/removing a setting doesn't crash on existing
+    # deployments where the user's .env still has the old key.
     model_config = {
         "env_file": (".env", "../.env"),
         "env_file_encoding": "utf-8",
+        "extra": "ignore",
     }
 
 

@@ -4,18 +4,27 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    ports:
-      - "8000:8000"
     volumes:
       - ./data:/app/data
-    env_file: .env
-    # Override the dev-oriented paths in .env so the container reads/writes
-    # the mounted /app/data volume regardless of what DATA_DIR is set to in
-    # the shared .env file.
+    env_file:
+      - path: .env
+        required: false
+    # Override the dev-oriented defaults so the container reads/writes the
+    # mounted /app/data volume and treats the frontend nginx (port 3000) as
+    # the public ingress — OIDC redirect_uri must round-trip through nginx.
+    # TRUST_PROXY=true because nginx is the only reachable peer.
     environment:
       DATA_DIR: /app/data
       DB_PATH: /app/data/just-wiki.db
       MEDIA_DIR: /app/data/media
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      TRUST_PROXY: "true"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health',timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
     restart: unless-stopped
 
   frontend:
@@ -26,5 +35,6 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
