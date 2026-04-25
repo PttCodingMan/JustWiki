@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import DOMPurify from 'dompurify'
 import useSearch from '../store/useSearch'
 import useTags from '../store/useTags'
@@ -14,6 +15,7 @@ const SNIPPET_SANITIZE_CONFIG = { ALLOWED_TAGS: ['mark'], ALLOWED_ATTR: [] }
 const TYPE_ICONS = { document: '📄', mindmap: '🧠' }
 
 export default function SearchResults() {
+  const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const q = searchParams.get('q') || ''
   const tag = searchParams.get('tag') || ''
@@ -32,10 +34,10 @@ export default function SearchResults() {
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold text-text mb-2">
-        Search: "{q}"
+        {t('searchResults.title', { q })}
       </h1>
       <p className="text-sm text-text-secondary mb-4">
-        {total} result{total !== 1 ? 's' : ''} found
+        {t('searchResults.resultCount', { count: total })}
       </p>
 
       {/* Tag filter */}
@@ -47,7 +49,7 @@ export default function SearchResults() {
               !selectedTag ? 'bg-primary text-primary-text border-primary' : 'bg-surface text-text-secondary border-border hover:border-primary'
             }`}
           >
-            All
+            {t('searchResults.all')}
           </button>
           {allTags.map((t) => (
             <button
@@ -64,10 +66,10 @@ export default function SearchResults() {
       )}
 
       {loading ? (
-        <p className="text-text-secondary">Searching...</p>
+        <p className="text-text-secondary">{t('searchResults.searching')}</p>
       ) : results.length === 0 ? (
         <div className="text-center py-16 text-text-secondary">
-          No results found for "{q}"
+          {t('searchResults.noResults', { q })}
         </div>
       ) : (
         <div className="space-y-4">
@@ -88,7 +90,7 @@ export default function SearchResults() {
                 }}
               />
               <div className="text-xs text-text-secondary mt-2">
-                /{r.slug} &middot; {r.view_count} views &middot; {new Date(r.updated_at).toLocaleDateString()}
+                /{r.slug} &middot; {t('common.views', { count: r.view_count })} &middot; {new Date(r.updated_at).toLocaleDateString()}
               </div>
             </Link>
           ))}

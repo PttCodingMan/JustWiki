@@ -100,7 +100,7 @@ Key variables:
 | `SECRET_KEY`    | Session signing key                | `change-me-...`      |
 | `ADMIN_USER`    | Admin username                     | `admin`              |
 | `ADMIN_PASS`    | Admin password                     | `admin`              |
-| `DB_PATH`       | SQLite database path               | `./data/just-wiki.db`|
+| `DB_PATH`       | SQLite database path               | `./backend/data/just-wiki.db`|
 | `AI_ENABLED`    | Enable AI chat                     | `false`              |
 | `AI_API_KEY`    | LLM provider API key (required if enabled) | —            |
 

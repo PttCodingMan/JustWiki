@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import publicApi from '../api/publicClient'
 import MarkdownViewer from '../components/Viewer/MarkdownViewer'
 import ThemeSwitcher from '../components/ThemeSwitcher'
@@ -17,6 +18,7 @@ import useSettings from '../store/useSettings'
  * used as the anonymous branch of the unified /page/:slug route.
  */
 export default function PublicPageView({ notFound }) {
+  const { t } = useTranslation()
   const { slug } = useParams()
   const location = useLocation()
   const loginHref = `/login?redirect=${encodeURIComponent(location.pathname + location.search)}`
@@ -77,7 +79,7 @@ export default function PublicPageView({ notFound }) {
   if (showLoading) {
     return (
       <div className="min-h-screen bg-bg text-text flex items-center justify-center">
-        <div className="text-text-secondary">Loading...</div>
+        <div className="text-text-secondary">{t('publicView.loading')}</div>
       </div>
     )
   }
@@ -94,7 +96,7 @@ export default function PublicPageView({ notFound }) {
             to={loginHref}
             className="text-sm px-3 py-1.5 rounded-md bg-primary text-primary-text hover:bg-primary-hover transition-colors"
           >
-            Login
+            {t('publicView.login')}
           </Link>
         </div>
       </header>
@@ -102,7 +104,7 @@ export default function PublicPageView({ notFound }) {
         <h1 className="text-3xl font-bold text-text mb-2">{page.title}</h1>
         <div className="text-sm text-text-secondary mb-6">
           {page.author_name && <>{page.author_name} &middot; </>}
-          Updated {new Date(page.updated_at).toLocaleString()}
+          {t('publicView.updated', { date: new Date(page.updated_at).toLocaleString() })}
         </div>
         <article className="bg-surface rounded-xl shadow-sm border border-border p-6 sm:p-8">
           <MarkdownViewer
@@ -122,10 +124,11 @@ export default function PublicPageView({ notFound }) {
 }
 
 function PublicNotFound() {
+  const { t } = useTranslation()
   return (
     <div className="min-h-screen bg-bg text-text flex flex-col items-center justify-center">
-      <h1 className="text-2xl font-semibold mb-2">Page not found</h1>
-      <p className="text-text-secondary">This page is not available.</p>
+      <h1 className="text-2xl font-semibold mb-2">{t('publicView.notFoundTitle')}</h1>
+      <p className="text-text-secondary">{t('publicView.notFoundBody')}</p>
     </div>
   )
 }

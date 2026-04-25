@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Minimal confirmation dialog.
@@ -17,12 +18,15 @@ export default function ConfirmDialog({
   open,
   title,
   description,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   onConfirm,
   onCancel,
   variant = 'primary', // "primary" | "danger"
 }) {
+  const { t } = useTranslation()
+  const finalConfirmLabel = confirmLabel ?? t('confirm.confirm')
+  const finalCancelLabel = cancelLabel ?? t('confirm.cancel')
   useEffect(() => {
     if (!open) return
     const handler = (e) => {
@@ -60,13 +64,13 @@ export default function ConfirmDialog({
             onClick={onCancel}
             className="px-4 py-1.5 rounded-lg text-sm text-text border border-border hover:bg-surface-hover"
           >
-            {cancelLabel}
+            {finalCancelLabel}
           </button>
           <button
             onClick={onConfirm}
             className={`px-4 py-1.5 rounded-lg text-sm ${confirmCls}`}
           >
-            {confirmLabel}
+            {finalConfirmLabel}
           </button>
         </div>
       </div>

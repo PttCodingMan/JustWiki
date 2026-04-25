@@ -1,4 +1,5 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Editor as MilkdownEditor, rootCtx, defaultValueCtx, commandsCtx } from '@milkdown/kit/core'
 import { commonmark, headingSchema, blockquoteSchema, hrSchema, bulletListSchema, orderedListSchema, codeBlockSchema, insertImageCommand } from '@milkdown/kit/preset/commonmark'
 import { clearTextInCurrentBlockCommand, setBlockTypeCommand, wrapInBlockTypeCommand, addBlockTypeCommand } from '@milkdown/kit/preset/commonmark'
@@ -13,24 +14,33 @@ import api from '../../api/client'
 import { wikilink } from './wikilink'
 import { math, mathBlockSchema } from './math'
 
-const SLASH_ITEMS = [
-  { id: 'h1', label: 'Heading 1', icon: 'H1', desc: 'Big section heading' },
-  { id: 'h2', label: 'Heading 2', icon: 'H2', desc: 'Medium section heading' },
-  { id: 'h3', label: 'Heading 3', icon: 'H3', desc: 'Small section heading' },
-  { id: 'bullet', label: 'Bullet List', icon: '\u2022', desc: 'Unordered list' },
-  { id: 'ordered', label: 'Ordered List', icon: '1.', desc: 'Numbered list' },
-  { id: 'quote', label: 'Blockquote', icon: '\u275D', desc: 'Quote block' },
-  { id: 'code', label: 'Code Block', icon: '</>', desc: 'Code snippet' },
-  { id: 'hr', label: 'Divider', icon: '\u2014', desc: 'Horizontal rule' },
-  { id: 'callout-info', label: 'Info Callout', icon: '\u2139', desc: ':::info block' },
-  { id: 'callout-warning', label: 'Warning Callout', icon: '\u26A0', desc: ':::warning block' },
-  { id: 'callout-tip', label: 'Tip Callout', icon: '\u2713', desc: ':::tip block' },
-  { id: 'callout-danger', label: 'Danger Callout', icon: '\u2715', desc: ':::danger block' },
-  { id: 'mermaid', label: 'Mermaid Diagram', icon: '\u25C7', desc: 'Insert mermaid chart' },
-  { id: 'math', label: 'Math Formula', icon: '\u03A3', desc: 'KaTeX math block' },
-  { id: 'drawio', label: 'Draw.io Diagram', icon: '\u25A1', desc: 'Insert Draw.io embed' },
-  { id: 'media', label: 'Media Library', icon: '\u{1F5BC}', desc: 'Pick from uploaded files' },
+const SLASH_ITEM_DEFS = [
+  { id: 'h1', icon: 'H1' },
+  { id: 'h2', icon: 'H2' },
+  { id: 'h3', icon: 'H3' },
+  { id: 'bullet', icon: '\u2022' },
+  { id: 'ordered', icon: '1.' },
+  { id: 'quote', icon: '\u275D' },
+  { id: 'code', icon: '</>' },
+  { id: 'hr', icon: '\u2014' },
+  { id: 'callout-info', icon: '\u2139' },
+  { id: 'callout-warning', icon: '\u26A0' },
+  { id: 'callout-tip', icon: '\u2713' },
+  { id: 'callout-danger', icon: '\u2715' },
+  { id: 'mermaid', icon: '\u25C7' },
+  { id: 'math', icon: '\u03A3' },
+  { id: 'drawio', icon: '\u25A1' },
+  { id: 'media', icon: '\u{1F5BC}' },
 ]
+
+function buildSlashItems(t) {
+  return SLASH_ITEM_DEFS.map((d) => ({
+    id: d.id,
+    icon: d.icon,
+    label: t(`slash.items.${d.id}.label`),
+    desc: t(`slash.items.${d.id}.desc`),
+  }))
+}
 
 function executeSlashCommand(ctx, id, view, drawioHandlerRef, mediaHandlerRef) {
   const commands = ctx.get(commandsCtx)
@@ -102,15 +112,16 @@ function executeSlashCommand(ctx, id, view, drawioHandlerRef, mediaHandlerRef) {
 }
 
 class SlashMenuView {
-  constructor(ctx, view, drawioHandlerRef, editorViewRef, mediaHandlerRef) {
+  constructor(ctx, view, drawioHandlerRef, editorViewRef, mediaHandlerRef, items) {
     this.ctx = ctx
     this.view = view
     this.drawioHandlerRef = drawioHandlerRef
     this.mediaHandlerRef = mediaHandlerRef
     this.editorViewRef = editorViewRef
+    this.items = items
     editorViewRef.current = view
     this.selectedIndex = 0
-    this.filteredItems = [...SLASH_ITEMS]
+    this.filteredItems = [...items]
     this.isVisible = false
 
     this.content = document.createElement('div')
@@ -137,7 +148,7 @@ class SlashMenuView {
         if (!currentText.startsWith('/')) return false
 
         const filter = currentText.slice(1).toLowerCase()
-        this.filteredItems = SLASH_ITEMS.filter(
+        this.filteredItems = this.items.filter(
           (item) => item.label.toLowerCase().includes(filter) || item.id.includes(filter)
         )
         this.selectedIndex = 0
@@ -231,7 +242,8 @@ class SlashMenuView {
 // ── Wikilink [[ autocomplete ──
 
 class WikilinkMenu {
-  constructor() {
+  constructor(emptyLabel) {
+    this.emptyLabel = emptyLabel
     this.el = document.createElement('div')
     this.el.className = 'wikilink-menu'
     this.el.style.display = 'none'
@@ -291,7 +303,7 @@ class WikilinkMenu {
     if (this.filtered.length === 0) {
       const empty = document.createElement('div')
       empty.className = 'wikilink-menu-empty'
-      empty.textContent = 'No pages found'
+      empty.textContent = this.emptyLabel
       this.el.appendChild(empty)
       return
     }
@@ -371,12 +383,22 @@ class WikilinkMenu {
 const wikilinkPluginKey = new PluginKey('wikilink-autocomplete')
 
 const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawioOpen, onMediaPickerOpen }, ref) {
+  const { t } = useTranslation()
   const editorRef = useRef(null)
   const containerRef = useRef(null)
   const onChangeRef = useRef(onChange)
   const drawioHandlerRef = useRef(onDrawioOpen)
   const mediaHandlerRef = useRef(onMediaPickerOpen)
   const editorViewRef = useRef(null)
+  // The slash menu and wikilink menu both render plain DOM (not React),
+  // so they cannot read t() from context. Snapshot translated strings into
+  // refs before the editor's init effect runs.
+  const slashItemsRef = useRef(null)
+  const wikilinkEmptyRef = useRef('')
+  useEffect(() => {
+    slashItemsRef.current = buildSlashItems(t)
+    wikilinkEmptyRef.current = t('slash.wikilinkEmpty')
+  }, [t])
 
   useEffect(() => {
     onChangeRef.current = onChange
@@ -407,7 +429,7 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
     const slash = slashFactory('slash-menu')
 
     // Create wikilink plugin per editor instance to avoid stale DOM references
-    const wikilinkMenu = new WikilinkMenu()
+    const wikilinkMenu = new WikilinkMenu(wikilinkEmptyRef.current)
     const wikilinkPlugin = $prose(() => {
       return new Plugin({
         key: wikilinkPluginKey,
@@ -467,7 +489,7 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
           let slashMenuView = null
           ctx.set(slash.key, {
             view: (editorView) => {
-              slashMenuView = new SlashMenuView(ctx, editorView, drawioHandlerRef, editorViewRef, mediaHandlerRef)
+              slashMenuView = new SlashMenuView(ctx, editorView, drawioHandlerRef, editorViewRef, mediaHandlerRef, slashItemsRef.current)
               return slashMenuView
             },
             props: {

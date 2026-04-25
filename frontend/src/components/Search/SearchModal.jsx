@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import DOMPurify from 'dompurify'
 import useSearch from '../../store/useSearch'
 
@@ -9,6 +10,7 @@ import useSearch from '../../store/useSearch'
 const SNIPPET_SANITIZE_CONFIG = { ALLOWED_TAGS: ['mark'], ALLOWED_ATTR: [] }
 
 export default function SearchModal({ isOpen, onClose }) {
+  const { t } = useTranslation()
   const [query, setQuery] = useState('')
   const [selectedIdx, setSelectedIdx] = useState(0)
   const [wasOpen, setWasOpen] = useState(isOpen)
@@ -90,7 +92,7 @@ export default function SearchModal({ isOpen, onClose }) {
             value={query}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
-            placeholder="Search pages..."
+            placeholder={t('searchModal.placeholder')}
             className="w-full px-3 py-4 text-base outline-none bg-transparent text-text"
           />
           <kbd className="text-xs text-text-secondary border border-border rounded px-1.5 py-0.5 shrink-0">ESC</kbd>
@@ -99,10 +101,10 @@ export default function SearchModal({ isOpen, onClose }) {
         {/* Results */}
         <div className="max-h-80 overflow-y-auto">
           {loading && (
-            <div className="px-4 py-6 text-center text-text-secondary text-sm">Searching...</div>
+            <div className="px-4 py-6 text-center text-text-secondary text-sm">{t('searchModal.searching')}</div>
           )}
           {!loading && query && results.length === 0 && (
-            <div className="px-4 py-6 text-center text-text-secondary text-sm">No results found</div>
+            <div className="px-4 py-6 text-center text-text-secondary text-sm">{t('searchModal.noResults')}</div>
           )}
           {!loading && results.map((r, i) => (
             <button
@@ -129,8 +131,8 @@ export default function SearchModal({ isOpen, onClose }) {
         {/* Footer */}
         {results.length > 0 && (
           <div className="px-4 py-2 border-t border-border text-xs text-text-secondary flex gap-3">
-            <span><kbd className="border rounded px-1">↑↓</kbd> navigate</span>
-            <span><kbd className="border rounded px-1">Enter</kbd> open</span>
+            <span><kbd className="border rounded px-1">↑↓</kbd> {t('searchModal.navigate')}</span>
+            <span><kbd className="border rounded px-1">Enter</kbd> {t('searchModal.open')}</span>
           </div>
         )}
       </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import useTheme, { themes } from '../store/useTheme'
 
 function applyThemePreview(themeId) {
@@ -13,6 +14,7 @@ function applyThemePreview(themeId) {
  * without selecting restores the previously saved theme.
  */
 export default function ThemeSwitcher() {
+  const { t } = useTranslation()
   const { theme, setTheme } = useTheme()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -48,8 +50,8 @@ export default function ThemeSwitcher() {
       <button
         onClick={handleOpen}
         className="p-1.5 rounded hover:bg-surface-hover text-text-secondary flex items-center gap-1"
-        title="Change theme"
-        aria-label="Change theme"
+        title={t('theme.change')}
+        aria-label={t('theme.change')}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
           <path d="M12 2a10 10 0 1 0 0 20 2 2 0 0 0 1.4-3.4 2 2 0 0 1 1.4-3.4H18a4 4 0 0 0 4-4 10 10 0 0 0-10-9.2z" />
@@ -63,8 +65,8 @@ export default function ThemeSwitcher() {
           className="absolute right-0 top-full mt-1 bg-surface border border-border rounded-xl shadow-lg p-2 z-50 w-44"
           onMouseLeave={handleLeave}
         >
-          <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider px-2 py-1 mb-1">Theme</div>
-          {Object.entries(themes).map(([id, t]) => (
+          <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider px-2 py-1 mb-1">{t('theme.title')}</div>
+          {Object.entries(themes).map(([id, def]) => (
             <button
               key={id}
               onMouseEnter={() => handleHover(id)}
@@ -76,7 +78,7 @@ export default function ThemeSwitcher() {
               }`}
             >
               <span className="flex gap-0.5 shrink-0">
-                {t.preview.map((c, i) => (
+                {def.preview.map((c, i) => (
                   <span
                     key={i}
                     className="w-3 h-3 rounded-full border border-border"
@@ -84,7 +86,7 @@ export default function ThemeSwitcher() {
                   />
                 ))}
               </span>
-              <span>{t.name}</span>
+              <span>{t(`theme.${id}`, def.name)}</span>
               {theme === id && <span className="ml-auto text-primary text-xs">&#10003;</span>}
             </button>
           ))}

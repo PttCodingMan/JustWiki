@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import DOMPurify from 'dompurify'
 import usePages from '../store/usePages'
 import useAuth from '../store/useAuth'
@@ -14,6 +15,7 @@ import { stripBrTags } from '../lib/markdown'
 import api from '../api/client'
 
 export default function PageEdit() {
+  const { t } = useTranslation()
   const { slug } = useParams()
   const navigate = useNavigate()
   const { getPage, updatePage, fetchTree } = usePages()
@@ -182,22 +184,22 @@ export default function PageEdit() {
         setConflict({
           currentVersion: detail?.current_version,
           yourVersion: detail?.your_version,
-          message: detail?.message || 'This page was modified by someone else.',
+          message: detail?.message || t('pageEdit.conflict.default'),
         })
         setError('')
       } else {
         const detail = err?.response?.data?.detail
-        const msg = typeof detail === 'string' ? detail : detail?.message || err.message || 'Save failed'
+        const msg = typeof detail === 'string' ? detail : detail?.message || err.message || t('pageEdit.saveFailed')
         setError(msg)
       }
       setSaving(false)
     }
-  }, [slug, title, content, saving, navigate, fetchTree, updatePage])
+  }, [slug, title, content, saving, navigate, fetchTree, updatePage, t])
 
   const handleReloadLatest = useCallback(async () => {
     try {
       const latest = await getPage(slug)
-      if (confirm('Discard your changes and load the latest version?')) {
+      if (confirm(t('pageEdit.conflict.confirmDiscard'))) {
         setTitle(latest.title)
         setContent(latest.content_md)
         setOriginal({ title: latest.title, content: latest.content_md })
@@ -207,7 +209,7 @@ export default function PageEdit() {
     } catch (e) {
       console.error('Failed to reload:', e)
     }
-  }, [getPage, slug])
+  }, [getPage, slug, t])
 
   const handleOverwrite = useCallback(async () => {
     // Fetch latest so we can show the user what they're about to lose —
@@ -218,17 +220,16 @@ export default function PageEdit() {
       latest = await getPage(slug)
     } catch (e) {
       console.error('Failed to fetch latest page state:', e)
-      setError('Could not fetch latest server version. Try again.')
+      setError(t('pageEdit.conflict.fetchLatestFailed'))
       return
     }
     const serverContent = latest.content_md || ''
     const localContent = content || ''
     const summary =
       serverContent === localContent
-        ? 'Server content matches yours; only metadata (title or structure) will change.'
-        : `You are about to overwrite ${serverContent.length} chars of server content ` +
-          `with ${localContent.length} chars of your edits.`
-    if (!confirm(`${summary}\n\nContinue and overwrite?`)) return
+        ? t('pageEdit.conflict.summarySame')
+        : t('pageEdit.conflict.summaryDiff', { server: serverContent.length, local: localContent.length })
+    if (!confirm(t('pageEdit.conflict.confirmOverwrite', { summary }))) return
 
     baseVersionRef.current = latest.version
     setConflict(null)
@@ -237,7 +238,7 @@ export default function PageEdit() {
     // lines), handleSave will re-render the conflict banner rather than
     // silently loop here.
     await handleSave()
-  }, [getPage, slug, handleSave, content])
+  }, [getPage, slug, handleSave, content, t])
 
   // Ctrl+S handler
   useEffect(() => {
@@ -251,7 +252,7 @@ export default function PageEdit() {
     return () => window.removeEventListener('keydown', handler)
   }, [handleSave])
 
-  if (!page) return <div className="text-text-secondary">Loading...</div>
+  if (!page) return <div className="text-text-secondary">{t('common.loading')}</div>
 
   return (
     <div className={showPreview ? 'edit-split-root' : 'max-w-4xl mx-auto'}>
@@ -261,13 +262,13 @@ export default function PageEdit() {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           className="text-2xl font-bold text-text bg-transparent border-none outline-none w-full"
-          placeholder="Page title"
+          placeholder={t('pageEdit.titlePlaceholder')}
         />
       </div>
       {page?.is_public && (
         <div className="mb-3 px-3 py-2 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200 rounded-lg text-sm flex items-center gap-2">
           <span role="img" aria-hidden="true">⚠</span>
-          <span>This page is publicly accessible. Any edit will be visible to the world.</span>
+          <span>{t('pageEdit.publicWarning')}</span>
         </div>
       )}
       {error && (
@@ -277,10 +278,13 @@ export default function PageEdit() {
       )}
       {conflict && (
         <div className="mb-3 px-3 py-3 bg-amber-50 text-amber-900 text-sm rounded-lg border border-amber-300">
-          <div className="font-semibold mb-1">⚠ Edit conflict</div>
+          <div className="font-semibold mb-1">{t('pageEdit.conflict.title')}</div>
           <div className="mb-2">
-            {conflict.message} (server version {conflict.currentVersion}, your version {conflict.yourVersion}).
-            Your changes are still here — choose an action:
+            {t('pageEdit.conflict.detail', {
+              message: conflict.message,
+              currentVersion: conflict.currentVersion,
+              yourVersion: conflict.yourVersion,
+            })}
           </div>
           <div className="flex gap-2">
             <button
@@ -288,19 +292,19 @@ export default function PageEdit() {
               onClick={handleReloadLatest}
               className="px-3 py-1 bg-white border border-amber-400 text-amber-900 rounded hover:bg-amber-100"
             >
-              Discard mine & load latest
+              {t('pageEdit.conflict.discardMine')}
             </button>
             <button
               type="button"
               onClick={handleOverwrite}
               className="px-3 py-1 bg-amber-600 text-white rounded hover:bg-amber-700"
             >
-              Overwrite with mine
+              {t('pageEdit.conflict.overwriteMine')}
             </button>
           </div>
         </div>
       )}
-      <div className="text-xs text-text-secondary mb-3">Press Ctrl+S to save &middot; Type / for commands</div>
+      <div className="text-xs text-text-secondary mb-3">{t('pageEdit.shortcutHint')}</div>
 
       <div className={showPreview ? 'edit-split-panels' : ''}>
         {/* Editor panel */}
@@ -319,7 +323,7 @@ export default function PageEdit() {
           {diagramIds.length > 0 && (
             <div className="mt-4">
               <div className="text-sm font-medium text-text-secondary mb-2">
-                Diagrams in this page (click to edit)
+                {t('pageEdit.diagramsLabel')}
               </div>
               <div className="space-y-3">
                 {diagramIds.map(id => (
@@ -335,11 +339,11 @@ export default function PageEdit() {
                       />
                     ) : (
                       <div className="diagram-edit-preview-placeholder">
-                        Loading diagram #{id}...
+                        {t('pageEdit.diagramLoading', { id })}
                       </div>
                     )}
                     <div className="diagram-edit-preview-overlay">
-                      <span>Click to edit in Draw.io</span>
+                      <span>{t('pageEdit.diagramOverlay')}</span>
                     </div>
                   </div>
                 ))}
@@ -353,7 +357,7 @@ export default function PageEdit() {
           <div className="edit-split-preview">
             <div className="bg-surface rounded-xl shadow-sm border border-border min-h-[500px] p-6 overflow-auto">
               <div className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-4 pb-2 border-b border-border">
-                {page?.page_type === 'mindmap' ? 'Mindmap preview' : 'Preview'}
+                {page?.page_type === 'mindmap' ? t('pageEdit.mindmapPreview') : t('pageEdit.preview')}
               </div>
               {page?.page_type === 'mindmap' ? (
                 <MindmapView content={content} title={title} />
@@ -370,7 +374,7 @@ export default function PageEdit() {
         <button
           onClick={() => setShowPreview(v => !v)}
           className={`fab-btn ${showPreview ? 'fab-btn-active' : 'fab-btn-secondary'}`}
-          title={showPreview ? 'Hide preview' : 'Show preview'}
+          title={showPreview ? t('pageEdit.hidePreview') : t('pageEdit.showPreview')}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <rect x="1" y="2" width="6" height="12" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none"/>
@@ -381,14 +385,14 @@ export default function PageEdit() {
           onClick={() => navigate(`/page/${slug}`)}
           className="fab-btn fab-btn-secondary"
         >
-          Cancel
+          {t('pageEdit.cancel')}
         </button>
         <button
           onClick={handleSave}
           disabled={saving}
           className="fab-btn fab-btn-primary"
         >
-          {saving ? 'Saving...' : 'Save'}
+          {saving ? t('pageEdit.saving') : t('pageEdit.save')}
         </button>
       </div>
 

@@ -1,5 +1,9 @@
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
+// Initialize i18n with English so components using useTranslation render
+// real strings under test instead of returning translation keys.
+import i18n from '../i18n'
+i18n.changeLanguage('en')
 
 // Mock localStorage
 const localStorageMock = (() => {

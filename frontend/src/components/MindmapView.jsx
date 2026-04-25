@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { renderMindmap, MindmapParseError } from '../lib/mindmap'
 import { layoutMindmap, LAYOUT } from '../lib/mindmapLayout'
 import useMindmapTheme, { mindmapThemes } from '../store/useMindmapTheme'
@@ -33,6 +34,7 @@ function levelStyle(palette, depth) {
 }
 
 function ThemeDropdown({ value, onChange }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -59,8 +61,8 @@ function ThemeDropdown({ value, onChange }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-2 px-2 py-1 text-xs rounded-lg border border-border bg-surface hover:bg-surface-hover text-text-secondary"
-        title="Mindmap theme"
-        aria-label="Mindmap theme"
+        title={t('mindmap.themeLabel')}
+        aria-label={t('mindmap.themeLabel')}
       >
         <span className="flex gap-0.5">
           {current.preview.map((c, i) => (
@@ -79,7 +81,7 @@ function ThemeDropdown({ value, onChange }) {
       {open && (
         <div className="absolute right-0 top-full mt-1 z-20 bg-surface border border-border rounded-xl shadow-lg p-1.5 min-w-[220px]">
           <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider px-2 py-1">
-            Mindmap theme
+            {t('mindmap.themeLabel')}
           </div>
           {Object.entries(mindmapThemes).map(([id, t]) => (
             <button

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import usePages from '../store/usePages'
 import useAuth from '../store/useAuth'
 import api from '../api/client'
@@ -22,6 +23,7 @@ function findNodeById(nodes, id) {
 }
 
 export default function NewPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { createPage, fetchTree, tree } = usePages()
@@ -144,10 +146,10 @@ export default function NewPage() {
       navigate(`/page/${page.slug}`)
     } catch (err) {
       console.error('Create failed:', err)
-      setError(err?.response?.data?.detail || err.message || 'Create failed')
+      setError(err?.response?.data?.detail || err.message || t('newPage.createFailed'))
       setSaving(false)
     }
-  }, [title, content, saving, selectedTemplate, parentId, parentMissing, pageType, createPage, fetchTree, navigate])
+  }, [title, content, saving, selectedTemplate, parentId, parentMissing, pageType, createPage, fetchTree, navigate, t])
 
   // Ctrl+S
   useEffect(() => {
@@ -167,15 +169,13 @@ export default function NewPage() {
         <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M4.93 19h14.14a2 2 0 001.74-3l-7.07-12a2 2 0 00-3.48 0l-7.07 12a2 2 0 001.74 3z" />
         </svg>
-        <span>
-          Parent page <span className="font-mono">#{parentId}</span> not found — will create as a root page.
-        </span>
+        <span>{t('newPage.parent.missing', { id: parentId })}</span>
         <button
           type="button"
           onClick={() => navigate('/new', { replace: true })}
           className="ml-auto text-yellow-800 hover:text-yellow-900 underline"
         >
-          Dismiss
+          {t('newPage.parent.dismiss')}
         </button>
       </div>
     ) : (
@@ -184,9 +184,9 @@ export default function NewPage() {
           <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h12M4 12h8m-8 6h4M20 10v10m-5-5h10" />
         </svg>
         <span>
-          Sub-page of:{' '}
+          {t('newPage.parent.subPageOf')}{' '}
           <span className="font-medium text-text">
-            {parentNode ? parentNode.title : 'Loading…'}
+            {parentNode ? parentNode.title : t('newPage.parent.loading')}
           </span>
         </span>
         <button
@@ -194,7 +194,7 @@ export default function NewPage() {
           onClick={() => navigate('/new', { replace: true })}
           className="ml-auto text-primary hover:text-primary-hover underline"
         >
-          Remove
+          {t('newPage.parent.remove')}
         </button>
       </div>
     )
@@ -203,7 +203,7 @@ export default function NewPage() {
   if (showTemplates) {
     return (
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-text mb-6">New Page</h1>
+        <h1 className="text-2xl font-bold text-text mb-6">{t('newPage.title')}</h1>
         {parentHint}
 
         <div className="flex gap-2 mb-4">
@@ -216,7 +216,7 @@ export default function NewPage() {
                 : 'bg-surface border border-border text-text-secondary hover:border-primary'
             }`}
           >
-            📄 Document
+            {t('newPage.type.document')}
           </button>
           <button
             type="button"
@@ -227,14 +227,12 @@ export default function NewPage() {
                 : 'bg-surface border border-border text-text-secondary hover:border-primary'
             }`}
           >
-            🧠 Mindmap
+            {t('newPage.type.mindmap')}
           </button>
         </div>
 
         <p className="text-text-secondary mb-4">
-          {pageType === 'mindmap'
-            ? 'Write markdown with headings or bullets — the viewer renders a mindmap.'
-            : 'Start from a template or blank page'}
+          {pageType === 'mindmap' ? t('newPage.intro.mindmap') : t('newPage.intro.document')}
         </p>
         <div className="grid grid-cols-2 gap-3 mb-4">
           <button
@@ -242,10 +240,10 @@ export default function NewPage() {
             className="p-4 bg-surface rounded-xl border-2 border-dashed border-border hover:border-primary text-left transition-colors"
           >
             <div className="font-medium text-text">
-              {pageType === 'mindmap' ? 'Mindmap starter' : 'Blank Page'}
+              {pageType === 'mindmap' ? t('newPage.starter.mindmap') : t('newPage.starter.blank')}
             </div>
             <div className="text-sm text-text-secondary mt-1">
-              {pageType === 'mindmap' ? 'Prefilled with a template outline' : 'Start from scratch'}
+              {pageType === 'mindmap' ? t('newPage.starter.mindmapSub') : t('newPage.starter.blankSub')}
             </div>
           </button>
           {pageType === 'document' && templates.map((tmpl) => (
@@ -272,7 +270,7 @@ export default function NewPage() {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           className="text-2xl font-bold text-text bg-transparent border-none outline-none flex-1 mr-4"
-          placeholder="Page title"
+          placeholder={t('newPage.titlePlaceholder')}
           autoFocus
         />
         <div className="flex gap-2">
@@ -280,14 +278,14 @@ export default function NewPage() {
             onClick={() => navigate('/')}
             className="px-3 py-1.5 text-sm text-text-secondary rounded-lg hover:bg-surface-hover"
           >
-            Cancel
+            {t('newPage.cancel')}
           </button>
           <button
             onClick={handleSave}
             disabled={saving || !title.trim()}
             className="px-3 py-1.5 text-sm bg-primary text-primary-text rounded-lg hover:bg-primary-hover disabled:opacity-50"
           >
-            {saving ? 'Creating...' : 'Create'}
+            {saving ? t('newPage.creating') : t('newPage.create')}
           </button>
         </div>
       </div>
@@ -298,23 +296,23 @@ export default function NewPage() {
       )}
       {selectedTemplate && (
         <div className="flex items-center gap-2 text-xs text-text-secondary mb-3">
-          <span>Template: {selectedTemplate.name}</span>
+          <span>{t('newPage.templateLabel', { name: selectedTemplate.name })}</span>
           <button
             onClick={changeTemplate}
             className="text-primary hover:text-primary-hover underline"
           >
-            Change
+            {t('newPage.change')}
           </button>
         </div>
       )}
       {!selectedTemplate && (
         <div className="flex items-center gap-2 text-xs text-text-secondary mb-3">
-          <span>Blank page</span>
+          <span>{t('newPage.blankPage')}</span>
           <button
             onClick={changeTemplate}
             className="text-primary hover:text-primary-hover underline"
           >
-            Use template
+            {t('newPage.useTemplate')}
           </button>
         </div>
       )}

@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { lazy, Suspense, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import useAuth from './store/useAuth'
 import useTheme from './store/useTheme'
 import useSettings from './store/useSettings'
@@ -37,13 +38,14 @@ import PageOrPublicView from './pages/PageOrPublicView'
  * notification bell unmounting and refetching.
  */
 function AuthGate() {
+  const { t } = useTranslation()
   const { user, loading } = useAuth()
   const location = useLocation()
   const homeSlug = useSettings((s) => s.home_page_slug)
   const settingsLoaded = useSettings((s) => s.loaded)
 
   if (loading || !settingsLoaded) {
-    return <div className="flex items-center justify-center h-screen">Loading...</div>
+    return <div className="flex items-center justify-center h-screen">{t('common.loading')}</div>
   }
 
   if (user) {
@@ -87,6 +89,7 @@ function RoleRoute({ role }) {
 }
 
 export default function App() {
+  const { t } = useTranslation()
   const { checkAuth } = useAuth()
   const initTheme = useTheme((s) => s.init)
   const fetchSettings = useSettings((s) => s.fetch)
@@ -118,7 +121,7 @@ export default function App() {
         <Route
           path="/graph"
           element={
-            <Suspense fallback={<div className="text-text-secondary">Loading graph…</div>}>
+            <Suspense fallback={<div className="text-text-secondary">{t('common.loadingGraph')}</div>}>
               <GraphView />
             </Suspense>
           }
@@ -127,7 +130,7 @@ export default function App() {
           <Route
             path="/admin"
             element={
-              <Suspense fallback={<div className="text-text-secondary">Loading admin…</div>}>
+              <Suspense fallback={<div className="text-text-secondary">{t('common.loadingAdmin')}</div>}>
                 <Admin />
               </Suspense>
             }

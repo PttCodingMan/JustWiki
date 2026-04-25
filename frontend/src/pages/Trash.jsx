@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import useAuth from '../store/useAuth'
 import usePages from '../store/usePages'
 
 export default function Trash() {
+  const { t } = useTranslation()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -20,11 +22,11 @@ export default function Trash() {
       const res = await api.get('/trash')
       setItems(res.data.items || [])
     } catch (err) {
-      setError(err?.response?.data?.detail || err.message || 'Failed to load trash')
+      setError(err?.response?.data?.detail || err.message || t('trash.failedLoad'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => { load() }, [load])
 
@@ -35,20 +37,20 @@ export default function Trash() {
       await fetchTree()
       await load()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Restore failed')
+      setError(err?.response?.data?.detail || t('trash.restoreFailed'))
     } finally {
       setBusySlug(null)
     }
   }
 
   const handlePurge = async (slug, title) => {
-    if (!confirm(`Permanently delete "${title}"? This cannot be undone.`)) return
+    if (!confirm(t('trash.confirmPurge', { title }))) return
     setBusySlug(slug)
     try {
       await api.delete(`/trash/${slug}`)
       await load()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Purge failed')
+      setError(err?.response?.data?.detail || t('trash.purgeFailed'))
     } finally {
       setBusySlug(null)
     }
@@ -57,20 +59,18 @@ export default function Trash() {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold text-text">Trash</h1>
+        <h1 className="text-2xl font-bold text-text">{t('trash.title')}</h1>
         <button
           onClick={() => navigate(-1)}
           className="text-sm text-text-secondary hover:text-text"
         >
-          ← Back
+          {t('trash.back')}
         </button>
       </div>
 
       <p className="text-sm text-text-secondary mb-6">
-        Deleted pages are kept here so you can restore them if needed.
-        {user?.role === 'admin'
-          ? ' As an admin you can permanently purge any trashed page.'
-          : ' Only the original creator (or an admin) can restore a trashed page.'}
+        {t('trash.intro')}
+        {user?.role === 'admin' ? t('trash.introAdmin') : t('trash.introOthers')}
       </p>
 
       {error && (
@@ -80,21 +80,21 @@ export default function Trash() {
       )}
 
       {loading ? (
-        <div className="text-text-secondary">Loading...</div>
+        <div className="text-text-secondary">{t('common.loading')}</div>
       ) : items.length === 0 ? (
         <div className="text-center py-12 text-text-secondary bg-surface rounded-xl border border-border">
           <div className="text-4xl mb-2">🗑</div>
-          <div>Trash is empty</div>
+          <div>{t('trash.empty')}</div>
         </div>
       ) : (
         <div className="bg-surface rounded-xl shadow-sm border border-border overflow-hidden">
           <table className="w-full">
             <thead className="border-b border-border bg-surface-hover">
               <tr className="text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">
-                <th className="px-4 py-3">Title</th>
-                <th className="px-4 py-3">Author</th>
-                <th className="px-4 py-3">Deleted</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th className="px-4 py-3">{t('trash.col.title')}</th>
+                <th className="px-4 py-3">{t('trash.col.author')}</th>
+                <th className="px-4 py-3">{t('trash.col.deleted')}</th>
+                <th className="px-4 py-3 text-right">{t('trash.col.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -116,7 +116,7 @@ export default function Trash() {
                       disabled={busySlug === item.slug}
                       className="text-sm text-primary hover:underline mr-3 disabled:opacity-50"
                     >
-                      Restore
+                      {t('trash.restore')}
                     </button>
                     {user?.role === 'admin' && (
                       <button
@@ -124,7 +124,7 @@ export default function Trash() {
                         disabled={busySlug === item.slug}
                         className="text-sm text-red-600 hover:underline disabled:opacity-50"
                       >
-                        Delete forever
+                        {t('trash.deleteForever')}
                       </button>
                     )}
                   </td>

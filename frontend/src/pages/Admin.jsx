@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import useAuth from '../store/useAuth'
 import useGroups from '../store/useGroups'
 import useSettings from '../store/useSettings'
@@ -14,6 +15,7 @@ function formatBytes(bytes) {
 }
 
 function SiteSettingsSection() {
+  const { t } = useTranslation()
   const settings = useSettings()
   const updateSettings = useSettings((s) => s.update)
   const [form, setForm] = useState({
@@ -42,9 +44,9 @@ function SiteSettingsSection() {
     setMessage(null)
     try {
       await updateSettings(form)
-      setMessage({ type: 'success', text: 'Settings saved.' })
+      setMessage({ type: 'success', text: t('admin.site.saveSuccess') })
     } catch (err) {
-      setMessage({ type: 'error', text: err?.response?.data?.detail || 'Failed to save settings' })
+      setMessage({ type: 'error', text: err?.response?.data?.detail || t('admin.site.saveFailed') })
     } finally {
       setSaving(false)
     }
@@ -54,70 +56,70 @@ function SiteSettingsSection() {
 
   return (
     <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
-      <h2 className="text-lg font-semibold text-text mb-1">Site Settings</h2>
+      <h2 className="text-lg font-semibold text-text mb-1">{t('admin.site.title')}</h2>
       <p className="text-sm text-text-secondary mb-4">
-        Brand the wiki with your team's name and pin a page as the homepage. Leave a field blank to restore the built-in default.
+        {t('admin.site.intro')}
       </p>
       <form onSubmit={handleSave} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-text mb-1">Site name</label>
+          <label className="block text-sm font-medium text-text mb-1">{t('admin.site.siteName')}</label>
           <input
             type="text"
             value={form.site_name}
             onChange={field('site_name')}
-            placeholder="JustWiki"
+            placeholder={t('admin.site.siteNamePlaceholder')}
             maxLength={80}
             className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
           />
-          <p className="text-xs text-text-secondary mt-1">Shown in the top-left brand and the browser tab.</p>
+          <p className="text-xs text-text-secondary mt-1">{t('admin.site.siteNameHint')}</p>
         </div>
         <div>
-          <label className="block text-sm font-medium text-text mb-1">Home page slug</label>
+          <label className="block text-sm font-medium text-text mb-1">{t('admin.site.homeSlug')}</label>
           <input
             type="text"
             value={form.home_page_slug}
             onChange={field('home_page_slug')}
-            placeholder="welcome"
+            placeholder={t('admin.site.homeSlugPlaceholder')}
             maxLength={200}
             className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
           />
-          <p className="text-xs text-text-secondary mt-1">Visiting <code>/</code> redirects to this page. Leave empty to show the page list.</p>
+          <p className="text-xs text-text-secondary mt-1">{t('admin.site.homeSlugHintBefore')} <code>/</code> {t('admin.site.homeSlugHintAfter')}</p>
         </div>
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-text mb-1">Login title</label>
+            <label className="block text-sm font-medium text-text mb-1">{t('admin.site.loginTitle')}</label>
             <input
               type="text"
               value={form.login_title}
               onChange={field('login_title')}
-              placeholder="JustWiki"
+              placeholder={t('admin.site.siteNamePlaceholder')}
               maxLength={80}
               className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-text mb-1">Login subtitle</label>
+            <label className="block text-sm font-medium text-text mb-1">{t('admin.site.loginSubtitle')}</label>
             <input
               type="text"
               value={form.login_subtitle}
               onChange={field('login_subtitle')}
-              placeholder="Just clone, run, and write."
+              placeholder={t('admin.site.loginSubtitlePlaceholder')}
               maxLength={200}
               className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
             />
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-text mb-1">Public footer text</label>
+          <label className="block text-sm font-medium text-text mb-1">{t('admin.site.footer')}</label>
           <input
             type="text"
             value={form.footer_text}
             onChange={field('footer_text')}
-            placeholder="Powered by JustWiki"
+            placeholder={t('admin.site.footerPlaceholder')}
             maxLength={200}
             className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
           />
-          <p className="text-xs text-text-secondary mt-1">Footer on the anonymous public page viewer.</p>
+          <p className="text-xs text-text-secondary mt-1">{t('admin.site.footerHint')}</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -125,7 +127,7 @@ function SiteSettingsSection() {
             disabled={saving}
             className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover disabled:opacity-50"
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? t('admin.site.saving') : t('admin.site.save')}
           </button>
           {message && (
             <span className={message.type === 'success' ? 'text-sm text-green-600' : 'text-sm text-red-600'}>
@@ -139,6 +141,7 @@ function SiteSettingsSection() {
 }
 
 function BackupSection() {
+  const { t } = useTranslation()
   const [restoring, setRestoring] = useState(false)
   const [message, setMessage] = useState(null)
   const fileRef = useRef(null)
@@ -150,7 +153,7 @@ function BackupSection() {
   const handleRestore = async () => {
     const file = fileRef.current?.files?.[0]
     if (!file) return
-    if (!confirm('This will replace all data. Are you sure?')) return
+    if (!confirm(t('admin.backup.confirmReplace'))) return
 
     setRestoring(true)
     setMessage(null)
@@ -158,10 +161,10 @@ function BackupSection() {
       const formData = new FormData()
       formData.append('file', file)
       await api.post('/backup/restore', formData)
-      setMessage({ type: 'success', text: 'Backup restored successfully. Reloading...' })
+      setMessage({ type: 'success', text: t('admin.backup.restoreSuccess') })
       setTimeout(() => window.location.reload(), 1500)
     } catch (err) {
-      setMessage({ type: 'error', text: err?.response?.data?.detail || 'Restore failed' })
+      setMessage({ type: 'error', text: err?.response?.data?.detail || t('admin.backup.restoreFailed') })
     } finally {
       setRestoring(false)
     }
@@ -169,22 +172,22 @@ function BackupSection() {
 
   return (
     <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
-      <h2 className="text-lg font-semibold text-text mb-4">Backup & Restore</h2>
+      <h2 className="text-lg font-semibold text-text mb-4">{t('admin.backup.title')}</h2>
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1">
-          <h3 className="text-sm font-medium text-text mb-2">Download Backup</h3>
-          <p className="text-sm text-text-secondary mb-3">Download a .zip file containing the database and all media files.</p>
+          <h3 className="text-sm font-medium text-text mb-2">{t('admin.backup.downloadTitle')}</h3>
+          <p className="text-sm text-text-secondary mb-3">{t('admin.backup.downloadHint')}</p>
           <button onClick={handleBackup} className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover">
-            Download Backup
+            {t('admin.backup.downloadBtn')}
           </button>
         </div>
         <div className="flex-1">
-          <h3 className="text-sm font-medium text-text mb-2">Restore from Backup</h3>
-          <p className="text-sm text-text-secondary mb-3">Upload a .zip backup to restore data. This replaces all current data.</p>
+          <h3 className="text-sm font-medium text-text mb-2">{t('admin.backup.restoreTitle')}</h3>
+          <p className="text-sm text-text-secondary mb-3">{t('admin.backup.restoreHint')}</p>
           <div className="flex items-center gap-2">
             <input ref={fileRef} type="file" accept=".zip" className="text-sm" />
             <button onClick={handleRestore} disabled={restoring} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50">
-              {restoring ? 'Restoring...' : 'Restore'}
+              {restoring ? t('admin.backup.restoring') : t('admin.backup.restoreBtn')}
             </button>
           </div>
         </div>
@@ -199,21 +202,23 @@ function BackupSection() {
 }
 
 function ExportSection() {
+  const { t } = useTranslation()
   return (
     <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
-      <h2 className="text-lg font-semibold text-text mb-4">Site Export</h2>
-      <p className="text-sm text-text-secondary mb-3">Export the entire wiki as a static HTML website.</p>
+      <h2 className="text-lg font-semibold text-text mb-4">{t('admin.export.title')}</h2>
+      <p className="text-sm text-text-secondary mb-3">{t('admin.export.intro')}</p>
       <button
         onClick={() => window.open('/api/export/site?format=html', '_blank')}
         className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover"
       >
-        Export Static Site (.zip)
+        {t('admin.export.btn')}
       </button>
     </div>
   )
 }
 
 function UsersSection() {
+  const { t } = useTranslation()
   const [tab, setTab] = useState('active')
   const [users, setUsers] = useState([])
   const [deletedUsers, setDeletedUsers] = useState([])
@@ -260,7 +265,7 @@ function UsersSection() {
       setShowCreate(false)
       loadUsers()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to create user')
+      setError(err?.response?.data?.detail || t('admin.users.createFailed'))
     }
   }
 
@@ -273,17 +278,12 @@ function UsersSection() {
       setShowInvite(false)
       loadUsers()
     } catch (err) {
-      setInviteError(err?.response?.data?.detail || 'Failed to invite user')
+      setInviteError(err?.response?.data?.detail || t('admin.users.inviteFailed'))
     }
   }
 
   const handleDelete = async (u) => {
-    const label = u.username
-    if (!confirm(
-      `Delete user "${label}"?\n\nThis is a soft-delete — the account is deactivated, ` +
-      `the username "${label}" is freed for reuse, and pages they authored keep their ` +
-      `authorship. You can restore the account from the Deleted tab.`
-    )) return
+    if (!confirm(t('admin.users.confirmDelete', { username: u.username }))) return
     try {
       await api.delete(`/users/${u.id}`)
       loadUsers()
@@ -291,7 +291,7 @@ function UsersSection() {
       // so switching tabs later shows the fresh row without a flash.
       loadDeleted()
     } catch (err) {
-      alert(err?.response?.data?.detail || 'Failed to delete user')
+      alert(err?.response?.data?.detail || t('admin.users.deleteFailed'))
     }
   }
 
@@ -300,7 +300,7 @@ function UsersSection() {
       await api.put(`/users/${userId}`, { role: newRole })
       loadUsers()
     } catch (err) {
-      alert(err?.response?.data?.detail || 'Failed to update role')
+      alert(err?.response?.data?.detail || t('admin.users.roleUpdateFailed'))
     }
   }
 
@@ -313,10 +313,9 @@ function UsersSection() {
       await Promise.all([loadUsers(), loadDeleted()])
     } catch (err) {
       if (err?.response?.status === 409) {
-        const suggestion = `${u.original_username || 'user'}-restored`
+        const suggestion = t('admin.users.restoreSuggestion', { username: u.original_username || 'user' })
         const alternative = prompt(
-          `Username "${u.original_username}" is already in use. ` +
-          `Enter a different username to restore the account under:`,
+          t('admin.users.restorePrompt', { username: u.original_username }),
           suggestion,
         )
         if (!alternative || !alternative.trim()) {
@@ -327,10 +326,10 @@ function UsersSection() {
           await api.post(`/users/${u.id}/restore`, { username: alternative.trim() })
           await Promise.all([loadUsers(), loadDeleted()])
         } catch (inner) {
-          alert(inner?.response?.data?.detail || 'Restore failed')
+          alert(inner?.response?.data?.detail || t('admin.users.restoreFailed'))
         }
       } else {
-        alert(err?.response?.data?.detail || 'Restore failed')
+        alert(err?.response?.data?.detail || t('admin.users.restoreFailed'))
       }
     } finally {
       setBusyId(null)
@@ -347,28 +346,28 @@ function UsersSection() {
   return (
     <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-        <h2 className="text-lg font-semibold text-text">Users</h2>
+        <h2 className="text-lg font-semibold text-text">{t('admin.users.title')}</h2>
         <div className="flex items-center gap-2 flex-wrap">
           <button type="button" onClick={() => setTab('active')} className={tabClass('active')}>
-            Active {users.length > 0 && <span className="text-xs opacity-70">({users.length})</span>}
+            {t('admin.users.tabActive')} {users.length > 0 && <span className="text-xs opacity-70">({users.length})</span>}
           </button>
           <button type="button" onClick={() => setTab('deleted')} className={tabClass('deleted')}>
-            Deleted {deletedUsers.length > 0 && <span className="text-xs opacity-70">({deletedUsers.length})</span>}
+            {t('admin.users.tabDeleted')} {deletedUsers.length > 0 && <span className="text-xs opacity-70">({deletedUsers.length})</span>}
           </button>
           {tab === 'active' && (
             <>
               <button
                 onClick={() => { setShowInvite(!showInvite); setShowCreate(false) }}
                 className="px-3 py-1.5 bg-surface-hover border border-border text-text rounded-lg text-sm hover:bg-surface-active"
-                title="Pre-provision an SSO user by email — they sign in via OIDC."
+                title={t('admin.users.inviteSsoTitle')}
               >
-                Invite (SSO)
+                {t('admin.users.inviteSso')}
               </button>
               <button
                 onClick={() => { setShowCreate(!showCreate); setShowInvite(false) }}
                 className="px-3 py-1.5 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover"
               >
-                + Add User
+                {t('admin.users.addUser')}
               </button>
             </>
           )}
@@ -378,12 +377,12 @@ function UsersSection() {
       {tab === 'active' && showInvite && (
         <form onSubmit={handleInvite} className="mb-4 p-4 bg-surface-hover rounded-lg border border-border">
           <p className="text-xs text-text-secondary mb-2">
-            Invite by email. The user signs in via SSO (Google / GitHub / Company SSO) and gets matched to this account by email.
+            {t('admin.users.inviteIntro')}
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <input
               type="email"
-              placeholder="Email"
+              placeholder={t('admin.users.emailPlaceholder')}
               value={inviteForm.email}
               onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
               required
@@ -391,7 +390,7 @@ function UsersSection() {
             />
             <input
               type="text"
-              placeholder="Display name (optional)"
+              placeholder={t('admin.users.displayNamePlaceholder')}
               value={inviteForm.display_name}
               onChange={(e) => setInviteForm({ ...inviteForm, display_name: e.target.value })}
               className="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
@@ -401,12 +400,12 @@ function UsersSection() {
               onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value })}
               className="px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
             >
-              <option value="editor">Editor</option>
-              <option value="viewer">Viewer</option>
-              <option value="admin">Admin</option>
+              <option value="editor">{t('admin.users.role.editor')}</option>
+              <option value="viewer">{t('admin.users.role.viewer')}</option>
+              <option value="admin">{t('admin.users.role.admin')}</option>
             </select>
             <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
-              Invite
+              {t('admin.users.inviteBtn')}
             </button>
           </div>
           {inviteError && <p className="mt-2 text-sm text-red-600">{inviteError}</p>}
@@ -418,7 +417,7 @@ function UsersSection() {
           <div className="flex flex-col sm:flex-row gap-3">
             <input
               type="text"
-              placeholder="Username"
+              placeholder={t('admin.users.usernamePlaceholder')}
               value={form.username}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
               required
@@ -426,7 +425,7 @@ function UsersSection() {
             />
             <input
               type="password"
-              placeholder="Password"
+              placeholder={t('admin.users.passwordPlaceholder')}
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
               required
@@ -437,12 +436,12 @@ function UsersSection() {
               onChange={(e) => setForm({ ...form, role: e.target.value })}
               className="px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
             >
-              <option value="editor">Editor</option>
-              <option value="viewer">Viewer</option>
-              <option value="admin">Admin</option>
+              <option value="editor">{t('admin.users.role.editor')}</option>
+              <option value="viewer">{t('admin.users.role.viewer')}</option>
+              <option value="admin">{t('admin.users.role.admin')}</option>
             </select>
             <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
-              Create
+              {t('admin.users.create')}
             </button>
           </div>
           {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
@@ -454,10 +453,10 @@ function UsersSection() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left py-2 px-3 text-text-secondary font-medium">Username</th>
-                <th className="text-left py-2 px-3 text-text-secondary font-medium">Role</th>
-                <th className="text-left py-2 px-3 text-text-secondary font-medium">Created</th>
-                <th className="text-right py-2 px-3 text-text-secondary font-medium">Actions</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.users.col.username')}</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.users.col.role')}</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.users.col.created')}</th>
+                <th className="text-right py-2 px-3 text-text-secondary font-medium">{t('admin.users.col.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -470,15 +469,15 @@ function UsersSection() {
                       onChange={(e) => handleRoleChange(u.id, e.target.value)}
                       className="text-sm px-2 py-1 border border-border rounded bg-surface text-text"
                     >
-                      <option value="editor">Editor</option>
-                      <option value="viewer">Viewer</option>
-                      <option value="admin">Admin</option>
+                      <option value="editor">{t('admin.users.role.editor')}</option>
+                      <option value="viewer">{t('admin.users.role.viewer')}</option>
+                      <option value="admin">{t('admin.users.role.admin')}</option>
                     </select>
                   </td>
                   <td className="py-2 px-3 text-text-secondary">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '-'}</td>
                   <td className="py-2 px-3 text-right">
                     <button onClick={() => handleDelete(u)} className="text-red-500 hover:text-red-700 text-sm">
-                      Delete
+                      {t('admin.users.delete')}
                     </button>
                   </td>
                 </tr>
@@ -491,24 +490,24 @@ function UsersSection() {
       {tab === 'deleted' && (
         deletedUsers.length === 0 ? (
           <div className="text-center py-8 text-text-secondary">
-            No deleted users.
+            {t('admin.users.emptyDeleted')}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-left py-2 px-3 text-text-secondary font-medium">Original username</th>
-                  <th className="text-left py-2 px-3 text-text-secondary font-medium">Display name</th>
-                  <th className="text-left py-2 px-3 text-text-secondary font-medium">Role</th>
-                  <th className="text-left py-2 px-3 text-text-secondary font-medium">Deleted</th>
-                  <th className="text-right py-2 px-3 text-text-secondary font-medium">Actions</th>
+                  <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.users.col.originalUsername')}</th>
+                  <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.users.col.displayName')}</th>
+                  <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.users.col.role')}</th>
+                  <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.users.col.deleted')}</th>
+                  <th className="text-right py-2 px-3 text-text-secondary font-medium">{t('admin.users.col.actions')}</th>
                 </tr>
               </thead>
               <tbody>
                 {deletedUsers.map((u) => (
                   <tr key={u.id} className="border-b border-border">
-                    <td className="py-2 px-3 text-text">{u.original_username || `user #${u.id}`}</td>
+                    <td className="py-2 px-3 text-text">{u.original_username || t('admin.users.userNumber', { id: u.id })}</td>
                     <td className="py-2 px-3 text-text-secondary">{u.display_name || '—'}</td>
                     <td className="py-2 px-3 text-text-secondary">{u.role}</td>
                     <td className="py-2 px-3 text-text-secondary">
@@ -520,7 +519,7 @@ function UsersSection() {
                         disabled={busyId === u.id}
                         className="text-sm text-primary hover:underline disabled:opacity-50"
                       >
-                        {busyId === u.id ? 'Restoring…' : 'Restore'}
+                        {busyId === u.id ? t('admin.users.restoring') : t('admin.users.restore')}
                       </button>
                     </td>
                   </tr>
@@ -535,6 +534,7 @@ function UsersSection() {
 }
 
 function GroupsSection() {
+  const { t } = useTranslation()
   const { groups, fetchGroups, createGroup, deleteGroup, membersByGroup, fetchMembers, addMember, removeMember } = useGroups()
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({ name: '', description: '' })
@@ -556,16 +556,16 @@ function GroupsSection() {
       setForm({ name: '', description: '' })
       setShowCreate(false)
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to create group')
+      setError(err?.response?.data?.detail || t('admin.groups.createFailed'))
     }
   }
 
   const handleDelete = async (group) => {
-    if (!confirm(`Delete group "${group.name}"? Any page ACL entries referencing it will be removed.`)) return
+    if (!confirm(t('admin.groups.confirmDelete', { name: group.name }))) return
     try {
       await deleteGroup(group.id)
     } catch (err) {
-      alert(err?.response?.data?.detail || 'Failed to delete group')
+      alert(err?.response?.data?.detail || t('admin.groups.deleteFailed'))
     }
   }
 
@@ -599,7 +599,7 @@ function GroupsSection() {
     try {
       await addMember(groupId, userId)
     } catch (err) {
-      alert(err?.response?.data?.detail || 'Failed to add member')
+      alert(err?.response?.data?.detail || t('admin.groups.addFailed'))
     }
   }
 
@@ -607,19 +607,19 @@ function GroupsSection() {
     try {
       await removeMember(groupId, userId)
     } catch (err) {
-      alert(err?.response?.data?.detail || 'Failed to remove member')
+      alert(err?.response?.data?.detail || t('admin.groups.removeFailed'))
     }
   }
 
   return (
     <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-text">Groups</h2>
+        <h2 className="text-lg font-semibold text-text">{t('admin.groups.title')}</h2>
         <button
           onClick={() => setShowCreate(!showCreate)}
           className="px-3 py-1.5 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover"
         >
-          + New Group
+          {t('admin.groups.newGroup')}
         </button>
       </div>
 
@@ -628,7 +628,7 @@ function GroupsSection() {
           <div className="flex flex-col sm:flex-row gap-3">
             <input
               type="text"
-              placeholder="Group name"
+              placeholder={t('admin.groups.namePlaceholder')}
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
@@ -636,13 +636,13 @@ function GroupsSection() {
             />
             <input
               type="text"
-              placeholder="Description (optional)"
+              placeholder={t('admin.groups.descriptionPlaceholder')}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               className="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
             />
             <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
-              Create
+              {t('admin.groups.create')}
             </button>
           </div>
           {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
@@ -650,7 +650,7 @@ function GroupsSection() {
       )}
 
       {groups.length === 0 ? (
-        <p className="text-sm text-text-secondary">No groups yet.</p>
+        <p className="text-sm text-text-secondary">{t('admin.groups.empty')}</p>
       ) : (
         <div className="space-y-2">
           {groups.map((g) => {
@@ -664,22 +664,22 @@ function GroupsSection() {
                     className="flex-1 text-left text-sm text-text flex items-center gap-2"
                   >
                     <span className="font-medium">{g.name}</span>
-                    <span className="text-text-secondary">· {g.member_count} {g.member_count === 1 ? 'member' : 'members'}</span>
+                    <span className="text-text-secondary">· {t('admin.groups.members', { count: g.member_count })}</span>
                     {g.description && <span className="text-text-secondary italic">— {g.description}</span>}
                   </button>
                   <button
                     onClick={() => handleDelete(g)}
                     className="text-sm text-red-500 hover:text-red-700"
                   >
-                    Delete
+                    {t('admin.groups.delete')}
                   </button>
                 </div>
                 {isOpen && (
                   <div className="px-4 py-3 space-y-3">
                     <div>
-                      <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">Members</div>
+                      <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">{t('admin.groups.membersHeading')}</div>
                       {members.length === 0 ? (
-                        <p className="text-sm text-text-secondary">No members yet.</p>
+                        <p className="text-sm text-text-secondary">{t('admin.groups.noMembers')}</p>
                       ) : (
                         <ul className="space-y-1">
                           {members.map((m) => (
@@ -692,7 +692,7 @@ function GroupsSection() {
                                 onClick={() => handleRemove(g.id, m.id)}
                                 className="text-xs text-red-500 hover:text-red-700"
                               >
-                                Remove
+                                {t('admin.groups.remove')}
                               </button>
                             </li>
                           ))}
@@ -700,10 +700,10 @@ function GroupsSection() {
                       )}
                     </div>
                     <div>
-                      <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">Add member</div>
+                      <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">{t('admin.groups.addMember')}</div>
                       <input
                         type="text"
-                        placeholder="Search users..."
+                        placeholder={t('admin.groups.searchUsers')}
                         value={activeGroupId === g.id ? userSearchTerm : ''}
                         onFocus={() => { setActiveGroupId(g.id); setUserResults([]) }}
                         onChange={(e) => runUserSearch(e.target.value)}
@@ -725,7 +725,7 @@ function GroupsSection() {
                                   onClick={() => handleAdd(g.id, u.id)}
                                   className="text-xs text-primary disabled:text-text-secondary"
                                 >
-                                  {alreadyMember ? 'Already a member' : 'Add'}
+                                  {alreadyMember ? t('admin.groups.alreadyMember') : t('admin.groups.add')}
                                 </button>
                               </li>
                             )
@@ -746,6 +746,7 @@ function GroupsSection() {
 
 
 function MediaLibraryPanel() {
+  const { t } = useTranslation()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -759,7 +760,7 @@ function MediaLibraryPanel() {
       const res = await api.get('/media')
       setItems(Array.isArray(res.data) ? res.data : [])
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to load media')
+      setError(err?.response?.data?.detail || t('admin.media.failedLoad'))
     } finally {
       setLoading(false)
     }
@@ -771,12 +772,12 @@ function MediaLibraryPanel() {
 
   const handleDelete = async (item) => {
     if (item.reference_count > 0) return
-    if (!confirm(`Delete "${item.original_name}"? This cannot be undone.`)) return
+    if (!confirm(t('admin.media.confirmDelete', { name: item.original_name }))) return
     try {
       await api.delete(`/media/${item.id}`)
       setItems((prev) => prev.filter((m) => m.id !== item.id))
     } catch (err) {
-      alert(err?.response?.data?.detail || 'Failed to delete media')
+      alert(err?.response?.data?.detail || t('admin.media.deleteFailed'))
     }
   }
 
@@ -799,7 +800,7 @@ function MediaLibraryPanel() {
       setCopied(item.id)
       setTimeout(() => setCopied((c) => (c === item.id ? null : c)), 1500)
     } catch {
-      alert(`Copy failed. Markdown:\n${snippet}`)
+      alert(t('admin.media.copyFailed', { snippet }))
     }
   }
 
@@ -810,21 +811,21 @@ function MediaLibraryPanel() {
     <>
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-text-secondary">
-          {items.length} files · {formatBytes(totalSize)} total · {unused} unused
+          {t('admin.media.summary', { count: items.length, size: formatBytes(totalSize), unused })}
         </p>
         <button
           onClick={loadMedia}
           className="px-3 py-1.5 bg-surface-hover border border-border text-text rounded-lg text-sm hover:bg-surface-active"
         >
-          Refresh
+          {t('admin.media.refresh')}
         </button>
       </div>
 
-      {loading && <p className="text-sm text-text-secondary">Loading...</p>}
+      {loading && <p className="text-sm text-text-secondary">{t('common.loading')}</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {!loading && !error && items.length === 0 && (
-        <p className="text-sm text-text-secondary">No uploaded media yet.</p>
+        <p className="text-sm text-text-secondary">{t('admin.media.empty')}</p>
       )}
 
       {!loading && !error && items.length > 0 && (
@@ -832,12 +833,12 @@ function MediaLibraryPanel() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left py-2 px-3 text-text-secondary font-medium">Preview</th>
-                <th className="text-left py-2 px-3 text-text-secondary font-medium">File</th>
-                <th className="text-left py-2 px-3 text-text-secondary font-medium">Size</th>
-                <th className="text-left py-2 px-3 text-text-secondary font-medium">Used by</th>
-                <th className="text-left py-2 px-3 text-text-secondary font-medium">Uploaded</th>
-                <th className="text-right py-2 px-3 text-text-secondary font-medium">Actions</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.media.col.preview')}</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.media.col.file')}</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.media.col.size')}</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.media.col.usedBy')}</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.media.col.uploaded')}</th>
+                <th className="text-right py-2 px-3 text-text-secondary font-medium">{t('admin.media.col.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -855,7 +856,7 @@ function MediaLibraryPanel() {
                           </a>
                         ) : (
                           <a href={item.url} target="_blank" rel="noreferrer" className="text-text-secondary text-xs">
-                            {item.mime_type || 'file'}
+                            {item.mime_type || t('admin.media.fileFallback')}
                           </a>
                         )}
                       </td>
@@ -870,10 +871,10 @@ function MediaLibraryPanel() {
                             onClick={() => toggleExpanded(item.id)}
                             className="text-primary hover:underline"
                           >
-                            {item.reference_count} page{item.reference_count === 1 ? '' : 's'}
+                            {t('admin.media.pages', { count: item.reference_count })}
                           </button>
                         ) : (
-                          <span className="text-text-secondary">unused</span>
+                          <span className="text-text-secondary">{t('admin.media.unused')}</span>
                         )}
                       </td>
                       <td className="py-2 px-3 text-text-secondary">
@@ -884,24 +885,24 @@ function MediaLibraryPanel() {
                         <button
                           onClick={() => copyMarkdown(item)}
                           className="text-text-secondary hover:text-text text-sm mr-3"
-                          title="Copy markdown snippet to paste elsewhere"
+                          title={t('admin.media.copyTitle')}
                         >
-                          {copied === item.id ? 'Copied!' : 'Copy'}
+                          {copied === item.id ? t('admin.media.copied') : t('admin.media.copy')}
                         </button>
                         <button
                           onClick={() => handleDelete(item)}
                           disabled={hasRefs}
                           className="text-red-500 hover:text-red-700 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                          title={hasRefs ? 'Cannot delete — media is referenced by a live page' : 'Delete media'}
+                          title={hasRefs ? t('admin.media.deleteRefsTip') : t('admin.media.deleteTip')}
                         >
-                          Delete
+                          {t('admin.media.delete')}
                         </button>
                       </td>
                     </tr>
                     {isExpanded && hasRefs && (
                       <tr className="border-b border-border bg-surface-hover">
                         <td colSpan={6} className="py-2 px-3">
-                          <div className="text-xs text-text-secondary mb-1">Referenced by:</div>
+                          <div className="text-xs text-text-secondary mb-1">{t('admin.media.referencedBy')}</div>
                           <ul className="flex flex-wrap gap-2">
                             {item.referenced_pages.map((p) => (
                               <li key={p.id}>
@@ -929,6 +930,7 @@ function MediaLibraryPanel() {
 }
 
 function DiagramsLibraryPanel() {
+  const { t } = useTranslation()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -943,7 +945,7 @@ function DiagramsLibraryPanel() {
       const res = await api.get('/diagrams')
       setItems(Array.isArray(res.data) ? res.data : [])
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to load diagrams')
+      setError(err?.response?.data?.detail || t('admin.diagrams.failedLoad'))
     } finally {
       setLoading(false)
     }
@@ -955,12 +957,12 @@ function DiagramsLibraryPanel() {
 
   const handleDelete = async (item) => {
     if (item.reference_count > 0) return
-    if (!confirm(`Delete "${item.name}"? This cannot be undone.`)) return
+    if (!confirm(t('admin.diagrams.confirmDelete', { name: item.name }))) return
     try {
       await api.delete(`/diagrams/${item.id}`)
       setItems((prev) => prev.filter((d) => d.id !== item.id))
     } catch (err) {
-      alert(err?.response?.data?.detail || 'Failed to delete diagram')
+      alert(err?.response?.data?.detail || t('admin.diagrams.deleteFailed'))
     }
   }
 
@@ -980,7 +982,7 @@ function DiagramsLibraryPanel() {
       setCopied(item.id)
       setTimeout(() => setCopied((c) => (c === item.id ? null : c)), 1500)
     } catch {
-      alert(`Copy failed. Directive:\n${snippet}`)
+      alert(t('admin.diagrams.copyFailed', { snippet }))
     }
   }
 
@@ -991,7 +993,7 @@ function DiagramsLibraryPanel() {
     <>
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-text-secondary">
-          {items.length} diagrams · {unusedCount} unused
+          {t('admin.diagrams.summary', { count: items.length, unused: unusedCount })}
         </p>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
@@ -1000,26 +1002,26 @@ function DiagramsLibraryPanel() {
               checked={unusedOnly}
               onChange={(e) => setUnusedOnly(e.target.checked)}
             />
-            Show unused only
+            {t('admin.diagrams.showUnusedOnly')}
           </label>
           <button
             onClick={loadDiagrams}
             className="px-3 py-1.5 bg-surface-hover border border-border text-text rounded-lg text-sm hover:bg-surface-active"
           >
-            Refresh
+            {t('admin.diagrams.refresh')}
           </button>
         </div>
       </div>
 
-      {loading && <p className="text-sm text-text-secondary">Loading...</p>}
+      {loading && <p className="text-sm text-text-secondary">{t('common.loading')}</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {!loading && !error && items.length === 0 && (
-        <p className="text-sm text-text-secondary">No diagrams yet.</p>
+        <p className="text-sm text-text-secondary">{t('admin.diagrams.empty')}</p>
       )}
 
       {!loading && !error && items.length > 0 && visible.length === 0 && (
-        <p className="text-sm text-text-secondary">No diagrams match the current filter.</p>
+        <p className="text-sm text-text-secondary">{t('admin.diagrams.emptyFiltered')}</p>
       )}
 
       {!loading && !error && visible.length > 0 && (
@@ -1027,11 +1029,11 @@ function DiagramsLibraryPanel() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left py-2 px-3 text-text-secondary font-medium">Preview</th>
-                <th className="text-left py-2 px-3 text-text-secondary font-medium">Name</th>
-                <th className="text-left py-2 px-3 text-text-secondary font-medium">Used by</th>
-                <th className="text-left py-2 px-3 text-text-secondary font-medium">Created</th>
-                <th className="text-right py-2 px-3 text-text-secondary font-medium">Actions</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.diagrams.col.preview')}</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.diagrams.col.name')}</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.diagrams.col.usedBy')}</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.diagrams.col.created')}</th>
+                <th className="text-right py-2 px-3 text-text-secondary font-medium">{t('admin.diagrams.col.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1049,12 +1051,12 @@ function DiagramsLibraryPanel() {
                             className="h-10 w-10 object-contain rounded border border-border bg-white"
                           />
                         ) : (
-                          <span className="text-xs text-text-secondary">no preview</span>
+                          <span className="text-xs text-text-secondary">{t('admin.diagrams.noPreview')}</span>
                         )}
                       </td>
                       <td className="py-2 px-3 text-text">
                         <div className="truncate max-w-[260px]" title={item.name}>{item.name}</div>
-                        <div className="text-xs text-text-secondary">id #{item.id}</div>
+                        <div className="text-xs text-text-secondary">{t('admin.diagrams.idLabel', { id: item.id })}</div>
                       </td>
                       <td className="py-2 px-3">
                         {hasRefs ? (
@@ -1062,10 +1064,10 @@ function DiagramsLibraryPanel() {
                             onClick={() => toggleExpanded(item.id)}
                             className="text-primary hover:underline"
                           >
-                            {item.reference_count} page{item.reference_count === 1 ? '' : 's'}
+                            {t('admin.diagrams.pages', { count: item.reference_count })}
                           </button>
                         ) : (
-                          <span className="text-text-secondary">unused</span>
+                          <span className="text-text-secondary">{t('admin.diagrams.unused')}</span>
                         )}
                       </td>
                       <td className="py-2 px-3 text-text-secondary">
@@ -1076,33 +1078,33 @@ function DiagramsLibraryPanel() {
                         <button
                           onClick={() => copyDirective(item)}
                           className="text-text-secondary hover:text-text text-sm mr-3"
-                          title="Copy ::drawio[id] directive"
+                          title={t('admin.diagrams.copyTitle')}
                         >
-                          {copied === item.id ? 'Copied!' : 'Copy'}
+                          {copied === item.id ? t('admin.diagrams.copied') : t('admin.diagrams.copy')}
                         </button>
                         <button
                           onClick={() => handleDelete(item)}
                           disabled={hasRefs}
                           className="text-red-500 hover:text-red-700 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                          title={hasRefs ? 'Cannot delete — diagram is referenced by a page (live or in trash)' : 'Delete diagram'}
+                          title={hasRefs ? t('admin.diagrams.deleteRefsTip') : t('admin.diagrams.deleteTip')}
                         >
-                          Delete
+                          {t('admin.diagrams.delete')}
                         </button>
                       </td>
                     </tr>
                     {isExpanded && hasRefs && (
                       <tr className="border-b border-border bg-surface-hover">
                         <td colSpan={5} className="py-2 px-3">
-                          <div className="text-xs text-text-secondary mb-1">Referenced by:</div>
+                          <div className="text-xs text-text-secondary mb-1">{t('admin.diagrams.referencedBy')}</div>
                           <ul className="flex flex-wrap gap-2">
                             {item.referenced_pages.map((p) => (
                               <li key={p.id}>
                                 <Link
                                   to={`/page/${p.slug}`}
                                   className={`text-sm hover:underline ${p.deleted ? 'text-text-secondary italic' : 'text-primary'}`}
-                                  title={p.deleted ? 'This page is currently in the trash' : undefined}
+                                  title={p.deleted ? t('admin.diagrams.inTrashTitle') : undefined}
                                 >
-                                  {p.title}{p.deleted ? ' (in trash)' : ''}
+                                  {p.title}{p.deleted ? t('admin.diagrams.inTrash') : ''}
                                 </Link>
                               </li>
                             ))}
@@ -1122,6 +1124,7 @@ function DiagramsLibraryPanel() {
 }
 
 function TemplatesSection() {
+  const { t } = useTranslation()
   const [templates, setTemplates] = useState([])
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({ name: '', description: '', content_md: '' })
@@ -1152,7 +1155,7 @@ function TemplatesSection() {
     e.preventDefault()
     setError('')
     if (!form.content_md.trim()) {
-      setError('Content is required')
+      setError(t('admin.templates.contentRequired'))
       return
     }
     try {
@@ -1161,17 +1164,17 @@ function TemplatesSection() {
       setShowCreate(false)
       loadTemplates()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to create template')
+      setError(err?.response?.data?.detail || t('admin.templates.createFailed'))
     }
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this template?')) return
+    if (!confirm(t('admin.templates.confirmDelete'))) return
     try {
       await api.delete(`/templates/${id}`)
       loadTemplates()
     } catch (err) {
-      alert(err?.response?.data?.detail || 'Failed to delete template')
+      alert(err?.response?.data?.detail || t('admin.templates.deleteFailed'))
     }
   }
 
@@ -1184,7 +1187,7 @@ function TemplatesSection() {
     e.preventDefault()
     setError('')
     if (!editing.content_md.trim()) {
-      setError('Content is required')
+      setError(t('admin.templates.contentRequired'))
       return
     }
     try {
@@ -1196,19 +1199,19 @@ function TemplatesSection() {
       setEditing(null)
       loadTemplates()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to update template')
+      setError(err?.response?.data?.detail || t('admin.templates.saveFailed'))
     }
   }
 
   return (
     <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-text">Templates</h2>
+        <h2 className="text-lg font-semibold text-text">{t('admin.templates.title')}</h2>
         <button
           onClick={() => { setShowCreate(!showCreate); resetForm() }}
           className="px-3 py-1.5 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover"
         >
-          + Add Template
+          {t('admin.templates.addTemplate')}
         </button>
       </div>
 
@@ -1217,7 +1220,7 @@ function TemplatesSection() {
           <div className="flex flex-col sm:flex-row gap-3">
             <input
               type="text"
-              placeholder="Template name"
+              placeholder={t('admin.templates.namePlaceholder')}
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
@@ -1225,7 +1228,7 @@ function TemplatesSection() {
             />
             <input
               type="text"
-              placeholder="Description (optional)"
+              placeholder={t('admin.templates.descriptionPlaceholder')}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               className="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
@@ -1239,10 +1242,10 @@ function TemplatesSection() {
           </div>
           <div className="flex items-center gap-3">
             <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
-              Create
+              {t('admin.templates.create')}
             </button>
             <button type="button" onClick={() => { setShowCreate(false); resetForm() }} className="px-4 py-2 text-sm text-text-secondary hover:text-text">
-              Cancel
+              {t('admin.templates.cancel')}
             </button>
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -1250,30 +1253,30 @@ function TemplatesSection() {
       )}
 
       {templates.length === 0 ? (
-        <p className="text-sm text-text-secondary">No templates yet.</p>
+        <p className="text-sm text-text-secondary">{t('admin.templates.empty')}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left py-2 px-3 text-text-secondary font-medium">Name</th>
-                <th className="text-left py-2 px-3 text-text-secondary font-medium">Description</th>
-                <th className="text-left py-2 px-3 text-text-secondary font-medium">Created</th>
-                <th className="text-right py-2 px-3 text-text-secondary font-medium">Actions</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.templates.col.name')}</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.templates.col.description')}</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.templates.col.created')}</th>
+                <th className="text-right py-2 px-3 text-text-secondary font-medium">{t('admin.templates.col.actions')}</th>
               </tr>
             </thead>
             <tbody>
-              {templates.map((t) => (
-                <tr key={t.id} className="border-b border-border">
-                  <td className="py-2 px-3 text-text">{t.name}</td>
-                  <td className="py-2 px-3 text-text-secondary">{t.description || '-'}</td>
-                  <td className="py-2 px-3 text-text-secondary">{t.created_at ? new Date(t.created_at).toLocaleDateString() : '-'}</td>
+              {templates.map((tmpl) => (
+                <tr key={tmpl.id} className="border-b border-border">
+                  <td className="py-2 px-3 text-text">{tmpl.name}</td>
+                  <td className="py-2 px-3 text-text-secondary">{tmpl.description || '-'}</td>
+                  <td className="py-2 px-3 text-text-secondary">{tmpl.created_at ? new Date(tmpl.created_at).toLocaleDateString() : '-'}</td>
                   <td className="py-2 px-3 text-right whitespace-nowrap">
-                    <button onClick={() => startEdit(t)} className="text-primary hover:underline text-sm mr-3">
-                      Edit
+                    <button onClick={() => startEdit(tmpl)} className="text-primary hover:underline text-sm mr-3">
+                      {t('admin.templates.edit')}
                     </button>
-                    <button onClick={() => handleDelete(t.id)} className="text-red-500 hover:text-red-700 text-sm">
-                      Delete
+                    <button onClick={() => handleDelete(tmpl.id)} className="text-red-500 hover:text-red-700 text-sm">
+                      {t('admin.templates.delete')}
                     </button>
                   </td>
                 </tr>
@@ -1286,10 +1289,10 @@ function TemplatesSection() {
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <form onSubmit={handleUpdate} className="bg-surface rounded-xl shadow-lg border border-border p-6 w-full max-w-3xl mx-4 space-y-3">
-            <h3 className="text-lg font-semibold text-text">Edit Template</h3>
+            <h3 className="text-lg font-semibold text-text">{t('admin.templates.editTitle')}</h3>
             <input
               type="text"
-              placeholder="Template name"
+              placeholder={t('admin.templates.namePlaceholder')}
               value={editing.name}
               onChange={(e) => setEditing({ ...editing, name: e.target.value })}
               required
@@ -1297,7 +1300,7 @@ function TemplatesSection() {
             />
             <input
               type="text"
-              placeholder="Description (optional)"
+              placeholder={t('admin.templates.descriptionPlaceholder')}
               value={editing.description}
               onChange={(e) => setEditing({ ...editing, description: e.target.value })}
               className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
@@ -1311,10 +1314,10 @@ function TemplatesSection() {
             </div>
             <div className="flex items-center gap-3">
               <button type="submit" className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover">
-                Save
+                {t('admin.templates.save')}
               </button>
               <button type="button" onClick={() => { setEditing(null); setError('') }} className="px-4 py-2 text-sm text-text-secondary hover:text-text">
-                Cancel
+                {t('admin.templates.cancel')}
               </button>
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
@@ -1326,6 +1329,7 @@ function TemplatesSection() {
 }
 
 function LibrarySection() {
+  const { t } = useTranslation()
   const [tab, setTab] = useState('media')
 
   const tabClass = (name) =>
@@ -1338,21 +1342,21 @@ function LibrarySection() {
   return (
     <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-text">Library</h2>
+        <h2 className="text-lg font-semibold text-text">{t('admin.library.title')}</h2>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setTab('media')}
             className={tabClass('media')}
           >
-            Images &amp; Files
+            {t('admin.library.tabMedia')}
           </button>
           <button
             type="button"
             onClick={() => setTab('diagrams')}
             className={tabClass('diagrams')}
           >
-            Diagrams
+            {t('admin.library.tabDiagrams')}
           </button>
         </div>
       </div>
@@ -1363,15 +1367,16 @@ function LibrarySection() {
 }
 
 export default function Admin() {
+  const { t } = useTranslation()
   const { user } = useAuth()
 
   if (user?.role !== 'admin') {
-    return <div className="text-center text-text-secondary mt-8">Admin access required.</div>
+    return <div className="text-center text-text-secondary mt-8">{t('admin.adminRequired')}</div>
   }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-text">Admin</h1>
+      <h1 className="text-2xl font-bold text-text">{t('admin.title')}</h1>
       <SiteSettingsSection />
       <UsersSection />
       <GroupsSection />

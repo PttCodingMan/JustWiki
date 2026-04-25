@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import useAuth from '../store/useAuth'
 import useSettings from '../store/useSettings'
 import api from '../api/client'
@@ -13,25 +14,28 @@ function safeRedirect(raw) {
   return raw
 }
 
-const SSO_ERROR_MESSAGES = {
-  not_invited: 'This wiki is invitation-only. Ask an admin to add your email.',
-  domain_not_allowed: 'Your email domain is not allowed here.',
-  email_not_allowed: 'Your email is not on the invite list.',
-  group_not_allowed: 'Your account is missing a required group membership.',
-  github_no_email: 'Your GitHub account has no verified primary email. Set one to public or verified first.',
-  no_email: 'The identity provider did not return an email address.',
-  oauth_failed: 'SSO sign-in failed. Please try again.',
-  user_disabled: 'Account is disabled. Contact an administrator.',
-  unknown_provider: 'SSO provider is not configured.',
-  username_collision: 'Could not generate a username. Ask an admin to invite you.',
-}
-
-function ssoError(code, detail) {
-  if (!code) return ''
-  return SSO_ERROR_MESSAGES[code] || detail || 'Sign-in failed.'
-}
+const SSO_ERROR_CODES = new Set([
+  'not_invited',
+  'domain_not_allowed',
+  'email_not_allowed',
+  'group_not_allowed',
+  'github_no_email',
+  'no_email',
+  'oauth_failed',
+  'user_disabled',
+  'unknown_provider',
+  'username_collision',
+])
 
 export default function Login() {
+  const { t } = useTranslation()
+
+  const ssoError = (code, detail) => {
+    if (!code) return ''
+    if (SSO_ERROR_CODES.has(code)) return t(`login.ssoErrors.${code}`)
+    return detail || t('login.ssoErrors.default')
+  }
+
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [searchParams] = useSearchParams()
@@ -64,7 +68,7 @@ export default function Login() {
       await login(username, password)
       navigate(safeRedirect(searchParams.get('redirect')))
     } catch {
-      setError('Invalid username or password')
+      setError(t('common.invalidCredentials'))
     }
   }
 
@@ -88,7 +92,7 @@ export default function Login() {
               <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">{error}</div>
             )}
             <div>
-              <label className="block text-sm font-medium text-text mb-1">Username</label>
+              <label className="block text-sm font-medium text-text mb-1">{t('common.username')}</label>
               <input
                 type="text"
                 value={username}
@@ -98,7 +102,7 @@ export default function Login() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-text mb-1">Password</label>
+              <label className="block text-sm font-medium text-text mb-1">{t('common.password')}</label>
               <input
                 type="password"
                 value={password}
@@ -110,7 +114,7 @@ export default function Login() {
               type="submit"
               className="w-full py-2 bg-primary text-primary-text rounded-lg font-medium hover:bg-primary-hover transition-colors"
             >
-              Log in
+              {t('common.logIn')}
             </button>
           </form>
 
@@ -118,7 +122,7 @@ export default function Login() {
             <>
               <div className="flex items-center gap-2 my-6">
                 <div className="flex-1 h-px bg-border" />
-                <span className="text-xs text-text-secondary">OR</span>
+                <span className="text-xs text-text-secondary">{t('common.or')}</span>
                 <div className="flex-1 h-px bg-border" />
               </div>
               <div className="space-y-2">
@@ -128,7 +132,7 @@ export default function Login() {
                     href={ssoHref(p.id)}
                     className="flex items-center justify-center gap-2 w-full py-2 border border-border rounded-lg text-sm font-medium text-text hover:bg-surface-hover transition-colors"
                   >
-                    Continue with {p.name}
+                    {t('common.continueWith', { provider: p.name })}
                   </a>
                 ))}
               </div>

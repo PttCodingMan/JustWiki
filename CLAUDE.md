@@ -65,7 +65,7 @@ These are separate systems with independent rendering logic — changes to one d
 - **Viewer**: `components/Viewer/MarkdownViewer.jsx` — Renders via `lib/markdown.js`. Sanitized with DOMPurify.
 - **Markdown pipeline**: `lib/markdown.js` — Centralized markdown-it + GFM pipeline. Adds callout blocks (`:::info/warning/tip/danger`), wikilinks (`[[slug]]`, `[[slug|text]]`), transclusion (`![[slug]]`), KaTeX (`$...$`, `$$...$$`), Mermaid fences, Draw.io embeds (`::drawio[id]`). Both the Viewer and any other rendering must go through this module.
 
-### Database (SQLite, single file at `data/just-wiki.db`)
+### Database (SQLite, single file at `backend/data/just-wiki.db` in dev, `/app/data/just-wiki.db` in docker)
 
 Key tables: `users`, `pages` (with `parent_id` hierarchy and `slug` URL), `page_versions`, `tags`, `page_tags`, `backlinks`, `templates`, `media`, `media_references`, `diagrams`, `comments`, `bookmarks`, `activity_log`, `page_acl`, `groups`, `group_members`, `page_watchers`, `notifications`, `view_dedup`. FTS5 virtual table `search_index` for full-text search with CJK support.
 

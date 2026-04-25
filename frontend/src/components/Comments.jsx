@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import useAuth from '../store/useAuth'
 import api from '../api/client'
 
 function CommentItem({ comment, currentUser, onDelete, onUpdate }) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [editContent, setEditContent] = useState(comment.content)
   const isOwner = currentUser?.id === comment.user_id
@@ -24,7 +26,7 @@ function CommentItem({ comment, currentUser, onDelete, onUpdate }) {
           <span className="text-sm font-medium text-text">{comment.display_name || comment.username}</span>
           <span className="text-xs text-text-secondary">{new Date(comment.created_at).toLocaleString()}</span>
           {comment.updated_at !== comment.created_at && (
-            <span className="text-xs text-text-secondary">(edited)</span>
+            <span className="text-xs text-text-secondary">{t('comments.edited')}</span>
           )}
         </div>
         {editing ? (
@@ -36,8 +38,8 @@ function CommentItem({ comment, currentUser, onDelete, onUpdate }) {
               rows={3}
             />
             <div className="flex gap-2 mt-1">
-              <button onClick={handleSave} className="text-xs px-3 py-1 bg-primary text-primary-text rounded hover:bg-primary-hover">Save</button>
-              <button onClick={() => { setEditing(false); setEditContent(comment.content) }} className="text-xs px-3 py-1 text-text-secondary hover:text-text">Cancel</button>
+              <button onClick={handleSave} className="text-xs px-3 py-1 bg-primary text-primary-text rounded hover:bg-primary-hover">{t('comments.save')}</button>
+              <button onClick={() => { setEditing(false); setEditContent(comment.content) }} className="text-xs px-3 py-1 text-text-secondary hover:text-text">{t('comments.cancel')}</button>
             </div>
           </div>
         ) : (
@@ -46,9 +48,9 @@ function CommentItem({ comment, currentUser, onDelete, onUpdate }) {
         {!editing && (isOwner || isAdmin) && (
           <div className="flex gap-3 mt-1">
             {isOwner && (
-              <button onClick={() => setEditing(true)} className="text-xs text-text-secondary hover:text-text">Edit</button>
+              <button onClick={() => setEditing(true)} className="text-xs text-text-secondary hover:text-text">{t('comments.edit')}</button>
             )}
-            <button onClick={() => onDelete(comment.id)} className="text-xs text-text-secondary hover:text-red-500">Delete</button>
+            <button onClick={() => onDelete(comment.id)} className="text-xs text-text-secondary hover:text-red-500">{t('comments.delete')}</button>
           </div>
         )}
       </div>
@@ -57,6 +59,7 @@ function CommentItem({ comment, currentUser, onDelete, onUpdate }) {
 }
 
 export default function Comments({ slug }) {
+  const { t } = useTranslation()
   const { user } = useAuth()
   const [comments, setComments] = useState([])
   const [total, setTotal] = useState(0)
@@ -105,7 +108,7 @@ export default function Comments({ slug }) {
   }
 
   const handleDelete = async (commentId) => {
-    if (!confirm('Delete this comment?')) return
+    if (!confirm(t('comments.confirmDelete'))) return
     try {
       await api.delete(`/pages/${slug}/comments/${commentId}`)
       loadComments()
@@ -122,11 +125,11 @@ export default function Comments({ slug }) {
   return (
     <div className="mt-6 bg-surface rounded-xl shadow-sm border border-border p-6">
       <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">
-        Discussion {total > 0 && `(${total})`}
+        {total > 0 ? t('comments.titleCount', { count: total }) : t('comments.title')}
       </h3>
 
       {loading ? (
-        <div className="text-sm text-text-secondary">Loading...</div>
+        <div className="text-sm text-text-secondary">{t('common.loading')}</div>
       ) : (
         <>
           {comments.length > 0 && (
@@ -147,7 +150,7 @@ export default function Comments({ slug }) {
             <textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Write a comment..."
+              placeholder={t('comments.placeholder')}
               className="w-full p-3 border border-border bg-surface text-text rounded-lg text-sm focus:outline-none focus:border-primary resize-none"
               rows={3}
             />
@@ -157,7 +160,7 @@ export default function Comments({ slug }) {
                 disabled={submitting || !newComment.trim()}
                 className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover disabled:opacity-50"
               >
-                {submitting ? 'Posting...' : 'Comment'}
+                {submitting ? t('comments.posting') : t('comments.post')}
               </button>
             </div>
           </form>

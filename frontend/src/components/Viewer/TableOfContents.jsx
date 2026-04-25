@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 export default function TableOfContents({ headings }) {
+  const { t } = useTranslation()
   const [activeId, setActiveId] = useState(null)
   const activeRef = useRef(null)
 
@@ -62,15 +64,15 @@ export default function TableOfContents({ headings }) {
   if (!headings || headings.length === 0) {
     return (
       <div className="toc-rail toc-empty">
-        <h3 className="toc-title">On this page</h3>
-        <p className="text-xs text-text-secondary">No headings yet.</p>
+        <h3 className="toc-title">{t('toc.title')}</h3>
+        <p className="text-xs text-text-secondary">{t('toc.empty')}</p>
       </div>
     )
   }
 
   return (
-    <nav className="toc-rail" aria-label="Table of contents">
-      <h3 className="toc-title">On this page</h3>
+    <nav className="toc-rail" aria-label={t('toc.label')}>
+      <h3 className="toc-title">{t('toc.title')}</h3>
       <ul className="toc-list">
         {headings.map((h) => (
           <li

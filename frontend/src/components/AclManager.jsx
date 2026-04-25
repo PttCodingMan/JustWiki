@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import useGroups from '../store/useGroups'
 import usePermissions from '../store/usePermissions'
@@ -12,6 +13,7 @@ import usePermissions from '../store/usePermissions'
  * grant between read and write. Saving PUTs the whole set atomically.
  */
 export default function AclManager({ slug, open, onClose }) {
+  const { t } = useTranslation()
   const { groups, fetchGroups } = useGroups()
   const invalidatePermission = usePermissions((s) => s.invalidate)
   const [loading, setLoading] = useState(false)
@@ -52,7 +54,7 @@ export default function AclManager({ slug, open, onClose }) {
         setPrincipalNames(names)
       })
       .catch((err) => {
-        if (!cancelled) setError(err?.response?.data?.detail || 'Failed to load ACL')
+        if (!cancelled) setError(err?.response?.data?.detail || t('acl.failedLoad'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -101,14 +103,14 @@ export default function AclManager({ slug, open, onClose }) {
       invalidatePermission()
       onClose?.()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to save ACL')
+      setError(err?.response?.data?.detail || t('acl.failedSave'))
     } finally {
       setSaving(false)
     }
   }
 
   const handleClear = async () => {
-    if (!confirm('Remove all explicit permissions? The page will fall back to inheritance.')) return
+    if (!confirm(t('acl.confirmClear'))) return
     setSaving(true)
     try {
       await api.delete(`/pages/${slug}/acl`)
@@ -118,7 +120,7 @@ export default function AclManager({ slug, open, onClose }) {
       invalidatePermission()
       onClose?.()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to clear ACL')
+      setError(err?.response?.data?.detail || t('acl.failedClear'))
     } finally {
       setSaving(false)
     }
@@ -130,25 +132,23 @@ export default function AclManager({ slug, open, onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-surface rounded-xl shadow-lg border border-border w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="text-lg font-semibold text-text">Manage permissions</h2>
+          <h2 className="text-lg font-semibold text-text">{t('acl.title')}</h2>
           <button onClick={onClose} className="text-text-secondary hover:text-text text-2xl leading-none">×</button>
         </div>
 
         <div className="p-6 space-y-5">
           {loading ? (
-            <p className="text-text-secondary">Loading…</p>
+            <p className="text-text-secondary">{t('acl.loading')}</p>
           ) : (
             <>
               <p className="text-sm text-text-secondary">
-                Leave empty to keep the page open to everyone (inherits from parent).
-                Add users or groups below to restrict access. Most-permissive rule applies
-                when the same user is granted through multiple rows.
+                {t('acl.intro')}
               </p>
 
               <div>
-                <h3 className="text-sm font-semibold text-text mb-2">Explicit grants</h3>
+                <h3 className="text-sm font-semibold text-text mb-2">{t('acl.explicitGrants')}</h3>
                 {rows.length === 0 ? (
-                  <p className="text-sm text-text-secondary italic">No explicit rows — page uses inherited permissions.</p>
+                  <p className="text-sm text-text-secondary italic">{t('acl.noExplicit')}</p>
                 ) : (
                   <ul className="space-y-2">
                     {rows.map((r) => {
@@ -164,14 +164,14 @@ export default function AclManager({ slug, open, onClose }) {
                             onChange={(e) => setRowPermission(r.principal_type, r.principal_id, e.target.value)}
                             className="px-2 py-1 border border-border rounded text-sm bg-surface text-text"
                           >
-                            <option value="read">Read</option>
-                            <option value="write">Write</option>
+                            <option value="read">{t('acl.permission.read')}</option>
+                            <option value="write">{t('acl.permission.write')}</option>
                           </select>
                           <button
                             onClick={() => removeRow(r.principal_type, r.principal_id)}
                             className="text-sm text-red-500 hover:text-red-700"
                           >
-                            Remove
+                            {t('acl.remove')}
                           </button>
                         </li>
                       )
@@ -181,19 +181,19 @@ export default function AclManager({ slug, open, onClose }) {
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold text-text mb-2">Add</h3>
+                <h3 className="text-sm font-semibold text-text mb-2">{t('acl.addLabel')}</h3>
                 <div className="flex gap-2 mb-3 text-sm">
                   <button
                     onClick={() => setTab('users')}
                     className={`px-3 py-1 rounded ${tab === 'users' ? 'bg-primary text-primary-text' : 'bg-surface-hover text-text'}`}
                   >
-                    Users
+                    {t('acl.tabUsers')}
                   </button>
                   <button
                     onClick={() => setTab('groups')}
                     className={`px-3 py-1 rounded ${tab === 'groups' ? 'bg-primary text-primary-text' : 'bg-surface-hover text-text'}`}
                   >
-                    Groups
+                    {t('acl.tabGroups')}
                   </button>
                 </div>
 
@@ -201,7 +201,7 @@ export default function AclManager({ slug, open, onClose }) {
                   <div>
                     <input
                       type="text"
-                      placeholder="Search users..."
+                      placeholder={t('acl.userSearchPlaceholder')}
                       value={userSearch}
                       onChange={(e) => runUserSearch(e.target.value)}
                       className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
@@ -224,7 +224,7 @@ export default function AclManager({ slug, open, onClose }) {
                                 onClick={() => addRow('user', u.id, u.display_name || u.username)}
                                 className="text-xs text-primary disabled:text-text-secondary"
                               >
-                                {already ? 'Added' : 'Add'}
+                                {already ? t('acl.added') : t('acl.add')}
                               </button>
                             </li>
                           )
@@ -235,7 +235,7 @@ export default function AclManager({ slug, open, onClose }) {
                 ) : (
                   <div>
                     {groups.length === 0 ? (
-                      <p className="text-sm text-text-secondary">No groups yet. Create one in Admin → Groups.</p>
+                      <p className="text-sm text-text-secondary">{t('acl.noGroups')}</p>
                     ) : (
                       <ul className="border border-border rounded-lg divide-y divide-border">
                         {groups.map((g) => {
@@ -246,14 +246,14 @@ export default function AclManager({ slug, open, onClose }) {
                             <li key={g.id} className="flex items-center justify-between px-3 py-2 text-sm">
                               <span className="text-text">
                                 {g.name}
-                                <span className="ml-2 text-xs text-text-secondary">· {g.member_count} members</span>
+                                <span className="ml-2 text-xs text-text-secondary">· {t('acl.groupMembers', { count: g.member_count })}</span>
                               </span>
                               <button
                                 disabled={already}
                                 onClick={() => addRow('group', g.id, g.name)}
                                 className="text-xs text-primary disabled:text-text-secondary"
                               >
-                                {already ? 'Added' : 'Add'}
+                                {already ? t('acl.added') : t('acl.add')}
                               </button>
                             </li>
                           )
@@ -266,7 +266,7 @@ export default function AclManager({ slug, open, onClose }) {
 
               {inherited.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-text mb-2">Inherited from ancestors</h3>
+                  <h3 className="text-sm font-semibold text-text mb-2">{t('acl.inheritedTitle')}</h3>
                   <ul className="space-y-1">
                     {inherited.map((r, i) => (
                       <li key={i} className="text-sm text-text-secondary">
@@ -274,7 +274,7 @@ export default function AclManager({ slug, open, onClose }) {
                           [{r.principal_type}] {r.principal_name || `${r.principal_type} ${r.principal_id}`}
                         </span>
                         {' '}· {r.permission}
-                        {' '}· from <code className="text-xs">{r.source_page_title}</code>
+                        {' '}· {t('acl.inheritedFrom')} <code className="text-xs">{r.source_page_title}</code>
                       </li>
                     ))}
                   </ul>
@@ -292,21 +292,21 @@ export default function AclManager({ slug, open, onClose }) {
             disabled={loading || saving || rows.length === 0}
             className="text-sm text-red-500 hover:text-red-700 disabled:text-text-secondary"
           >
-            Clear all (revert to inheritance)
+            {t('acl.clearAll')}
           </button>
           <div className="flex gap-2">
             <button
               onClick={onClose}
               className="px-4 py-2 text-sm text-text border border-border rounded-lg hover:bg-surface"
             >
-              Cancel
+              {t('acl.cancel')}
             </button>
             <button
               onClick={handleSave}
               disabled={loading || saving}
               className="px-4 py-2 text-sm bg-primary text-primary-text rounded-lg hover:bg-primary-hover disabled:opacity-50"
             >
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? t('acl.saving') : t('acl.save')}
             </button>
           </div>
         </div>

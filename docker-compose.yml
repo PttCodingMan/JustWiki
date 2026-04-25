@@ -9,6 +9,13 @@ services:
     volumes:
       - ./data:/app/data
     env_file: .env
+    # Override the dev-oriented paths in .env so the container reads/writes
+    # the mounted /app/data volume regardless of what DATA_DIR is set to in
+    # the shared .env file.
+    environment:
+      DATA_DIR: /app/data
+      DB_PATH: /app/data/just-wiki.db
+      MEDIA_DIR: /app/data/media
     restart: unless-stopped
 
   frontend:

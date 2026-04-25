@@ -6,7 +6,7 @@ dev:
 	@make dev-frontend
 
 dev-backend:
-	cd backend && source .venv/bin/activate && PYTHON_GIL=1 uvicorn app.main:app --reload --port 8000
+	source backend/.venv/bin/activate && PYTHON_GIL=1 uvicorn app.main:app --reload --reload-dir backend --port 8000 --app-dir backend
 
 dev-frontend:
 	cd frontend && npm run dev

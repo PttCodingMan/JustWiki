@@ -96,7 +96,7 @@ docker-compose up -d
 | `SECRET_KEY`      | Session 簽章金鑰              | `change-me-...`       |
 | `ADMIN_USER`      | 管理員帳號                    | `admin`               |
 | `ADMIN_PASS`      | 管理員密碼                    | `admin`               |
-| `DB_PATH`         | SQLite 資料庫路徑             | `./data/just-wiki.db` |
+| `DB_PATH`         | SQLite 資料庫路徑             | `./backend/data/just-wiki.db` |
 | `AI_ENABLED`      | 啟用 AI 問答功能              | `false`               |
 | `AI_API_KEY`      | LLM 供應商 API 金鑰（啟用時必填） | —                     |
 

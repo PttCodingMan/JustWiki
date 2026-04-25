@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import usePages from '../store/usePages'
 import useTags from '../store/useTags'
 import useSettings from '../store/useSettings'
@@ -7,6 +8,7 @@ import useSettings from '../store/useSettings'
 const PER_PAGE = 20
 
 export default function Home() {
+  const { t } = useTranslation()
   const { pages, total, loading, fetchPages } = usePages()
   const { allTags, fetchAllTags } = useTags()
   const siteName = useSettings((s) => s.site_name)
@@ -16,9 +18,9 @@ export default function Home() {
 
   useEffect(() => {
     if (homeSlug) return
-    document.title = `Home - ${siteName}`
+    document.title = `${t('home.browserTitle')} - ${siteName}`
     return () => { document.title = siteName }
-  }, [siteName, homeSlug])
+  }, [siteName, homeSlug, t])
 
   useEffect(() => {
     if (homeSlug) return
@@ -36,7 +38,7 @@ export default function Home() {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-text">All Pages</h1>
+        <h1 className="text-2xl font-bold text-text">{t('home.title')}</h1>
       </div>
 
       {/* Tag filter bar */}
@@ -55,15 +57,15 @@ export default function Home() {
       )}
 
       {loading ? (
-        <p className="text-text-secondary">Loading...</p>
+        <p className="text-text-secondary">{t('common.loading')}</p>
       ) : pages.length === 0 ? (
         <div className="text-center py-16">
-          <p className="text-text-secondary text-lg mb-4">No pages yet</p>
+          <p className="text-text-secondary text-lg mb-4">{t('common.noPagesYet')}</p>
           <Link
             to="/new"
             className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm font-medium hover:bg-primary-hover"
           >
-            Create your first page
+            {t('common.createFirstPage')}
           </Link>
         </div>
       ) : (
@@ -79,7 +81,7 @@ export default function Home() {
               >
                 <div className="font-medium text-text">{p.title}</div>
                 <div className="text-sm text-text-secondary mt-1">
-                  /{p.slug} &middot; {new Date(p.updated_at).toLocaleDateString()} &middot; {p.view_count} views
+                  /{p.slug} &middot; {new Date(p.updated_at).toLocaleDateString()} &middot; {t('common.views', { count: p.view_count })}
                 </div>
               </Link>
             ))}
@@ -93,7 +95,7 @@ export default function Home() {
                 disabled={page === 1}
                 className="px-3 py-1.5 text-sm rounded-lg border border-border hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Previous
+                {t('common.previous')}
               </button>
               <div className="flex gap-1">
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
@@ -115,7 +117,7 @@ export default function Home() {
                 disabled={page === totalPages}
                 className="px-3 py-1.5 text-sm rounded-lg border border-border hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed text-text"
               >
-                Next
+                {t('common.next')}
               </button>
             </div>
           )}

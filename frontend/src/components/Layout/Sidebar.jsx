@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import usePages from '../../store/usePages'
 import useBookmarks from '../../store/useBookmarks'
 import useAuth from '../../store/useAuth'
 import useChat from '../../store/useChat'
 
 function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
+  const { t } = useTranslation()
   const location = useLocation()
   const navigate = useNavigate()
   const { movePage } = usePages()
@@ -141,8 +143,8 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
               navigate(`/new?parent=${node.id}`)
             }}
             draggable={false}
-            aria-label={`New subpage under ${node.title}`}
-            title="New subpage"
+            aria-label={t('sidebar.newSubpageUnder', { title: node.title })}
+            title={t('sidebar.newSubpage')}
             className="w-6 h-6 mr-1 flex items-center justify-center shrink-0 rounded opacity-0 group-hover:opacity-100 focus:opacity-100 text-text-secondary hover:text-text hover:bg-surface-hover"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
@@ -168,6 +170,7 @@ function isChildActive(node, pathname) {
 }
 
 export default function Sidebar() {
+  const { t } = useTranslation()
   const { tree } = usePages()
   const { bookmarks } = useBookmarks()
   const { user } = useAuth()
@@ -189,7 +192,7 @@ export default function Sidebar() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
             </svg>
-            Recent Changes
+            {t('sidebar.recentChanges')}
           </Link>
           <Link
             to="/graph"
@@ -201,7 +204,7 @@ export default function Sidebar() {
               <circle cx="18" cy="6" r="3" />
               <path d="M8.5 8.5l7 7M8.5 6h7" />
             </svg>
-            Graph View
+            {t('sidebar.graphView')}
           </Link>
           {aiStatus?.enabled && (
             <Link
@@ -211,7 +214,7 @@ export default function Sidebar() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.84L3 20l1.16-3.68A7.94 7.94 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
               </svg>
-              AI Chat
+              {t('sidebar.aiChat')}
             </Link>
           )}
           <Link
@@ -221,7 +224,7 @@ export default function Sidebar() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" />
             </svg>
-            Trash
+            {t('sidebar.trash')}
           </Link>
           {user?.role === 'admin' && (
             <>
@@ -235,7 +238,7 @@ export default function Sidebar() {
                   <rect x="14" y="12" width="7" height="9" rx="1" />
                   <rect x="3" y="16" width="7" height="5" rx="1" />
                 </svg>
-                Dashboard
+                {t('sidebar.dashboard')}
               </Link>
               <Link
                 to="/admin"
@@ -245,7 +248,7 @@ export default function Sidebar() {
                   <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                   <circle cx="12" cy="12" r="3" />
                 </svg>
-                Admin
+                {t('sidebar.admin')}
               </Link>
             </>
           )}
@@ -255,7 +258,7 @@ export default function Sidebar() {
         {bookmarks.length > 0 && (
           <div className="mb-4">
             <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2 px-3">
-              Bookmarks
+              {t('sidebar.bookmarks')}
             </div>
             {bookmarks.map((b) => (
               <Link
@@ -273,10 +276,10 @@ export default function Sidebar() {
 
         {/* Pages tree */}
         <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2 px-3">
-          Pages
+          {t('sidebar.pages')}
         </div>
         {tree.length === 0 && (
-          <p className="text-sm text-text-secondary px-3">No pages yet</p>
+          <p className="text-sm text-text-secondary px-3">{t('sidebar.noPages')}</p>
         )}
         {tree.map((node, i) => (
           <TreeNode key={node.id} node={node} parentId={null} index={i} />

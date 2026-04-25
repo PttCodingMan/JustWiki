@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import { buildPlanetObject, planetColor, planetParams } from '../lib/planet'
 
@@ -18,6 +19,7 @@ function detectWebGL() {
 }
 
 export default function GraphView() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const graphRef = useRef(null)
   const containerRef = useRef(null)
@@ -120,17 +122,17 @@ export default function GraphView() {
   const colorFor = (node) => planetColor(node)
   const sizeFor = (node) => 1 + planetParams(node).radius * 2
 
-  if (loading) return <div className="text-text-secondary">Loading...</div>
+  if (loading) return <div className="text-text-secondary">{t('common.loading')}</div>
 
   const hasData = graphData && graphData.nodes.length > 0
 
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h1 className="text-2xl font-bold text-text">Knowledge Graph</h1>
+        <h1 className="text-2xl font-bold text-text">{t('graph.title')}</h1>
         <div className="flex items-center gap-3">
           <div className="text-sm text-text-secondary">
-            {graphData?.nodes?.length || 0} pages &middot; {graphData?.links?.length || 0} links
+            {t('graph.stats', { pages: graphData?.nodes?.length || 0, links: graphData?.links?.length || 0 })}
           </div>
           {hasData && webglSupported && (
             <div className="inline-flex rounded-md border border-border overflow-hidden text-sm">
@@ -155,8 +157,8 @@ export default function GraphView() {
 
       {!hasData ? (
         <div className="text-center py-16 text-text-secondary">
-          <p className="text-lg mb-2">No pages to visualize</p>
-          <p className="text-sm">Create pages with [[wikilinks]] to build your knowledge graph</p>
+          <p className="text-lg mb-2">{t('graph.emptyTitle')}</p>
+          <p className="text-sm">{t('graph.emptyHint')}</p>
         </div>
       ) : (
         <div className="relative bg-surface rounded-xl shadow-sm border border-border overflow-hidden">
@@ -164,7 +166,7 @@ export default function GraphView() {
             <Suspense
               fallback={
                 <div className="flex items-center justify-center h-full text-text-secondary">
-                  Loading graph…
+                  {t('common.loadingGraph')}
                 </div>
               }
             >
@@ -207,11 +209,11 @@ export default function GraphView() {
           {selectedNode && (
             <div className="absolute top-4 right-4 w-64 bg-surface border border-border rounded-lg shadow-lg p-4">
               <div className="text-xs uppercase tracking-wide text-text-secondary mb-1">
-                Selected page
+                {t('graph.selectedLabel')}
               </div>
               <div className="font-semibold text-text break-words">{selectedNode.title}</div>
               <div className="text-xs text-text-secondary mt-1">
-                {selectedNode.linkCount || 0} connection{selectedNode.linkCount === 1 ? '' : 's'}
+                {t('graph.connections', { count: selectedNode.linkCount || 0 })}
               </div>
               <div className="flex gap-2 mt-3">
                 <button
@@ -219,14 +221,14 @@ export default function GraphView() {
                   onClick={() => navigate(`/page/${selectedNode.slug}`)}
                   className="flex-1 px-3 py-1.5 text-sm bg-primary text-white rounded hover:opacity-90"
                 >
-                  Go to page
+                  {t('graph.goToPage')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedNode(null)}
                   className="px-3 py-1.5 text-sm text-text-secondary hover:text-text"
                 >
-                  Close
+                  {t('graph.close')}
                 </button>
               </div>
             </div>
@@ -234,7 +236,7 @@ export default function GraphView() {
 
           {!webglSupported && (
             <div className="absolute bottom-3 left-3 text-xs text-text-secondary bg-surface/80 border border-border rounded px-2 py-1">
-              WebGL unavailable — showing 2D view
+              {t('graph.webglUnavailable')}
             </div>
           )}
         </div>

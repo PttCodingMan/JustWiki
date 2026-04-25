@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import useNotifications from '../../store/useNotifications'
 
 export default function NotificationBell() {
+  const { t } = useTranslation()
   const { items, unreadCount, fetchNotifications, markAllRead, markRead } = useNotifications()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -30,11 +32,12 @@ export default function NotificationBell() {
   }
 
   const label = (n) => {
-    const titleSuffix = n.page_title ? `“${n.page_title}”` : ''
-    if (n.event === 'page.updated') return `${n.actor_name || 'Someone'} updated ${titleSuffix}`
-    if (n.event === 'page.created') return `${n.actor_name || 'Someone'} created ${titleSuffix}`
-    if (n.event === 'page.deleted') return `${n.actor_name || 'Someone'} deleted ${titleSuffix}`
-    return `${n.event} ${titleSuffix}`
+    const title = n.page_title ? `“${n.page_title}”` : ''
+    const actor = n.actor_name || t('notifications.someone')
+    if (n.event === 'page.updated') return t('notifications.pageUpdated', { actor, title })
+    if (n.event === 'page.created') return t('notifications.pageCreated', { actor, title })
+    if (n.event === 'page.deleted') return t('notifications.pageDeleted', { actor, title })
+    return t('notifications.fallback', { event: n.event, title })
   }
 
   return (
@@ -42,7 +45,7 @@ export default function NotificationBell() {
       <button
         onClick={handleOpen}
         className="relative p-1.5 rounded hover:bg-surface-hover text-text-secondary"
-        title="Notifications"
+        title={t('nav.notifications')}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
           <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
@@ -56,20 +59,20 @@ export default function NotificationBell() {
       {open && (
         <div className="absolute right-0 top-full mt-1 bg-surface border border-border rounded-xl shadow-lg z-50 w-80 max-h-96 overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-            <div className="text-sm font-semibold text-text">Notifications</div>
+            <div className="text-sm font-semibold text-text">{t('notifications.title')}</div>
             {unreadCount > 0 && (
               <button
                 onClick={() => markAllRead()}
                 className="text-xs text-primary hover:underline"
               >
-                Mark all read
+                {t('notifications.markAllRead')}
               </button>
             )}
           </div>
           <div className="overflow-y-auto">
             {items.length === 0 ? (
               <div className="px-3 py-6 text-center text-sm text-text-secondary">
-                No notifications yet
+                {t('notifications.empty')}
               </div>
             ) : (
               items.map((n) => (

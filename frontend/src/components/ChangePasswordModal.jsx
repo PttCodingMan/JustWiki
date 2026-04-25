@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 
 export default function ChangePasswordModal({ isOpen, onClose }) {
+  const { t } = useTranslation()
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -27,11 +29,11 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
     setError('')
 
     if (newPassword.length < 4) {
-      setError('New password must be at least 4 characters')
+      setError(t('changePassword.tooShort'))
       return
     }
     if (newPassword !== confirmPassword) {
-      setError('New passwords do not match')
+      setError(t('changePassword.mismatch'))
       return
     }
 
@@ -44,7 +46,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
       setSuccess(true)
       setTimeout(handleClose, 1500)
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to change password')
+      setError(err?.response?.data?.detail || t('changePassword.failed'))
     } finally {
       setLoading(false)
     }
@@ -58,16 +60,16 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
         className="bg-surface rounded-xl shadow-xl w-full max-w-sm mx-4 p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold text-text mb-4">Change Password</h2>
+        <h2 className="text-lg font-semibold text-text mb-4">{t('changePassword.title')}</h2>
 
         {success ? (
           <div className="p-3 rounded-lg text-sm bg-green-50 text-green-700 border border-green-200">
-            Password changed successfully!
+            {t('changePassword.success')}
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-text mb-1">Current Password</label>
+              <label className="block text-sm font-medium text-text mb-1">{t('changePassword.current')}</label>
               <input
                 type="password"
                 value={oldPassword}
@@ -77,7 +79,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-text mb-1">New Password</label>
+              <label className="block text-sm font-medium text-text mb-1">{t('changePassword.new')}</label>
               <input
                 type="password"
                 value={newPassword}
@@ -87,7 +89,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-text mb-1">Confirm New Password</label>
+              <label className="block text-sm font-medium text-text mb-1">{t('changePassword.confirm')}</label>
               <input
                 type="password"
                 value={confirmPassword}
@@ -103,14 +105,14 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
                 onClick={handleClose}
                 className="px-4 py-2 text-sm text-text-secondary hover:text-text"
               >
-                Cancel
+                {t('changePassword.cancel')}
               </button>
               <button
                 type="submit"
                 disabled={loading}
                 className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover disabled:opacity-50"
               >
-                {loading ? 'Saving...' : 'Change Password'}
+                {loading ? t('changePassword.saving') : t('changePassword.submit')}
               </button>
             </div>
           </form>

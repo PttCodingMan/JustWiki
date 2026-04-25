@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import useAuth from '../store/useAuth'
 import api from '../api/client'
 import ConfirmDialog from '../components/ConfirmDialog'
 
 export default function Profile() {
+  const { t } = useTranslation()
   const { checkAuth } = useAuth()
   const [profile, setProfile] = useState(null)
   const [form, setForm] = useState({ display_name: '', email: '' })
@@ -39,10 +41,10 @@ export default function Profile() {
     try {
       const res = await api.put('/auth/profile', form)
       setProfile(res.data)
-      setMessage({ type: 'success', text: 'Profile updated successfully.' })
+      setMessage({ type: 'success', text: t('profile.edit.success') })
       checkAuth()
     } catch (err) {
-      setMessage({ type: 'error', text: err?.response?.data?.detail || 'Failed to update profile' })
+      setMessage({ type: 'error', text: err?.response?.data?.detail || t('profile.edit.failed') })
     } finally {
       setSaving(false)
     }
@@ -53,11 +55,11 @@ export default function Profile() {
     setPwMessage(null)
 
     if (pwForm.new_password.length < 4) {
-      setPwMessage({ type: 'error', text: 'New password must be at least 4 characters' })
+      setPwMessage({ type: 'error', text: t('profile.password.tooShort') })
       return
     }
     if (pwForm.new_password !== pwForm.confirm_password) {
-      setPwMessage({ type: 'error', text: 'New passwords do not match' })
+      setPwMessage({ type: 'error', text: t('profile.password.mismatch') })
       return
     }
 
@@ -67,37 +69,37 @@ export default function Profile() {
         old_password: pwForm.old_password,
         new_password: pwForm.new_password,
       })
-      setPwMessage({ type: 'success', text: 'Password changed successfully.' })
+      setPwMessage({ type: 'success', text: t('profile.password.success') })
       setPwForm({ old_password: '', new_password: '', confirm_password: '' })
     } catch (err) {
-      setPwMessage({ type: 'error', text: err?.response?.data?.detail || 'Failed to change password' })
+      setPwMessage({ type: 'error', text: err?.response?.data?.detail || t('profile.password.failed') })
     } finally {
       setPwSaving(false)
     }
   }
 
   if (!profile) {
-    return <div className="text-center text-gray-500 mt-8">Loading...</div>
+    return <div className="text-center text-gray-500 mt-8">{t('common.loading')}</div>
   }
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-text">Profile</h1>
+      <h1 className="text-2xl font-bold text-text">{t('profile.title')}</h1>
 
       {/* Account Info */}
       <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
-        <h2 className="text-lg font-semibold text-text mb-4">Account Info</h2>
+        <h2 className="text-lg font-semibold text-text mb-4">{t('profile.account.title')}</h2>
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <span className="text-text-secondary">Username</span>
+            <span className="text-text-secondary">{t('profile.account.username')}</span>
             <p className="font-medium text-text">{profile.username}</p>
           </div>
           <div>
-            <span className="text-text-secondary">Role</span>
+            <span className="text-text-secondary">{t('profile.account.role')}</span>
             <p className="font-medium text-text capitalize">{profile.role}</p>
           </div>
           <div>
-            <span className="text-text-secondary">Created</span>
+            <span className="text-text-secondary">{t('profile.account.created')}</span>
             <p className="font-medium text-text">
               {profile.created_at ? new Date(profile.created_at).toLocaleDateString() : '-'}
             </p>
@@ -107,25 +109,25 @@ export default function Profile() {
 
       {/* Edit Profile */}
       <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
-        <h2 className="text-lg font-semibold text-text mb-4">Edit Profile</h2>
+        <h2 className="text-lg font-semibold text-text mb-4">{t('profile.edit.title')}</h2>
         <form onSubmit={handleSave} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-text mb-1">Display Name</label>
+            <label className="block text-sm font-medium text-text mb-1">{t('profile.edit.displayName')}</label>
             <input
               type="text"
               value={form.display_name}
               onChange={(e) => setForm({ ...form, display_name: e.target.value })}
-              placeholder="Your display name"
+              placeholder={t('profile.edit.displayNamePlaceholder')}
               className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-text focus:outline-none focus:border-primary"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-text mb-1">Email</label>
+            <label className="block text-sm font-medium text-text mb-1">{t('profile.edit.email')}</label>
             <input
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="your@email.com"
+              placeholder={t('profile.edit.emailPlaceholder')}
               className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-text focus:outline-none focus:border-primary"
             />
           </div>
@@ -140,7 +142,7 @@ export default function Profile() {
               disabled={saving}
               className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover disabled:opacity-50"
             >
-              {saving ? 'Saving...' : 'Save Changes'}
+              {saving ? t('profile.edit.saving') : t('profile.edit.save')}
             </button>
           </div>
         </form>
@@ -151,10 +153,10 @@ export default function Profile() {
 
       {/* Change Password */}
       <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
-        <h2 className="text-lg font-semibold text-text mb-4">Change Password</h2>
+        <h2 className="text-lg font-semibold text-text mb-4">{t('profile.password.title')}</h2>
         <form onSubmit={handlePasswordChange} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-text mb-1">Current Password</label>
+            <label className="block text-sm font-medium text-text mb-1">{t('profile.password.current')}</label>
             <input
               type="password"
               value={pwForm.old_password}
@@ -164,7 +166,7 @@ export default function Profile() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-text mb-1">New Password</label>
+            <label className="block text-sm font-medium text-text mb-1">{t('profile.password.new')}</label>
             <input
               type="password"
               value={pwForm.new_password}
@@ -174,7 +176,7 @@ export default function Profile() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-text mb-1">Confirm New Password</label>
+            <label className="block text-sm font-medium text-text mb-1">{t('profile.password.confirm')}</label>
             <input
               type="password"
               value={pwForm.confirm_password}
@@ -194,7 +196,7 @@ export default function Profile() {
               disabled={pwSaving}
               className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover disabled:opacity-50"
             >
-              {pwSaving ? 'Saving...' : 'Change Password'}
+              {pwSaving ? t('profile.password.saving') : t('profile.password.change')}
             </button>
           </div>
         </form>
@@ -204,6 +206,7 @@ export default function Profile() {
 }
 
 function ApiTokensCard({ role }) {
+  const { t } = useTranslation()
   const [tokens, setTokens] = useState([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState(null)
@@ -223,7 +226,7 @@ function ApiTokensCard({ role }) {
       const res = await api.get('/auth/tokens')
       setTokens(res.data)
     } catch (e) {
-      setErr(e?.response?.data?.detail || 'Failed to load tokens')
+      setErr(e?.response?.data?.detail || t('tokens.failedLoad'))
     } finally {
       setLoading(false)
     }
@@ -248,7 +251,7 @@ function ApiTokensCard({ role }) {
       setNewExpiry(30)
       await load()
     } catch (e) {
-      setErr(e?.response?.data?.detail || 'Failed to create token')
+      setErr(e?.response?.data?.detail || t('tokens.failedCreate'))
     } finally {
       setCreating(false)
     }
@@ -271,7 +274,7 @@ function ApiTokensCard({ role }) {
       await api.delete(`/auth/tokens/${toRevoke.id}`)
       await load()
     } catch (e) {
-      setErr(e?.response?.data?.detail || 'Failed to revoke token')
+      setErr(e?.response?.data?.detail || t('tokens.failedRevoke'))
     } finally {
       setToRevoke(null)
     }
@@ -282,18 +285,18 @@ function ApiTokensCard({ role }) {
   return (
     <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
       <div className="flex items-start justify-between mb-1">
-        <h2 className="text-lg font-semibold text-text">API Tokens</h2>
+        <h2 className="text-lg font-semibold text-text">{t('tokens.title')}</h2>
       </div>
       <p className="text-sm text-text-secondary mb-4">
-        Personal tokens for scripts and AI agents. Present as{' '}
-        <code className="text-xs bg-surface-hover px-1 py-0.5 rounded">Authorization: Bearer &lt;token&gt;</code>.
-        Tokens inherit your role and access; anyone holding one can act as you.
+        {t('tokens.intro1')}{' '}
+        <code className="text-xs bg-surface-hover px-1 py-0.5 rounded">Authorization: Bearer &lt;token&gt;</code>.{' '}
+        {t('tokens.intro2')}
       </p>
 
       {justCreated && (
         <div className="mb-4 p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900">
           <div className="font-medium text-sm mb-1">
-            Copy your token now — it will not be shown again.
+            {t('tokens.copyNow')}
           </div>
           <div className="flex items-center gap-2">
             <code className="flex-1 text-xs break-all bg-white/70 p-2 rounded border border-amber-200">
@@ -303,13 +306,13 @@ function ApiTokensCard({ role }) {
               onClick={handleCopy}
               className="px-3 py-1.5 text-sm rounded-lg bg-amber-600 text-white hover:bg-amber-700"
             >
-              {copied ? 'Copied' : 'Copy'}
+              {copied ? t('tokens.copied') : t('tokens.copy')}
             </button>
             <button
               onClick={() => setJustCreated(null)}
               className="px-3 py-1.5 text-sm rounded-lg border border-amber-300 hover:bg-amber-100"
             >
-              Dismiss
+              {t('tokens.dismiss')}
             </button>
           </div>
         </div>
@@ -318,28 +321,28 @@ function ApiTokensCard({ role }) {
       {!isViewer && (
         <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-2 mb-4">
           <div className="flex-1 min-w-[200px]">
-            <label className="block text-sm font-medium text-text mb-1">Name</label>
+            <label className="block text-sm font-medium text-text mb-1">{t('tokens.name')}</label>
             <input
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="e.g. ci-bot, laptop-script"
+              placeholder={t('tokens.namePlaceholder')}
               maxLength={100}
               required
               className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-text focus:outline-none focus:border-primary"
             />
           </div>
           <div className="w-40">
-            <label className="block text-sm font-medium text-text mb-1">Expires</label>
+            <label className="block text-sm font-medium text-text mb-1">{t('tokens.expires')}</label>
             <select
               value={newExpiry}
               onChange={(e) => setNewExpiry(e.target.value)}
               className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-text focus:outline-none focus:border-primary"
             >
-              <option value={30}>30 days</option>
-              <option value={90}>90 days</option>
-              <option value={365}>365 days</option>
-              <option value={0}>Never</option>
+              <option value={30}>{t('tokens.expiresDays', { count: 30 })}</option>
+              <option value={90}>{t('tokens.expiresDays', { count: 90 })}</option>
+              <option value={365}>{t('tokens.expiresDays', { count: 365 })}</option>
+              <option value={0}>{t('tokens.expiresNever')}</option>
             </select>
           </div>
           <button
@@ -347,13 +350,13 @@ function ApiTokensCard({ role }) {
             disabled={creating}
             className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover disabled:opacity-50"
           >
-            {creating ? 'Creating...' : 'New Token'}
+            {creating ? t('tokens.creating') : t('tokens.newToken')}
           </button>
         </form>
       )}
       {isViewer && (
         <div className="mb-4 text-sm text-text-secondary">
-          Your account is read-only, so creating tokens is disabled.
+          {t('tokens.viewerNotice')}
         </div>
       )}
 
@@ -364,49 +367,53 @@ function ApiTokensCard({ role }) {
       )}
 
       {loading ? (
-        <div className="text-sm text-text-secondary">Loading…</div>
+        <div className="text-sm text-text-secondary">{t('common.loading')}</div>
       ) : tokens.length === 0 ? (
-        <div className="text-sm text-text-secondary">No tokens yet.</div>
+        <div className="text-sm text-text-secondary">{t('tokens.empty')}</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-text-secondary border-b border-border">
-                <th className="py-2 pr-2">Name</th>
-                <th className="py-2 pr-2">Prefix</th>
-                <th className="py-2 pr-2">Last used</th>
-                <th className="py-2 pr-2">Expires</th>
-                <th className="py-2 pr-2">Status</th>
+                <th className="py-2 pr-2">{t('tokens.col.name')}</th>
+                <th className="py-2 pr-2">{t('tokens.col.prefix')}</th>
+                <th className="py-2 pr-2">{t('tokens.col.lastUsed')}</th>
+                <th className="py-2 pr-2">{t('tokens.col.expires')}</th>
+                <th className="py-2 pr-2">{t('tokens.col.status')}</th>
                 <th className="py-2"></th>
               </tr>
             </thead>
             <tbody>
-              {tokens.map((t) => {
-                const revoked = !!t.revoked_at
+              {tokens.map((tok) => {
+                const revoked = !!tok.revoked_at
                 const expired =
-                  !revoked && t.expires_at && new Date(t.expires_at.replace(' ', 'T') + 'Z') <= new Date()
-                const status = revoked ? 'Revoked' : expired ? 'Expired' : 'Active'
+                  !revoked && tok.expires_at && new Date(tok.expires_at.replace(' ', 'T') + 'Z') <= new Date()
+                const status = revoked
+                  ? t('tokens.status.revoked')
+                  : expired
+                    ? t('tokens.status.expired')
+                    : t('tokens.status.active')
                 const statusCls = revoked || expired
                   ? 'text-text-secondary'
                   : 'text-green-700'
                 return (
-                  <tr key={t.id} className="border-b border-border/60">
-                    <td className="py-2 pr-2 font-medium text-text">{t.name}</td>
+                  <tr key={tok.id} className="border-b border-border/60">
+                    <td className="py-2 pr-2 font-medium text-text">{tok.name}</td>
                     <td className="py-2 pr-2 font-mono text-xs text-text-secondary">
-                      {t.prefix || '—'}
+                      {tok.prefix || '—'}
                     </td>
-                    <td className="py-2 pr-2 text-text-secondary">{fmt(t.last_used)}</td>
+                    <td className="py-2 pr-2 text-text-secondary">{fmt(tok.last_used)}</td>
                     <td className="py-2 pr-2 text-text-secondary">
-                      {t.expires_at ? fmt(t.expires_at) : 'Never'}
+                      {tok.expires_at ? fmt(tok.expires_at) : t('tokens.expiresNever')}
                     </td>
                     <td className={`py-2 pr-2 ${statusCls}`}>{status}</td>
                     <td className="py-2 text-right">
                       {!revoked && (
                         <button
-                          onClick={() => setToRevoke(t)}
+                          onClick={() => setToRevoke(tok)}
                           className="px-2 py-1 text-xs rounded-lg border border-border text-red-600 hover:bg-red-50"
                         >
-                          Revoke
+                          {t('tokens.revoke')}
                         </button>
                       )}
                     </td>
@@ -420,16 +427,9 @@ function ApiTokensCard({ role }) {
 
       <ConfirmDialog
         open={!!toRevoke}
-        title="Revoke this token?"
-        description={
-          toRevoke && (
-            <>
-              The token "<span className="font-medium">{toRevoke.name}</span>" will stop
-              working immediately. This cannot be undone.
-            </>
-          )
-        }
-        confirmLabel="Revoke"
+        title={t('tokens.confirmTitle')}
+        description={toRevoke && t('tokens.confirmBody', { name: toRevoke.name })}
+        confirmLabel={t('tokens.revoke')}
         variant="danger"
         onConfirm={confirmRevoke}
         onCancel={() => setToRevoke(null)}

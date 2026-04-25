@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import api from '../../api/client'
 
 function formatBytes(bytes) {
@@ -9,6 +10,7 @@ function formatBytes(bytes) {
 }
 
 export default function MediaPickerModal({ open, onClose, onInsert }) {
+  const { t } = useTranslation()
   const [tab, setTab] = useState('media')
   const [items, setItems] = useState([])
   const [diagrams, setDiagrams] = useState([])
@@ -25,7 +27,7 @@ export default function MediaPickerModal({ open, onClose, onInsert }) {
       const res = await api.get('/media')
       setItems(Array.isArray(res.data) ? res.data : [])
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to load media library')
+      setError(err?.response?.data?.detail || t('mediaPicker.failedLoadMedia'))
     } finally {
       setLoading(false)
     }
@@ -38,7 +40,7 @@ export default function MediaPickerModal({ open, onClose, onInsert }) {
       const res = await api.get('/diagrams')
       setDiagrams(Array.isArray(res.data) ? res.data : [])
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to load diagrams')
+      setError(err?.response?.data?.detail || t('mediaPicker.failedLoadDiagrams'))
     } finally {
       setLoading(false)
     }
@@ -74,7 +76,7 @@ export default function MediaPickerModal({ open, onClose, onInsert }) {
       onInsert(buildMediaMarkdown(res.data))
       onClose()
     } catch (err) {
-      alert(err?.response?.data?.detail || 'Upload failed')
+      alert(err?.response?.data?.detail || t('mediaPicker.uploadFailed'))
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -118,11 +120,11 @@ export default function MediaPickerModal({ open, onClose, onInsert }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-text">Insert from Library</h2>
+          <h2 className="text-lg font-semibold text-text">{t('mediaPicker.title')}</h2>
           <button
             onClick={onClose}
             className="text-text-secondary hover:text-text"
-            aria-label="Close"
+            aria-label={t('mediaPicker.close')}
           >
             ✕
           </button>
@@ -134,14 +136,14 @@ export default function MediaPickerModal({ open, onClose, onInsert }) {
             onClick={() => handleTabChange('media')}
             className={tabClass('media')}
           >
-            Images &amp; Files
+            {t('mediaPicker.tabMedia')}
           </button>
           <button
             type="button"
             onClick={() => handleTabChange('diagrams')}
             className={tabClass('diagrams')}
           >
-            Diagrams
+            {t('mediaPicker.tabDiagrams')}
           </button>
         </div>
 
@@ -150,7 +152,7 @@ export default function MediaPickerModal({ open, onClose, onInsert }) {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={tab === 'media' ? 'Search by filename...' : 'Search by diagram name...'}
+            placeholder={tab === 'media' ? t('mediaPicker.searchMedia') : t('mediaPicker.searchDiagram')}
             className="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
           />
           {tab === 'media' && (
@@ -166,21 +168,21 @@ export default function MediaPickerModal({ open, onClose, onInsert }) {
                 disabled={uploading}
                 className="px-3 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover disabled:opacity-50"
               >
-                {uploading ? 'Uploading...' : 'Upload new'}
+                {uploading ? t('mediaPicker.uploading') : t('mediaPicker.uploadNew')}
               </button>
             </>
           )}
         </div>
 
         <div className="flex-1 overflow-auto p-5">
-          {loading && <p className="text-sm text-text-secondary">Loading...</p>}
+          {loading && <p className="text-sm text-text-secondary">{t('common.loading')}</p>}
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           {!loading && !error && tab === 'media' && (
             <>
               {filteredMedia.length === 0 && (
                 <p className="text-sm text-text-secondary">
-                  {items.length === 0 ? 'No uploaded media yet.' : 'No matches.'}
+                  {items.length === 0 ? t('mediaPicker.noMedia') : t('mediaPicker.noMatches')}
                 </p>
               )}
               {filteredMedia.length > 0 && (
@@ -195,7 +197,7 @@ export default function MediaPickerModal({ open, onClose, onInsert }) {
                           onClose()
                         }}
                         className="group text-left bg-surface-hover border border-border rounded-lg overflow-hidden hover:border-primary transition"
-                        title={`Insert ${item.original_name}`}
+                        title={t('mediaPicker.insertMedia', { name: item.original_name })}
                       >
                         <div className="aspect-video bg-surface flex items-center justify-center overflow-hidden">
                           {isImage ? (
@@ -206,7 +208,7 @@ export default function MediaPickerModal({ open, onClose, onInsert }) {
                             />
                           ) : (
                             <span className="text-xs text-text-secondary px-2 text-center">
-                              {item.mime_type || 'file'}
+                              {item.mime_type || t('mediaPicker.fileFallback')}
                             </span>
                           )}
                         </div>
@@ -234,8 +236,8 @@ export default function MediaPickerModal({ open, onClose, onInsert }) {
               {filteredDiagrams.length === 0 && (
                 <p className="text-sm text-text-secondary">
                   {diagrams.length === 0
-                    ? 'No diagrams yet. Use the slash command "Draw.io Diagram" to create one.'
-                    : 'No matches.'}
+                    ? t('mediaPicker.noDiagrams')
+                    : t('mediaPicker.noMatches')}
                 </p>
               )}
               {filteredDiagrams.length > 0 && (
@@ -248,7 +250,7 @@ export default function MediaPickerModal({ open, onClose, onInsert }) {
                         onClose()
                       }}
                       className="group text-left bg-surface-hover border border-border rounded-lg overflow-hidden hover:border-primary transition"
-                      title={`Insert ::drawio[${item.id}]`}
+                      title={t('mediaPicker.insertDiagram', { id: item.id })}
                     >
                       <div className="aspect-video bg-white flex items-center justify-center overflow-hidden">
                         {item.has_svg ? (
@@ -259,7 +261,7 @@ export default function MediaPickerModal({ open, onClose, onInsert }) {
                           />
                         ) : (
                           <span className="text-xs text-text-secondary px-2 text-center">
-                            no preview
+                            {t('mediaPicker.noPreview')}
                           </span>
                         )}
                       </div>
@@ -272,8 +274,8 @@ export default function MediaPickerModal({ open, onClose, onInsert }) {
                         </div>
                         <div className="text-[10px] text-text-secondary">
                           {item.reference_count > 0
-                            ? `used by ${item.reference_count} page${item.reference_count === 1 ? '' : 's'}`
-                            : 'unused'}
+                            ? t('mediaPicker.usedByPages', { count: item.reference_count })
+                            : t('mediaPicker.unused')}
                         </div>
                       </div>
                     </button>

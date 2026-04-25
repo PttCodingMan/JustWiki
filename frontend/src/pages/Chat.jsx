@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import useChat from '../store/useChat'
 import MarkdownViewer from '../components/Viewer/MarkdownViewer'
 
 export default function Chat() {
+  const { t } = useTranslation()
   const {
     messages,
     isStreaming,
@@ -45,11 +47,11 @@ export default function Chat() {
   if (aiStatus && !aiStatus.enabled) {
     return (
       <div className="max-w-3xl mx-auto py-16 text-center">
-        <h1 className="text-2xl font-bold text-text mb-2">AI Chat</h1>
+        <h1 className="text-2xl font-bold text-text mb-2">{t('chat.disabledTitle')}</h1>
         <p className="text-text-secondary">
-          AI chat is not enabled on this server. Ask an administrator to set{' '}
+          {t('chat.disabledIntro')}{' '}
           <code className="px-1.5 py-0.5 bg-surface rounded text-xs">AI_ENABLED=true</code>{' '}
-          and provide{' '}
+          {t('chat.disabledAnd')}{' '}
           <code className="px-1.5 py-0.5 bg-surface rounded text-xs">AI_API_KEY</code>.
         </p>
       </div>
@@ -60,10 +62,10 @@ export default function Chat() {
     <div className="max-w-3xl mx-auto h-[calc(100vh-4rem)] flex flex-col">
       <div className="flex items-center justify-between py-4">
         <div>
-          <h1 className="text-2xl font-bold text-text">AI Chat</h1>
+          <h1 className="text-2xl font-bold text-text">{t('chat.title')}</h1>
           {aiStatus?.model && (
             <p className="text-xs text-text-secondary mt-0.5">
-              Model: {aiStatus.model}
+              {t('chat.modelLabel', { model: aiStatus.model })}
             </p>
           )}
         </div>
@@ -73,7 +75,7 @@ export default function Chat() {
             disabled={isStreaming}
             className="text-sm text-text-secondary hover:text-text disabled:opacity-50"
           >
-            Clear
+            {t('chat.clear')}
           </button>
         )}
       </div>
@@ -84,7 +86,7 @@ export default function Chat() {
       >
         {messages.length === 0 ? (
           <div className="text-center text-text-secondary py-16">
-            Ask anything about this wiki. Retrieved pages are cited as links.
+            {t('chat.empty')}
           </div>
         ) : (
           messages.map((m, i) => <Message key={i} message={m} />)
@@ -97,7 +99,7 @@ export default function Chat() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask a question…"
+            placeholder={t('chat.inputPlaceholder')}
             rows={2}
             disabled={isStreaming}
             className="flex-1 resize-none bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary disabled:opacity-60"
@@ -108,7 +110,7 @@ export default function Chat() {
               onClick={stopStreaming}
               className="px-4 py-2 rounded-lg bg-surface border border-border text-sm text-text hover:bg-surface-hover"
             >
-              Stop
+              {t('chat.stop')}
             </button>
           ) : (
             <button
@@ -116,12 +118,12 @@ export default function Chat() {
               disabled={!input.trim()}
               className="px-4 py-2 rounded-lg bg-primary text-primary-text text-sm font-medium disabled:opacity-50"
             >
-              Send
+              {t('chat.send')}
             </button>
           )}
         </div>
         <p className="text-xs text-text-secondary mt-1.5">
-          Enter to send · Shift+Enter for newline
+          {t('chat.shortcutHint')}
         </p>
       </form>
     </div>
@@ -129,6 +131,7 @@ export default function Chat() {
 }
 
 function Message({ message }) {
+  const { t } = useTranslation()
   if (message.role === 'user') {
     return (
       <div className="flex justify-end">
@@ -143,13 +146,13 @@ function Message({ message }) {
     <div className="flex justify-start">
       <div className="max-w-[85%] bg-surface border border-border rounded-2xl rounded-bl-md px-4 py-3">
         {message.error ? (
-          <div className="text-sm text-red-600">{message.content || 'Something went wrong.'}</div>
+          <div className="text-sm text-red-600">{message.content || t('chat.errorFallback')}</div>
         ) : message.content ? (
           <div className="text-sm text-text break-words chat-markdown">
             <MarkdownViewer content={message.content} />
           </div>
         ) : (
-          <div className="text-sm text-text-secondary italic">Thinking…</div>
+          <div className="text-sm text-text-secondary italic">{t('chat.thinking')}</div>
         )}
         {message.citations?.length > 0 && (
           <div className="mt-3 pt-2 border-t border-border flex flex-wrap gap-1.5">

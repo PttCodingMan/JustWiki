@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import usePages from '../store/usePages'
 import useTags from '../store/useTags'
 import useBookmarks from '../store/useBookmarks'
@@ -16,6 +17,7 @@ import { stripBrTags } from '../lib/markdown'
 import api from '../api/client'
 
 export default function PageView() {
+  const { t } = useTranslation()
   const { slug } = useParams()
   const navigate = useNavigate()
   const { getPage, deletePage, fetchTree } = usePages()
@@ -138,7 +140,7 @@ export default function PageView() {
     const link = `${window.location.origin}/page/${slug}`
     try {
       await navigator.clipboard.writeText(link)
-      setToast('Public link copied')
+      setToast(t('pageView.toast.publicCopied'))
     } catch {
       setToast(link)
     }
@@ -148,9 +150,9 @@ export default function PageView() {
   const handleCopyMarkdown = async () => {
     try {
       await navigator.clipboard.writeText(stripBrTags(page.content_md ?? ''))
-      setToast('Markdown copied')
+      setToast(t('pageView.toast.markdownCopied'))
     } catch {
-      setToast('Copy failed — clipboard requires HTTPS or localhost')
+      setToast(t('pageView.toast.copyFailed'))
     }
     setMenuOpen(false)
   }
@@ -174,10 +176,10 @@ export default function PageView() {
     try {
       await api.put(`/pages/${slug}`, { is_public: false })
       setPage((p) => ({ ...p, is_public: false }))
-      setToast('Page is now private')
+      setToast(t('pageView.toast.nowPrivate'))
     } catch (err) {
       console.error('Failed to make private:', err)
-      setToast('Failed to update visibility')
+      setToast(t('pageView.toast.visibilityFailed'))
     }
     setMenuOpen(false)
   }
@@ -186,10 +188,10 @@ export default function PageView() {
     try {
       await api.put(`/pages/${slug}`, { is_public: true })
       setPage((p) => ({ ...p, is_public: true }))
-      setToast('Page is now public')
+      setToast(t('pageView.toast.nowPublic'))
     } catch (err) {
       console.error('Failed to make public:', err)
-      setToast('Failed to update visibility')
+      setToast(t('pageView.toast.visibilityFailed'))
     }
     setPublicConfirmOpen(false)
   }
@@ -203,7 +205,7 @@ export default function PageView() {
     return () => { document.title = siteName }
   }, [page?.title, siteName])
 
-  if (loading) return <div className="text-text-secondary">Loading...</div>
+  if (loading) return <div className="text-text-secondary">{t('common.loading')}</div>
   if (!page) return null
 
   const permission = page.effective_permission
@@ -216,20 +218,20 @@ export default function PageView() {
       <button
         onClick={() => navigate(`/page/${slug}/edit`)}
         className="fab-btn fab-btn-primary"
-        title="Edit (Ctrl+E)"
+        title={t('pageView.editTitle')}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
           <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
         </svg>
-        Edit
+        {t('pageView.edit')}
       </button>
       )}
       <div className="relative" ref={menuRef}>
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           className="fab-btn fab-btn-secondary"
-          title="More actions"
+          title={t('pageView.moreActions')}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="12" cy="5" r="1.5" />
@@ -246,7 +248,7 @@ export default function PageView() {
               <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
               </svg>
-              History
+              {t('pageView.history')}
             </button>
             <button
               onClick={() => { setMenuOpen(false); handleToggleWatch() }}
@@ -256,7 +258,7 @@ export default function PageView() {
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                 <circle cx="12" cy="12" r="3" />
               </svg>
-              {watching ? 'Stop watching' : 'Watch page'}
+              {watching ? t('pageView.unwatch') : t('pageView.watch')}
             </button>
             {writable && (
             <>
@@ -271,7 +273,7 @@ export default function PageView() {
                     <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
                     <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
                   </svg>
-                  Copy public link
+                  {t('pageView.copyPublicLink')}
                 </button>
                 <button
                   onClick={handleMakePrivate}
@@ -281,7 +283,7 @@ export default function PageView() {
                     <rect x="3" y="11" width="18" height="11" rx="2" />
                     <path d="M7 11V7a5 5 0 0110 0v4" />
                   </svg>
-                  Make private
+                  {t('pageView.makePrivate')}
                 </button>
               </>
             ) : (
@@ -293,7 +295,7 @@ export default function PageView() {
                   <circle cx="12" cy="12" r="10" />
                   <path d="M2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20" />
                 </svg>
-                Make public
+                {t('pageView.makePublic')}
               </button>
             )}
             {manageable && (
@@ -304,7 +306,7 @@ export default function PageView() {
                 <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                   <path d="M12 11c0-1.1.9-2 2-2h.01M12 11c0-1.1-.9-2-2-2H9.99M12 11v3m0 0v.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2h-3.17a2 2 0 01-1.42-.59l-1.17-1.17A2 2 0 0011.83 4H10.17a2 2 0 00-1.41.59L7.59 5.76A2 2 0 016.17 6.35H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
-                Manage permissions
+                {t('pageView.managePermissions')}
               </button>
             )}
             </>
@@ -318,7 +320,7 @@ export default function PageView() {
                 <rect x="9" y="9" width="11" height="11" rx="2" />
                 <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
               </svg>
-              Copy Markdown
+              {t('pageView.copyMarkdown')}
             </button>
             <button
               onClick={handleDownloadMarkdown}
@@ -329,7 +331,7 @@ export default function PageView() {
                 <path d="M7 10l5 5 5-5" />
                 <path d="M5 21h14" />
               </svg>
-              Download .md
+              {t('pageView.downloadMarkdown')}
             </button>
             <button
               onClick={() => {
@@ -341,7 +343,7 @@ export default function PageView() {
               <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              Export HTML
+              {t('pageView.exportHtml')}
             </button>
             <button
               onClick={() => {
@@ -355,7 +357,7 @@ export default function PageView() {
                 <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" />
                 <path d="M6 14h12v8H6z" />
               </svg>
-              Print / Save as PDF
+              {t('pageView.printOrPdf')}
             </button>
             {writable && (
               <>
@@ -367,7 +369,7 @@ export default function PageView() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
-                  Delete
+                  {t('pageView.delete')}
                 </button>
               </>
             )}
@@ -385,7 +387,7 @@ export default function PageView() {
           <button
             onClick={handleToggleBookmark}
             className={`text-xl transition-colors ${bookmarked ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-400'}`}
-            title={bookmarked ? 'Remove bookmark' : 'Add bookmark'}
+            title={bookmarked ? t('pageView.removeBookmark') : t('pageView.addBookmark')}
           >
             {bookmarked ? '\u2605' : '\u2606'}
           </button>
@@ -398,13 +400,13 @@ export default function PageView() {
 
         {/* Tags */}
         <div className="flex flex-wrap items-center gap-2 mb-4">
-          {pageTags.map((t) => (
-            <span key={t.id} className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-primary-soft text-primary dark:text-accent rounded-full">
-              {t.name}
+          {pageTags.map((tag) => (
+            <span key={tag.id} className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-primary-soft text-primary dark:text-accent rounded-full">
+              {tag.name}
               <button
-                onClick={() => handleRemoveTag(t.name)}
+                onClick={() => handleRemoveTag(tag.name)}
                 className="text-primary/60 hover:text-primary ml-0.5"
-                title="Remove tag"
+                title={t('pageView.removeTag')}
               >
                 &times;
               </button>
@@ -417,7 +419,7 @@ export default function PageView() {
                 value={newTag}
                 onChange={(e) => setNewTag(e.target.value)}
                 onBlur={() => { if (!newTag.trim()) setShowTagInput(false) }}
-                placeholder="Tag name"
+                placeholder={t('pageView.tagPlaceholder')}
                 className="text-xs px-2 py-1 border border-border rounded-full w-24 outline-none focus:border-primary bg-transparent text-text"
               />
             </form>
@@ -426,16 +428,16 @@ export default function PageView() {
               onClick={() => setShowTagInput(true)}
               className="text-xs px-2 py-1 text-text-secondary hover:text-text border border-dashed border-border rounded-full hover:border-text-secondary"
             >
-              + tag
+              {t('pageView.addTag')}
             </button>
           )}
         </div>
 
         <div className="text-sm text-text-secondary mb-6">
           {page.author_name && <>{page.author_name} &middot; </>}
-          /{page.slug} &middot; {page.view_count} views &middot; Updated {new Date(page.updated_at).toLocaleString()}
-          {page.is_public && <> &middot; <span title="This page is public">🌐 Public</span></>}
-          {watcherCount > 0 && <> &middot; {watcherCount} watching</>}
+          /{page.slug} &middot; {t('common.views', { count: page.view_count })} &middot; {t('pageView.updated', { date: new Date(page.updated_at).toLocaleString() })}
+          {page.is_public && <> &middot; <span title={t('pageView.publicTitle')}>{t('pageView.publicLabel')}</span></>}
+          {watcherCount > 0 && <> &middot; {t('pageView.watchingCount', { count: watcherCount })}</>}
         </div>
         <div className="bg-surface rounded-xl shadow-sm border border-border p-8">
           {page.page_type === 'mindmap' ? (
@@ -449,7 +451,7 @@ export default function PageView() {
         {backlinks.length > 0 && (
           <div className="mt-6 p-4 bg-surface rounded-xl shadow-sm border border-border no-print">
             <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3">
-              Linked from ({backlinks.length})
+              {t('pageView.linkedFrom', { count: backlinks.length })}
             </h3>
             <div className="flex flex-wrap gap-2">
               {backlinks.map((bl) => (
@@ -483,30 +485,30 @@ export default function PageView() {
 
       <ConfirmDialog
         open={publicConfirmOpen}
-        title="Make this page public?"
+        title={t('pageView.confirm.makePublicTitle')}
         description={
           <>
             <div className="font-medium text-text mb-1">&quot;{page.title}&quot;</div>
-            <div>You can switch it back to private at any time.</div>
+            <div>{t('pageView.confirm.makePublicBody')}</div>
           </>
         }
-        confirmLabel="Make public"
-        cancelLabel="Cancel"
+        confirmLabel={t('pageView.confirm.makePublicLabel')}
+        cancelLabel={t('pageView.confirm.cancel')}
         onConfirm={handleMakePublic}
         onCancel={() => setPublicConfirmOpen(false)}
       />
 
       <ConfirmDialog
         open={deleteConfirmOpen}
-        title="Delete this page?"
+        title={t('pageView.confirm.deleteTitle')}
         description={
           <>
             <div className="font-medium text-text mb-1">&quot;{page.title}&quot;</div>
-            <div>This cannot be undone. Backlinks and comments will be lost.</div>
+            <div>{t('pageView.confirm.deleteBody')}</div>
           </>
         }
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
+        confirmLabel={t('pageView.confirm.deleteLabel')}
+        cancelLabel={t('pageView.confirm.cancel')}
         variant="danger"
         onConfirm={handleDelete}
         onCancel={() => setDeleteConfirmOpen(false)}

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 
 function DiffViewer({ oldText, newText, v1, v2 }) {
+  const { t } = useTranslation()
   const oldLines = (oldText || '').split('\n')
   const newLines = (newText || '').split('\n')
 
@@ -12,10 +14,10 @@ function DiffViewer({ oldText, newText, v1, v2 }) {
   return (
     <div className="grid grid-cols-2 gap-0 border border-gray-200 rounded-lg overflow-hidden text-sm font-mono">
       <div className="bg-gray-50 px-3 py-2 border-b border-r border-gray-200 font-sans font-medium text-gray-600 text-xs">
-        Version {v1} (old)
+        {t('versions.diffOldHeader', { v: v1 })}
       </div>
       <div className="bg-gray-50 px-3 py-2 border-b border-gray-200 font-sans font-medium text-gray-600 text-xs">
-        Version {v2} (new)
+        {t('versions.diffNewHeader', { v: v2 })}
       </div>
       <div className="border-r border-gray-200 overflow-auto max-h-[600px]">
         {diff.map((d, i) => (
@@ -95,6 +97,7 @@ function computeDiff(oldLines, newLines) {
 }
 
 export default function PageVersions() {
+  const { t } = useTranslation()
   const { slug } = useParams()
   const navigate = useNavigate()
   const [versions, setVersions] = useState([])
@@ -139,13 +142,13 @@ export default function PageVersions() {
       setConfirmRevert(null)
       navigate(`/page/${slug}`)
     } catch (err) {
-      alert(err?.response?.data?.detail || 'Revert failed')
+      alert(err?.response?.data?.detail || t('versions.revertFailed'))
     } finally {
       setReverting(false)
     }
   }
 
-  if (loading) return <div className="text-text-secondary">Loading...</div>
+  if (loading) return <div className="text-text-secondary">{t('common.loading')}</div>
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -157,27 +160,27 @@ export default function PageVersions() {
           >
             &larr;
           </button>
-          <h1 className="text-2xl font-bold text-text">Version History</h1>
+          <h1 className="text-2xl font-bold text-text">{t('versions.title')}</h1>
         </div>
         <Link
           to={`/page/${slug}`}
           className="px-3 py-1.5 text-sm text-text-secondary rounded-lg hover:bg-surface-hover"
         >
-          Back to page
+          {t('versions.back')}
         </Link>
       </div>
 
       {versions.length === 0 ? (
         <div className="text-center py-16 text-text-secondary">
-          <p className="text-lg mb-2">No version history yet</p>
-          <p className="text-sm">Versions are created each time you edit a page</p>
+          <p className="text-lg mb-2">{t('versions.empty')}</p>
+          <p className="text-sm">{t('versions.emptyHint')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-[280px_1fr] gap-6">
           {/* Timeline */}
           <div className="space-y-1">
             <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3">
-              Versions ({versions.length})
+              {t('versions.list', { count: versions.length })}
             </div>
             {versions.map((v) => (
               <div
@@ -210,13 +213,13 @@ export default function PageVersions() {
                       setConfirmRevert(v.version_num)
                     }}
                     className="text-xs text-primary hover:text-primary-hover"
-                    title="Revert to this version"
+                    title={t('versions.revertTitle')}
                   >
-                    Revert
+                    {t('versions.revert')}
                   </button>
                 </div>
                 <div className="text-xs text-text-secondary mt-1">
-                  {v.display_name || v.username || 'unknown'} &middot; {new Date(v.edited_at).toLocaleString()}
+                  {v.display_name || v.username || t('versions.unknownAuthor')} &middot; {new Date(v.edited_at).toLocaleString()}
                 </div>
                 <div className="text-xs text-text-secondary mt-0.5 truncate">{v.title}</div>
               </div>
@@ -234,7 +237,7 @@ export default function PageVersions() {
               />
             ) : (
               <div className="text-center py-16 text-text-secondary border border-dashed border-border rounded-lg">
-                Select two versions to compare
+                {t('versions.selectTwo')}
               </div>
             )}
           </div>
@@ -245,24 +248,23 @@ export default function PageVersions() {
       {confirmRevert && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-surface rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
-            <h3 className="text-lg font-semibold text-text mb-2">Revert to v{confirmRevert}?</h3>
+            <h3 className="text-lg font-semibold text-text mb-2">{t('versions.confirmTitle', { v: confirmRevert })}</h3>
             <p className="text-sm text-text-secondary mb-4">
-              The current version will be saved as a new version before reverting.
-              This action can be undone.
+              {t('versions.confirmBody')}
             </p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setConfirmRevert(null)}
                 className="px-3 py-1.5 text-sm text-text-secondary rounded-lg hover:bg-surface-hover"
               >
-                Cancel
+                {t('versions.cancel')}
               </button>
               <button
                 onClick={() => handleRevert(confirmRevert)}
                 disabled={reverting}
                 className="px-3 py-1.5 text-sm bg-primary text-primary-text rounded-lg hover:bg-primary-hover disabled:opacity-50"
               >
-                {reverting ? 'Reverting...' : 'Revert'}
+                {reverting ? t('versions.reverting') : t('versions.revert')}
               </button>
             </div>
           </div>
