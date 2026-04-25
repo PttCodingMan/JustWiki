@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import useAuth from '../store/useAuth'
 import useGroups from '../store/useGroups'
+import useSettings from '../store/useSettings'
 import api from '../api/client'
 import Editor from '../components/Editor/Editor'
 
@@ -10,6 +11,131 @@ function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function SiteSettingsSection() {
+  const settings = useSettings()
+  const updateSettings = useSettings((s) => s.update)
+  const [form, setForm] = useState({
+    site_name: '',
+    login_title: '',
+    login_subtitle: '',
+    home_page_slug: '',
+    footer_text: '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState(null)
+
+  useEffect(() => {
+    setForm({
+      site_name: settings.site_name,
+      login_title: settings.login_title,
+      login_subtitle: settings.login_subtitle,
+      home_page_slug: settings.home_page_slug,
+      footer_text: settings.footer_text,
+    })
+  }, [settings.site_name, settings.login_title, settings.login_subtitle, settings.home_page_slug, settings.footer_text])
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    setMessage(null)
+    try {
+      await updateSettings(form)
+      setMessage({ type: 'success', text: 'Settings saved.' })
+    } catch (err) {
+      setMessage({ type: 'error', text: err?.response?.data?.detail || 'Failed to save settings' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const field = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))
+
+  return (
+    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+      <h2 className="text-lg font-semibold text-text mb-1">Site Settings</h2>
+      <p className="text-sm text-text-secondary mb-4">
+        Brand the wiki with your team's name and pin a page as the homepage. Leave a field blank to restore the built-in default.
+      </p>
+      <form onSubmit={handleSave} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">Site name</label>
+          <input
+            type="text"
+            value={form.site_name}
+            onChange={field('site_name')}
+            placeholder="JustWiki"
+            maxLength={80}
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
+          />
+          <p className="text-xs text-text-secondary mt-1">Shown in the top-left brand and the browser tab.</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">Home page slug</label>
+          <input
+            type="text"
+            value={form.home_page_slug}
+            onChange={field('home_page_slug')}
+            placeholder="welcome"
+            maxLength={200}
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
+          />
+          <p className="text-xs text-text-secondary mt-1">Visiting <code>/</code> redirects to this page. Leave empty to show the page list.</p>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">Login title</label>
+            <input
+              type="text"
+              value={form.login_title}
+              onChange={field('login_title')}
+              placeholder="JustWiki"
+              maxLength={80}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">Login subtitle</label>
+            <input
+              type="text"
+              value={form.login_subtitle}
+              onChange={field('login_subtitle')}
+              placeholder="Just clone, run, and write."
+              maxLength={200}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">Public footer text</label>
+          <input
+            type="text"
+            value={form.footer_text}
+            onChange={field('footer_text')}
+            placeholder="Powered by JustWiki"
+            maxLength={200}
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
+          />
+          <p className="text-xs text-text-secondary mt-1">Footer on the anonymous public page viewer.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={saving}
+            className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          {message && (
+            <span className={message.type === 'success' ? 'text-sm text-green-600' : 'text-sm text-red-600'}>
+              {message.text}
+            </span>
+          )}
+        </div>
+      </form>
+    </div>
+  )
 }
 
 function BackupSection() {
@@ -1246,6 +1372,7 @@ export default function Admin() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-text">Admin</h1>
+      <SiteSettingsSection />
       <UsersSection />
       <GroupsSection />
       <TemplatesSection />

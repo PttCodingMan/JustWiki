@@ -1,24 +1,35 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import usePages from '../store/usePages'
 import useTags from '../store/useTags'
+import useSettings from '../store/useSettings'
 
 const PER_PAGE = 20
 
 export default function Home() {
   const { pages, total, loading, fetchPages } = usePages()
   const { allTags, fetchAllTags } = useTags()
+  const siteName = useSettings((s) => s.site_name)
+  const homeSlug = useSettings((s) => s.home_page_slug)
+  const settingsLoaded = useSettings((s) => s.loaded)
   const [page, setPage] = useState(1)
 
   useEffect(() => {
-    document.title = 'Home - JustWiki'
-    return () => { document.title = 'JustWiki' }
-  }, [])
+    if (homeSlug) return
+    document.title = `Home - ${siteName}`
+    return () => { document.title = siteName }
+  }, [siteName, homeSlug])
 
   useEffect(() => {
+    if (homeSlug) return
     fetchPages(page, PER_PAGE)
     fetchAllTags()
-  }, [page])
+  }, [page, homeSlug])
+
+  // Wait until settings load so we don't briefly render the page list
+  // before redirecting (and don't fire a needless /api/pages request).
+  if (!settingsLoaded) return null
+  if (homeSlug) return <Navigate to={`/page/${homeSlug}`} replace />
 
   const totalPages = Math.ceil(total / PER_PAGE)
 

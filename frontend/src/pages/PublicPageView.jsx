@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom'
 import publicApi from '../api/publicClient'
 import MarkdownViewer from '../components/Viewer/MarkdownViewer'
 import ThemeSwitcher from '../components/ThemeSwitcher'
+import useSettings from '../store/useSettings'
 
 /**
  * Anonymous read-only viewer for pages that have been marked is_public.
@@ -19,6 +20,8 @@ export default function PublicPageView({ notFound }) {
   const { slug } = useParams()
   const location = useLocation()
   const loginHref = `/login?redirect=${encodeURIComponent(location.pathname + location.search)}`
+  const siteName = useSettings((s) => s.site_name)
+  const footerText = useSettings((s) => s.footer_text)
   const [state, setState] = useState({ status: 'loading', slug: null, page: null })
   const reqIdRef = useRef(0)
 
@@ -60,12 +63,12 @@ export default function PublicPageView({ notFound }) {
 
   useEffect(() => {
     if (state.page?.title) {
-      document.title = `${state.page.title} - JustWiki`
+      document.title = `${state.page.title} - ${siteName}`
     } else {
-      document.title = 'JustWiki'
+      document.title = siteName
     }
-    return () => { document.title = 'JustWiki' }
-  }, [state.page?.title])
+    return () => { document.title = siteName }
+  }, [state.page?.title, siteName])
 
   // Until the fetch for the current slug resolves, show a loading screen.
   // state.slug tracks which slug the current data belongs to so a stale
@@ -84,7 +87,7 @@ export default function PublicPageView({ notFound }) {
   return (
     <div className="min-h-screen bg-bg text-text flex flex-col">
       <header className="flex justify-between items-center px-6 py-3 border-b border-border">
-        <div className="text-sm font-semibold text-text">JustWiki</div>
+        <div className="text-sm font-semibold text-text">{siteName}</div>
         <div className="flex items-center gap-3">
           <ThemeSwitcher />
           <Link
@@ -109,9 +112,11 @@ export default function PublicPageView({ notFound }) {
           />
         </article>
       </main>
-      <footer className="text-center text-xs text-text-secondary py-4">
-        Powered by JustWiki
-      </footer>
+      {footerText && (
+        <footer className="text-center text-xs text-text-secondary py-4">
+          {footerText}
+        </footer>
+      )}
     </div>
   )
 }

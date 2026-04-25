@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { lazy, Suspense, useEffect } from 'react'
 import useAuth from './store/useAuth'
 import useTheme from './store/useTheme'
+import useSettings from './store/useSettings'
 import Layout from './components/Layout/Layout'
 import Login from './pages/Login'
 import Home from './pages/Home'
@@ -38,8 +39,10 @@ import PageOrPublicView from './pages/PageOrPublicView'
 function AuthGate() {
   const { user, loading } = useAuth()
   const location = useLocation()
+  const homeSlug = useSettings((s) => s.home_page_slug)
+  const settingsLoaded = useSettings((s) => s.loaded)
 
-  if (loading) {
+  if (loading || !settingsLoaded) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>
   }
 
@@ -55,7 +58,11 @@ function AuthGate() {
   // not on /edit or /versions. PageOrPublicView handles the public fetch
   // and a login-redirect fallback when the page isn't public.
   const isPageRoute = /^\/page\/[^/]+$/.test(location.pathname)
-  if (isPageRoute) {
+  // When the admin has pinned a homepage slug, allow `/` through anonymously
+  // so the Home component can <Navigate> to /page/{slug}; that route renders
+  // PublicPageView for public pages and falls back to /login otherwise.
+  const isRootWithHome = location.pathname === '/' && homeSlug
+  if (isPageRoute || isRootWithHome) {
     return <Outlet />
   }
 
@@ -82,11 +89,20 @@ function RoleRoute({ role }) {
 export default function App() {
   const { checkAuth } = useAuth()
   const initTheme = useTheme((s) => s.init)
+  const fetchSettings = useSettings((s) => s.fetch)
+  const siteName = useSettings((s) => s.site_name)
 
   useEffect(() => {
     checkAuth()
     initTheme()
-  }, [checkAuth, initTheme])
+    fetchSettings()
+  }, [checkAuth, initTheme, fetchSettings])
+
+  // Drive the browser tab title from settings so per-page useEffects can
+  // append "- {site_name}" without re-reading state from individual pages.
+  useEffect(() => {
+    document.title = siteName
+  }, [siteName])
 
   return (
     <Routes>

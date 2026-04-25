@@ -146,6 +146,24 @@ async def _m009_page_type(db: aiosqlite.Connection) -> None:
         )
 
 
+async def _m010_site_settings(db: aiosqlite.Connection) -> None:
+    """Create site_settings for branding overrides and the home-page slug.
+
+    Key/value rather than columns so new knobs land without an ALTER. Reads
+    fall back to the in-code DEFAULT_SETTINGS map (see routers/settings.py),
+    so an absent row simply means "use the built-in default".
+    """
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS site_settings (
+            key        TEXT PRIMARY KEY,
+            value      TEXT NOT NULL DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+
 MIGRATIONS: list[Migration] = [
     (1, "user_profile_columns", _m001_user_profile_columns),
     (2, "user_soft_delete", _m002_user_soft_delete),
@@ -156,6 +174,7 @@ MIGRATIONS: list[Migration] = [
     (7, "groups_ldap_dn", _m007_groups_ldap_dn),
     (8, "api_tokens_extend", _m008_api_tokens_extend),
     (9, "page_type", _m009_page_type),
+    (10, "site_settings", _m010_site_settings),
 ]
 
 
@@ -247,6 +266,11 @@ async def _detect_preexisting(db: aiosqlite.Connection) -> set[int]:
         applied.add(8)
     if await _column_exists(db, "pages", "page_type"):
         applied.add(9)
+    rows = await db.execute_fetchall(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='site_settings'"
+    )
+    if rows:
+        applied.add(10)
     return applied
 
 

@@ -5,6 +5,7 @@ import useTags from '../store/useTags'
 import useBookmarks from '../store/useBookmarks'
 import useAuth from '../store/useAuth'
 import usePermissions, { canEdit, canManageAcl } from '../store/usePermissions'
+import useSettings from '../store/useSettings'
 import MarkdownViewer from '../components/Viewer/MarkdownViewer'
 import MindmapView from '../components/MindmapView'
 import TableOfContents from '../components/Viewer/TableOfContents'
@@ -22,6 +23,7 @@ export default function PageView() {
   const { checkBookmark, addBookmark, removeBookmark, fetchBookmarks } = useBookmarks()
   const { user } = useAuth()
   const seedPermission = usePermissions((s) => s.seed)
+  const siteName = useSettings((s) => s.site_name)
   const [page, setPage] = useState(null)
   const [loading, setLoading] = useState(true)
   const [bookmarked, setBookmarked] = useState(false)
@@ -194,12 +196,12 @@ export default function PageView() {
 
   useEffect(() => {
     if (page?.title) {
-      document.title = `${page.title} - JustWiki`
+      document.title = `${page.title} - ${siteName}`
     } else {
-      document.title = 'JustWiki'
+      document.title = siteName
     }
-    return () => { document.title = 'JustWiki' }
-  }, [page?.title])
+    return () => { document.title = siteName }
+  }, [page?.title, siteName])
 
   if (loading) return <div className="text-text-secondary">Loading...</div>
   if (!page) return null

@@ -4,6 +4,7 @@ import useAuth from '../../store/useAuth'
 import usePages from '../../store/usePages'
 import useBookmarks from '../../store/useBookmarks'
 import useNotifications from '../../store/useNotifications'
+import useSettings from '../../store/useSettings'
 import Sidebar from './Sidebar'
 import KeyboardShortcuts from '../../hooks/useKeyboard'
 import SearchModal from '../Search/SearchModal'
@@ -15,6 +16,7 @@ export default function Layout({ children }) {
   const { fetchTree } = usePages()
   const { fetchBookmarks } = useBookmarks()
   const { fetchNotifications } = useNotifications()
+  const siteName = useSettings((s) => s.site_name)
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -51,7 +53,7 @@ export default function Layout({ children }) {
         </button>
         <Link to="/" className="flex items-center gap-1.5 font-bold text-lg text-text mr-4">
           <img src="/favicon.png" alt="" className="h-7 w-7" />
-          JustWiki
+          {siteName}
         </Link>
         <div className="flex-1" />
 

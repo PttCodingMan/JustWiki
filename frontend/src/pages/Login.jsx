@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import useAuth from '../store/useAuth'
+import useSettings from '../store/useSettings'
 import api from '../api/client'
 
 // Only same-origin paths are allowed as a post-login destination. Refuse
@@ -44,6 +45,8 @@ export default function Login() {
   })
   const [providers, setProviders] = useState([])
   const { login } = useAuth()
+  const loginTitle = useSettings((s) => s.login_title)
+  const loginSubtitle = useSettings((s) => s.login_subtitle)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -75,8 +78,10 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-bg">
       <div className="w-full max-w-sm">
         <div className="bg-surface rounded-xl shadow-lg p-8">
-          <h1 className="text-2xl font-bold text-center mb-1 text-text">JustWiki</h1>
-          <p className="text-text-secondary text-center mb-6 text-sm">Just clone, run, and write.</p>
+          <h1 className={`text-2xl font-bold text-center text-text ${loginSubtitle ? 'mb-1' : 'mb-6'}`}>{loginTitle}</h1>
+          {loginSubtitle && (
+            <p className="text-text-secondary text-center mb-6 text-sm">{loginSubtitle}</p>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
