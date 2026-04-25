@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import publicApi from '../api/publicClient'
 import MarkdownViewer from '../components/Viewer/MarkdownViewer'
+import MindmapView from '../components/MindmapView'
 import ThemeSwitcher from '../components/ThemeSwitcher'
 import useSettings from '../store/useSettings'
 
@@ -107,11 +108,15 @@ export default function PublicPageView({ notFound }) {
           {t('publicView.updated', { date: new Date(page.updated_at).toLocaleString() })}
         </div>
         <article className="bg-surface rounded-xl shadow-sm border border-border p-6 sm:p-8">
-          <MarkdownViewer
-            content={page.content_md}
-            publicMode
-            diagrams={page.diagrams || {}}
-          />
+          {page.page_type === 'mindmap' ? (
+            <MindmapView content={page.content_md} title={page.title} />
+          ) : (
+            <MarkdownViewer
+              content={page.content_md}
+              publicMode
+              diagrams={page.diagrams || {}}
+            />
+          )}
         </article>
       </main>
       {footerText && (

@@ -34,6 +34,16 @@ vi.mock('../components/Viewer/MarkdownViewer', () => ({
     ),
 }))
 
+vi.mock('../components/MindmapView', () => ({
+  default: ({ content, title }) =>
+    React.createElement(
+      'div',
+      { 'data-testid': 'mindmap-viewer' },
+      React.createElement('span', { 'data-testid': 'mindmap-title' }, title),
+      React.createElement('span', { 'data-testid': 'mindmap-content' }, content),
+    ),
+}))
+
 import publicApi from '../api/publicClient'
 import PublicPageView from './PublicPageView'
 
@@ -147,5 +157,26 @@ describe('PublicPageView', () => {
 
     expect(screen.getByTestId('md-diagrams').textContent).toContain('42')
     expect(screen.getByTestId('md-diagrams').textContent).toContain('svg')
+  })
+
+  it('renders MindmapView when page_type is mindmap', async () => {
+    publicApi.get.mockResolvedValueOnce({
+      data: {
+        slug: 'mm',
+        title: 'The Mindmap',
+        content_md: '# Node',
+        page_type: 'mindmap',
+        updated_at: '2026-04-01T00:00:00Z',
+        author_name: null,
+      },
+    })
+
+    renderAt('mm')
+    await screen.findByRole('heading', { name: 'The Mindmap' })
+
+    expect(screen.getByTestId('mindmap-viewer')).toBeInTheDocument()
+    expect(screen.getByTestId('mindmap-title').textContent).toBe('The Mindmap')
+    expect(screen.getByTestId('mindmap-content').textContent).toBe('# Node')
+    expect(screen.queryByTestId('md-viewer')).toBeNull()
   })
 })

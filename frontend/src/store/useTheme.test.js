@@ -12,9 +12,9 @@ describe('useTheme Store', () => {
     document.documentElement.classList.remove('dark')
   })
 
-  it('should initialize with light theme by default', () => {
+  it('should initialize with sand theme by default', () => {
     const { result } = renderHook(() => useTheme())
-    expect(result.current.theme).toBe('light')
+    expect(result.current.theme).toBe('sand')
   })
 
   it('should initialize with saved theme from localStorage', () => {
@@ -57,7 +57,7 @@ describe('useTheme Store', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(false)
   })
 
-  it('should fallback to light theme on init if saved theme is invalid', () => {
+  it('should fallback to sand theme on init if saved theme is invalid', () => {
     localStorage.setItem('theme', 'invalid-theme')
     const { result } = renderHook(() => useTheme())
     
@@ -65,7 +65,7 @@ describe('useTheme Store', () => {
       result.current.init()
     })
 
-    expect(result.current.theme).toBe('light')
-    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+    expect(result.current.theme).toBe('sand')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('sand')
   })
 })

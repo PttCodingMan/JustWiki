@@ -49,7 +49,7 @@ export const themes = {
 }
 
 function applyTheme(themeId) {
-  const theme = themes[themeId] || themes.light
+  const theme = themes[themeId] || themes.sand
   const root = document.documentElement
   root.setAttribute('data-theme', themeId)
   root.classList.toggle('dark', theme.dark)
@@ -76,7 +76,7 @@ function safeSet(key, value) {
 }
 
 const useTheme = create((set) => ({
-  theme: safeGet('theme') || 'light',
+  theme: safeGet('theme') || 'sand',
   dark: false,
 
   setTheme: (themeId) => {
@@ -87,7 +87,7 @@ const useTheme = create((set) => ({
 
   init: () => {
     const saved = safeGet('theme')
-    const themeId = saved && themes[saved] ? saved : 'light'
+    const themeId = saved && themes[saved] ? saved : 'sand'
     applyTheme(themeId)
     set({ theme: themeId, dark: themes[themeId]?.dark ?? false })
   },
