@@ -1,8 +1,15 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.auth import get_current_user
+from app.auth import get_current_user, require_real_user
 from app.database import get_db
 
-router = APIRouter(prefix="/api/bookmarks", tags=["bookmarks"])
+# Bookmarks are inherently per-user; the synthetic guest has no place here,
+# so reject it at the router boundary instead of repeating the check on
+# every endpoint.
+router = APIRouter(
+    prefix="/api/bookmarks",
+    tags=["bookmarks"],
+    dependencies=[Depends(require_real_user)],
+)
 
 
 @router.get("")

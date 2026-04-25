@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 
-from app.auth import get_current_user
+from app.auth import get_current_user, require_real_user
 from app.database import get_db
 from app.services.acl import require_page_read, require_page_write
 from app.routers.activity import log_activity
@@ -25,6 +25,10 @@ async def list_comments(
     per_page: int = Query(50, ge=1, le=200),
     user=Depends(get_current_user),
 ):
+    # Intentionally `get_current_user`, not `require_real_user`: with
+    # ANONYMOUS_READ on, guests can read comments on pages they can
+    # otherwise read (require_page_read below still enforces ACL).
+    # Posting is gated separately via `require_real_user` on the writes.
     db = await get_db()
     page_rows = await db.execute_fetchall(
         "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
@@ -59,7 +63,7 @@ async def list_comments(
 
 
 @router.post("", status_code=201)
-async def create_comment(slug: str, body: CommentCreate, user=Depends(get_current_user)):
+async def create_comment(slug: str, body: CommentCreate, user=Depends(require_real_user)):
     if not body.content.strip():
         raise HTTPException(status_code=400, detail="Comment content cannot be empty")
     db = await get_db()
@@ -95,7 +99,7 @@ async def create_comment(slug: str, body: CommentCreate, user=Depends(get_curren
 
 @router.put("/{comment_id}")
 async def update_comment(
-    slug: str, comment_id: int, body: CommentUpdate, user=Depends(get_current_user)
+    slug: str, comment_id: int, body: CommentUpdate, user=Depends(require_real_user)
 ):
     db = await get_db()
     # Verify the comment exists AND belongs to the page in the URL
@@ -134,7 +138,7 @@ async def update_comment(
 
 
 @router.delete("/{comment_id}", status_code=204)
-async def delete_comment(slug: str, comment_id: int, user=Depends(get_current_user)):
+async def delete_comment(slug: str, comment_id: int, user=Depends(require_real_user)):
     db = await get_db()
     # Verify the comment exists AND belongs to the page in the URL
     page_rows = await db.execute_fetchall(

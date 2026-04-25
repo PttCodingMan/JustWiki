@@ -6,6 +6,7 @@
     "search": "検索",
     "newPage": "+ 新規",
     "logout": "ログアウト",
+    "signIn": "ログイン",
     "profile": "プロフィール",
     "previous": "前へ",
     "next": "次へ",
@@ -82,7 +83,8 @@
     "placeholder": "コメントを入力…",
     "post": "投稿",
     "posting": "投稿中…",
-    "confirmDelete": "このコメントを削除しますか？"
+    "confirmDelete": "このコメントを削除しますか？",
+    "signInToReply": "ログインしてディスカッションに参加してください。"
   },
   "acl": {
     "title": "権限を管理",

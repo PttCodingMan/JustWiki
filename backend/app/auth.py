@@ -17,6 +17,27 @@ TOKEN_EXPIRE_HOURS = 24
 API_TOKEN_PREFIX = "jwk_"
 API_TOKEN_DISPLAY_PREFIX_LEN = 12  # "jwk_" + 8 chars shown in the UI
 
+# Synthetic id for the guest user produced when ANONYMOUS_READ is on and
+# the request carries no valid credentials. The users table starts at 1
+# (AUTOINCREMENT), so 0 cannot collide with any real account.
+ANONYMOUS_USER_ID = 0
+
+
+def anonymous_user() -> dict:
+    """Synthetic viewer used when ANONYMOUS_READ=true and creds are absent.
+
+    Carries the `anonymous=True` flag so write endpoints can reject it via
+    `require_real_user` and the ACL layer can short-circuit cheaply.
+    """
+    return {
+        "id": ANONYMOUS_USER_ID,
+        "username": "guest",
+        "role": "viewer",
+        "display_name": "Guest",
+        "email": "",
+        "anonymous": True,
+    }
+
 
 def hash_api_token(token: str) -> str:
     """Return the canonical hash we store in api_tokens.token_hash.
@@ -98,7 +119,7 @@ async def _resolve_api_token(token: str) -> dict | None:
     }
 
 
-async def _resolve_request_credentials(request: Request) -> dict | None:
+async def resolve_request_credentials(request: Request) -> dict | None:
     """Decode whichever credential the request carries, or return None.
 
     Recognises both personal API tokens (prefixed with `jwk_`) and JWT
@@ -136,13 +157,19 @@ async def _resolve_request_credentials(request: Request) -> dict | None:
 
 
 async def get_current_user(request: Request):
-    user = await _resolve_request_credentials(request)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
-    return user
+    user = await resolve_request_credentials(request)
+    if user is not None:
+        return user
+    # When ANONYMOUS_READ is on, fall through to a synthetic guest viewer
+    # rather than 401. ACL caps viewers at `read` and write/admin endpoints
+    # use `require_real_user` / `require_admin` to reject the guest, so this
+    # opens reads without affecting writes.
+    if settings.ANONYMOUS_READ:
+        return anonymous_user()
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+    )
 
 
 async def get_optional_user(request: Request) -> dict | None:
@@ -150,7 +177,22 @@ async def get_optional_user(request: Request) -> dict | None:
     instead of raising on missing/invalid credentials. Use for endpoints
     that serve both authenticated and anonymous traffic (e.g. media
     files referenced by public pages)."""
-    return await _resolve_request_credentials(request)
+    return await resolve_request_credentials(request)
+
+
+async def require_real_user(user=Depends(get_current_user)):
+    """Reject the synthetic anonymous user.
+
+    Use on endpoints that don't go through ACL (bookmarks, comments POST,
+    tokens, notifications, watch, profile, password, ai). ACL-gated writes
+    don't need this — viewer cap turns them into 403 automatically.
+    """
+    if user.get("anonymous"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Login required",
+        )
+    return user
 
 
 async def require_admin(user=Depends(get_current_user)):

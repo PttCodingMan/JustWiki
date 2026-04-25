@@ -2,6 +2,7 @@ import json
 from fastapi import APIRouter, Depends, Query
 from app.auth import get_current_user
 from app.database import get_db
+from app.services.acl import list_readable_page_ids
 
 router = APIRouter(prefix="/api/activity", tags=["activity"])
 
@@ -16,6 +17,24 @@ async def log_activity(db, user_id: int, action: str, target_type: str, target_i
     )
 
 
+def _readable_clause(readable: frozenset[int] | set[int]) -> tuple[str, list]:
+    """SQL fragment + params for "target_type='page' AND target_id ∈ readable".
+
+    Non-page rows (e.g. comment activity) are kept as-is — currently every
+    write that calls log_activity uses target_type='page', so the filter is
+    effectively a whitelist; if non-page targets are added later, they'll
+    pass through and may need their own ACL gate.
+    """
+    if not readable:
+        # No readable pages → drop every page-targeted row.
+        return "(a.target_type != 'page')", []
+    placeholders = ",".join("?" * len(readable))
+    return (
+        f"(a.target_type != 'page' OR a.target_id IN ({placeholders}))",
+        list(readable),
+    )
+
+
 @router.get("")
 async def list_activity(
     page: int = Query(1, ge=1),
@@ -25,17 +44,27 @@ async def list_activity(
     db = await get_db()
     offset = (page - 1) * per_page
 
-    count_rows = await db.execute_fetchall("SELECT COUNT(*) as cnt FROM activity_log")
+    # Filter activity to entries about pages the caller can read; otherwise
+    # the feed leaks titles/slugs of restricted pages via the metadata blob.
+    # Admin is short-circuited inside list_readable_page_ids.
+    readable = await list_readable_page_ids(db, user)
+    where_sql, where_params = _readable_clause(readable)
+
+    count_rows = await db.execute_fetchall(
+        f"SELECT COUNT(*) as cnt FROM activity_log a WHERE {where_sql}",
+        where_params,
+    )
     total = count_rows[0]["cnt"]
 
     rows = await db.execute_fetchall(
-        """SELECT a.id, a.user_id, a.action, a.target_type, a.target_id, a.metadata, a.created_at,
-                  u.username, u.display_name
+        f"""SELECT a.id, a.user_id, a.action, a.target_type, a.target_id, a.metadata, a.created_at,
+                   u.username, u.display_name
            FROM activity_log a
            LEFT JOIN users u ON u.id = a.user_id
+           WHERE {where_sql}
            ORDER BY a.created_at DESC, a.id DESC
            LIMIT ? OFFSET ?""",
-        (per_page, offset),
+        where_params + [per_page, offset],
     )
 
     results = []
@@ -52,36 +81,67 @@ async def list_activity(
 async def activity_stats(user=Depends(get_current_user)):
     db = await get_db()
 
-    # Top viewed pages
+    # Filter every page-derived list by the caller's readable set so guests
+    # (and any role that can't read everything) don't see restricted titles
+    # in top_viewed / recently_updated / orphan_pages.
+    readable = await list_readable_page_ids(db, user)
+
+    if not readable:
+        # No readable pages → all page-keyed lists are empty. Still return
+        # the shape so the dashboard renders without null-checks.
+        return {
+            "top_viewed": [],
+            "recently_updated": [],
+            "orphan_pages": [],
+            "total_pages": 0,
+            # Suppress global user count for callers without read access to
+            # any page — they have no business enumerating the user roster.
+            "total_users": 0,
+        }
+
+    placeholders = ",".join("?" * len(readable))
+    readable_params = list(readable)
+
     top_viewed = await db.execute_fetchall(
-        """SELECT id, slug, title, view_count FROM pages
-           ORDER BY view_count DESC LIMIT 10"""
+        f"""SELECT id, slug, title, view_count FROM pages
+           WHERE id IN ({placeholders})
+           ORDER BY view_count DESC LIMIT 10""",
+        readable_params,
     )
 
-    # Recently updated pages
     recently_updated = await db.execute_fetchall(
-        """SELECT p.id, p.slug, p.title, p.updated_at
+        f"""SELECT p.id, p.slug, p.title, p.updated_at
            FROM pages p
-           ORDER BY p.updated_at DESC LIMIT 10"""
+           WHERE p.id IN ({placeholders})
+           ORDER BY p.updated_at DESC LIMIT 10""",
+        readable_params,
     )
 
-    # Orphan pages (no backlinks pointing to them, not linked from anywhere)
     orphan_pages = await db.execute_fetchall(
-        """SELECT p.id, p.slug, p.title, p.view_count
+        f"""SELECT p.id, p.slug, p.title, p.view_count
            FROM pages p
-           WHERE p.id NOT IN (SELECT target_page_id FROM backlinks)
+           WHERE p.id IN ({placeholders})
+             AND p.id NOT IN (SELECT target_page_id FROM backlinks)
              AND p.parent_id IS NULL
-           ORDER BY p.updated_at DESC LIMIT 20"""
+           ORDER BY p.updated_at DESC LIMIT 20""",
+        readable_params,
     )
 
-    # Total counts
-    total_pages_row = await db.execute_fetchall("SELECT COUNT(*) as cnt FROM pages")
-    total_users_row = await db.execute_fetchall("SELECT COUNT(*) as cnt FROM users")
+    # total_pages reflects what *this user* can read, not the global count.
+    # Anonymous and viewers see the open-default subset; admins see all.
+    total_pages = len(readable)
+    # Hide the user roster size from the synthetic guest. Real users on a
+    # small-team wiki are expected to know the roster, so editors+ see it.
+    if user.get("anonymous"):
+        total_users = 0
+    else:
+        total_users_row = await db.execute_fetchall("SELECT COUNT(*) as cnt FROM users")
+        total_users = total_users_row[0]["cnt"]
 
     return {
         "top_viewed": [dict(r) for r in top_viewed],
         "recently_updated": [dict(r) for r in recently_updated],
         "orphan_pages": [dict(r) for r in orphan_pages],
-        "total_pages": total_pages_row[0]["cnt"],
-        "total_users": total_users_row[0]["cnt"],
+        "total_pages": total_pages,
+        "total_users": total_users,
     }

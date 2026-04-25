@@ -39,6 +39,14 @@ class Settings(BaseSettings):
     OIDC_ENABLED: bool = False
     OIDC_PROVIDERS: str = ""             # comma-separated: google,github,generic
 
+    # When True, requests without valid credentials are treated as a
+    # synthetic "guest" viewer (id=0, role=viewer) instead of being rejected
+    # with 401. ACL still gates access — guests only see pages with no ACL
+    # anchor in their parent chain (the open-default set). All write/admin
+    # endpoints remain login-required (see auth.require_real_user).
+    # Default off so existing private-wiki deployments are unaffected.
+    ANONYMOUS_READ: bool = False
+
     # Access-control layers. Any rule that is set and does not match → 403.
     OIDC_ALLOW_SIGNUP: bool = False      # if False, only pre-provisioned users
     OIDC_ALLOWED_EMAILS: str = ""        # comma-separated individual whitelist

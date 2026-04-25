@@ -61,17 +61,29 @@ export default function PageView() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [menuOpen])
 
+  const isGuest = !!user?.anonymous
+
   useEffect(() => {
     let cancelled = false
     const load = async () => {
       setLoading(true)
       try {
+        // Bookmarks and watch are personal endpoints that 401 for the
+        // synthetic guest. Skip the calls entirely instead of relying on
+        // .catch(), so we don't paint a transient UI state and don't make
+        // the network panel show spurious 401s on every page load.
+        const personalPromises = isGuest
+          ? [Promise.resolve(false), Promise.resolve({ data: { watching: false, watcher_count: 0 } })]
+          : [
+              checkBookmark(slug),
+              api.get(`/pages/${slug}/watch`).catch(() => ({ data: { watching: false, watcher_count: 0 } })),
+            ]
         const [pageData, , isBookmarked, backlinksRes, watchRes] = await Promise.all([
           getPage(slug),
           fetchPageTags(slug),
-          checkBookmark(slug),
+          personalPromises[0],
           api.get(`/pages/${slug}/backlinks`).catch(() => ({ data: [] })),
-          api.get(`/pages/${slug}/watch`).catch(() => ({ data: { watching: false, watcher_count: 0 } })),
+          personalPromises[1],
         ])
         if (!cancelled) {
           setPage(pageData)
@@ -89,7 +101,7 @@ export default function PageView() {
     }
     load()
     return () => { cancelled = true }
-  }, [slug, getPage, fetchPageTags, checkBookmark, navigate])
+  }, [slug, getPage, fetchPageTags, checkBookmark, navigate, isGuest])
 
   const handleToggleWatch = async () => {
     try {
@@ -250,16 +262,18 @@ export default function PageView() {
               </svg>
               {t('pageView.history')}
             </button>
-            <button
-              onClick={() => { setMenuOpen(false); handleToggleWatch() }}
-              className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
-            >
-              <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-              {watching ? t('pageView.unwatch') : t('pageView.watch')}
-            </button>
+            {!isGuest && (
+              <button
+                onClick={() => { setMenuOpen(false); handleToggleWatch() }}
+                className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
+              >
+                <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                {watching ? t('pageView.unwatch') : t('pageView.watch')}
+              </button>
+            )}
             {writable && (
             <>
             <div className="border-t border-border my-1" />
@@ -384,13 +398,15 @@ export default function PageView() {
       <article>
         <div className="flex items-center gap-3 mb-4 flex-wrap">
           <h1 className="text-3xl font-bold text-text">{page.title}</h1>
-          <button
-            onClick={handleToggleBookmark}
-            className={`text-xl transition-colors ${bookmarked ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-400'}`}
-            title={bookmarked ? t('pageView.removeBookmark') : t('pageView.addBookmark')}
-          >
-            {bookmarked ? '\u2605' : '\u2606'}
-          </button>
+          {!isGuest && (
+            <button
+              onClick={handleToggleBookmark}
+              className={`text-xl transition-colors ${bookmarked ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-400'}`}
+              title={bookmarked ? t('pageView.removeBookmark') : t('pageView.addBookmark')}
+            >
+              {bookmarked ? '\u2605' : '\u2606'}
+            </button>
+          )}
         </div>
 
         {/* Mobile: inline actions under the title. Desktop uses the right-rail dock. */}
@@ -403,16 +419,18 @@ export default function PageView() {
           {pageTags.map((tag) => (
             <span key={tag.id} className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-primary-soft text-primary dark:text-accent rounded-full">
               {tag.name}
-              <button
-                onClick={() => handleRemoveTag(tag.name)}
-                className="text-primary/60 hover:text-primary ml-0.5"
-                title={t('pageView.removeTag')}
-              >
-                &times;
-              </button>
+              {!isGuest && (
+                <button
+                  onClick={() => handleRemoveTag(tag.name)}
+                  className="text-primary/60 hover:text-primary ml-0.5"
+                  title={t('pageView.removeTag')}
+                >
+                  &times;
+                </button>
+              )}
             </span>
           ))}
-          {showTagInput ? (
+          {!isGuest && (showTagInput ? (
             <form onSubmit={handleAddTag} className="inline-flex">
               <input
                 autoFocus
@@ -430,7 +448,7 @@ export default function PageView() {
             >
               {t('pageView.addTag')}
             </button>
-          )}
+          ))}
         </div>
 
         <div className="text-sm text-text-secondary mb-6">

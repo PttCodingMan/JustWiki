@@ -1,10 +1,16 @@
 """In-app notification endpoints for watchers."""
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.auth import get_current_user
+from app.auth import get_current_user, require_real_user
 from app.database import get_db
 
-router = APIRouter(prefix="/api/notifications", tags=["notifications"])
+# Notifications are personal — guests don't receive any, so the whole
+# router is real-user-only.
+router = APIRouter(
+    prefix="/api/notifications",
+    tags=["notifications"],
+    dependencies=[Depends(require_real_user)],
+)
 
 
 @router.get("")

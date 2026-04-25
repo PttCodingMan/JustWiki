@@ -26,10 +26,27 @@ import Chat from './pages/Chat'
 import PublicPageView from './pages/PublicPageView'
 import PageOrPublicView from './pages/PageOrPublicView'
 
+// Routes a guest (ANONYMOUS_READ visitor without a real session) is not
+// allowed on. The matchers cover the path prefixes in the route table that
+// imply a write/admin/personal action; everything else (page view, search,
+// graph, activity) is open to guests.
+const GUEST_BLOCKED_ROUTES = [
+  /^\/new$/,
+  /^\/admin/,
+  /^\/dashboard$/,
+  /^\/trash$/,
+  /^\/profile$/,
+  /^\/chat$/,
+  /^\/page\/[^/]+\/(edit|versions)$/,
+]
+
 /**
  * Layout-route element that gates every in-app route. The tree split:
  *   loading               → placeholder
- *   authenticated         → <Layout><Outlet /></Layout>  (Layout persists across child navigation)
+ *   authenticated user    → <Layout><Outlet /></Layout>  (Layout persists across child navigation)
+ *   guest user (ANONYMOUS_READ on)
+ *     ↳ on a write/admin route → redirect to /login
+ *     ↳ otherwise              → <Layout><Outlet /></Layout> with guest-mode UI
  *   anonymous + /page/:slug → <Outlet /> (bare — PageOrPublicView renders its own chrome)
  *   anonymous, anything else → <Navigate to="/login?redirect=..."/>
  *
@@ -49,6 +66,10 @@ function AuthGate() {
   }
 
   if (user) {
+    if (user.anonymous && GUEST_BLOCKED_ROUTES.some((re) => re.test(location.pathname))) {
+      const back = location.pathname + location.search
+      return <Navigate to={`/login?redirect=${encodeURIComponent(back)}`} replace />
+    }
     return (
       <Layout>
         <Outlet />

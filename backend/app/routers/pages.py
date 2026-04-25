@@ -342,11 +342,15 @@ async def get_page(slug: str, user=Depends(get_current_user)):
 
     # Increment view count (does not bump the content version), deduplicated
     # so refreshes / tab-switches by the same user don't inflate the count.
-    if await _should_count_view(db, user["id"], page["id"]):
-        await db.execute(
-            "UPDATE pages SET view_count = view_count + 1 WHERE id = ?", (page["id"],)
-        )
-        page["view_count"] += 1
+    # Skip for the synthetic guest: every anonymous viewer would share the
+    # same id=0 dedup key, which both makes the count meaningless and lets
+    # one IP block all anonymous views from ever counting.
+    if not user.get("anonymous"):
+        if await _should_count_view(db, user["id"], page["id"]):
+            await db.execute(
+                "UPDATE pages SET view_count = view_count + 1 WHERE id = ?", (page["id"],)
+            )
+            page["view_count"] += 1
     await db.commit()
 
     page["effective_permission"] = permission

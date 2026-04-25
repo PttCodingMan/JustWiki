@@ -5,7 +5,13 @@ from fastapi import APIRouter, HTTPException, Response, Depends, Request
 from app.schemas import LoginRequest, UserResponse
 from typing import Optional
 from pydantic import BaseModel
-from app.auth import verify_password, create_token, get_current_user, hash_password
+from app.auth import (
+    verify_password,
+    create_token,
+    hash_password,
+    require_real_user,
+    resolve_request_credentials,
+)
 from app.config import settings
 from app.database import get_db
 from app.services.client_ip import client_ip
@@ -104,7 +110,14 @@ async def logout(response: Response):
 
 
 @router.get("/me", response_model=UserResponse)
-async def me(user=Depends(get_current_user)):
+async def me(request: Request):
+    # Always 401 when there's no real session, even with ANONYMOUS_READ on.
+    # The frontend uses this 401 to detect "I'm a guest" vs "I'm logged in";
+    # if /me silently returned the synthetic guest, the UI couldn't tell
+    # the difference and would render the logged-in chrome.
+    user = await resolve_request_credentials(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     return user
 
 
@@ -114,7 +127,7 @@ class ProfileUpdateRequest(BaseModel):
 
 
 @router.get("/profile")
-async def get_profile(user=Depends(get_current_user)):
+async def get_profile(user=Depends(require_real_user)):
     db = await get_db()
     rows = await db.execute_fetchall(
         "SELECT id, username, role, display_name, email, created_at FROM users WHERE id = ?",
@@ -124,7 +137,7 @@ async def get_profile(user=Depends(get_current_user)):
 
 
 @router.put("/profile")
-async def update_profile(body: ProfileUpdateRequest, user=Depends(get_current_user)):
+async def update_profile(body: ProfileUpdateRequest, user=Depends(require_real_user)):
     db = await get_db()
     updates = []
     values = []
@@ -157,7 +170,7 @@ class ChangePasswordRequest(BaseModel):
 
 
 @router.put("/password")
-async def change_password(body: ChangePasswordRequest, user=Depends(get_current_user)):
+async def change_password(body: ChangePasswordRequest, user=Depends(require_real_user)):
     if len(body.new_password) < 8:
         raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
 

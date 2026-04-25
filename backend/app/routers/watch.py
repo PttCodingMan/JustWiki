@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.auth import get_current_user, require_admin
+from app.auth import require_admin, require_real_user
 from app.database import get_db
 from app.services.acl import resolve_page_permission
 from app.services.notifications import validate_webhook_url
@@ -33,7 +33,7 @@ async def _require_readable_page(db, user, slug: str) -> int:
 # ── Watching ──────────────────────────────────────────────────────────
 
 @router.get("/api/pages/{slug}/watch")
-async def get_watch_status(slug: str, user=Depends(get_current_user)):
+async def get_watch_status(slug: str, user=Depends(require_real_user)):
     db = await get_db()
     page_id = await _require_readable_page(db, user, slug)
 
@@ -48,7 +48,7 @@ async def get_watch_status(slug: str, user=Depends(get_current_user)):
 
 
 @router.post("/api/pages/{slug}/watch")
-async def watch_page(slug: str, user=Depends(get_current_user)):
+async def watch_page(slug: str, user=Depends(require_real_user)):
     db = await get_db()
     page_id = await _require_readable_page(db, user, slug)
 
@@ -61,7 +61,7 @@ async def watch_page(slug: str, user=Depends(get_current_user)):
 
 
 @router.delete("/api/pages/{slug}/watch")
-async def unwatch_page(slug: str, user=Depends(get_current_user)):
+async def unwatch_page(slug: str, user=Depends(require_real_user)):
     db = await get_db()
     # Unwatch is always safe: even if ACL changed after subscribing, let
     # users clean up. Still require the page exists and isn't deleted.

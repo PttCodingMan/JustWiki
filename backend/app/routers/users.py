@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 
-from app.auth import get_current_user, require_admin, hash_password
+from app.auth import get_current_user, require_admin, require_real_user, hash_password
 from app.database import get_db
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -60,7 +60,7 @@ class UserRestore(BaseModel):
 async def search_users(
     q: str = Query("", description="Substring match on username or display_name"),
     limit: int = Query(20, ge=1, le=100),
-    user=Depends(get_current_user),
+    user=Depends(require_real_user),
 ):
     """Username lookup for the AclManager picker.
 
@@ -68,7 +68,9 @@ async def search_users(
     response small. Available to any authenticated user since the
     alternative is no UI for managing ACLs at all; this does allow
     username enumeration by authenticated users, which is an accepted
-    trade-off for a small-team wiki.
+    trade-off for a small-team wiki — but **not** by anonymous visitors,
+    so this endpoint blocks the synthetic guest even when ANONYMOUS_READ
+    is on.
     """
     db = await get_db()
     pattern = f"%{q}%"

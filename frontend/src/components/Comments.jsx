@@ -146,24 +146,30 @@ export default function Comments({ slug }) {
             </div>
           )}
 
-          <form onSubmit={handleSubmit}>
-            <textarea
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder={t('comments.placeholder')}
-              className="w-full p-3 border border-border bg-surface text-text rounded-lg text-sm focus:outline-none focus:border-primary resize-none"
-              rows={3}
-            />
-            <div className="flex justify-end mt-2">
-              <button
-                type="submit"
-                disabled={submitting || !newComment.trim()}
-                className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover disabled:opacity-50"
-              >
-                {submitting ? t('comments.posting') : t('comments.post')}
-              </button>
+          {user?.anonymous ? (
+            <div className="text-sm text-text-secondary text-center py-2">
+              {t('comments.signInToReply')}
             </div>
-          </form>
+          ) : (
+            <form onSubmit={handleSubmit}>
+              <textarea
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder={t('comments.placeholder')}
+                className="w-full p-3 border border-border bg-surface text-text rounded-lg text-sm focus:outline-none focus:border-primary resize-none"
+                rows={3}
+              />
+              <div className="flex justify-end mt-2">
+                <button
+                  type="submit"
+                  disabled={submitting || !newComment.trim()}
+                  className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover disabled:opacity-50"
+                >
+                  {submitting ? t('comments.posting') : t('comments.post')}
+                </button>
+              </div>
+            </form>
+          )}
         </>
       )}
     </div>

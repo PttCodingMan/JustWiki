@@ -12,7 +12,7 @@ referenced the group, so deleted groups don't leave behind ghost grants.
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.auth import get_current_user, require_admin
+from app.auth import require_admin, require_real_user
 from app.database import get_db
 from app.routers.activity import log_activity
 from app.services.acl import invalidate_readable_cache
@@ -30,7 +30,9 @@ class GroupMemberAdd(BaseModel):
 
 
 @router.get("")
-async def list_groups(user=Depends(get_current_user)):
+async def list_groups(user=Depends(require_real_user)):
+    # Open to any authenticated user (the AclManager picker needs it), but
+    # never to the synthetic guest — group names are org-chart intel.
     db = await get_db()
     rows = await db.execute_fetchall(
         """SELECT g.id, g.name, g.description, g.created_at, g.created_by,
@@ -97,7 +99,7 @@ async def delete_group(group_id: int, user=Depends(require_admin)):
 
 
 @router.get("/{group_id}/members")
-async def list_members(group_id: int, user=Depends(get_current_user)):
+async def list_members(group_id: int, user=Depends(require_real_user)):
     db = await get_db()
     group = await db.execute_fetchall(
         "SELECT id FROM groups WHERE id = ?", (group_id,)

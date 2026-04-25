@@ -13,7 +13,9 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
   const navigate = useNavigate()
   const { movePage } = usePages()
   const { user } = useAuth()
-  const canAuthor = user?.role !== 'viewer'
+  // viewer covers both real viewers and the synthetic guest, since both
+  // resolve to permission='read' and can't reorder pages.
+  const canAuthor = user?.role !== 'viewer' && !user?.anonymous
   const isActive = location.pathname === `/page/${node.slug}`
   const hasChildren = node.children?.length > 0
   const [expanded, setExpanded] = useState(
@@ -93,11 +95,11 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
     <div>
       <div
         ref={rowRef}
-        draggable
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
+        draggable={canAuthor}
+        onDragStart={canAuthor ? handleDragStart : undefined}
+        onDragOver={canAuthor ? handleDragOver : undefined}
+        onDragLeave={canAuthor ? handleDragLeave : undefined}
+        onDrop={canAuthor ? handleDrop : undefined}
         className={`flex items-center group rounded-lg transition-colors cursor-grab active:cursor-grabbing ${dropIndicatorClass} ${
           isActive
             ? 'text-text font-medium'
@@ -218,15 +220,17 @@ export default function Sidebar() {
               {t('sidebar.aiChat')}
             </Link>
           )}
-          <Link
-            to="/trash"
-            className="flex items-center gap-2 px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover rounded-lg"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" />
-            </svg>
-            {t('sidebar.trash')}
-          </Link>
+          {!user?.anonymous && (
+            <Link
+              to="/trash"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover rounded-lg"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" />
+              </svg>
+              {t('sidebar.trash')}
+            </Link>
+          )}
           {user?.role === 'admin' && (
             <>
               <Link

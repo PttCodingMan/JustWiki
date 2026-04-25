@@ -6,6 +6,7 @@
     "search": "검색",
     "newPage": "+ 새로 만들기",
     "logout": "로그아웃",
+    "signIn": "로그인",
     "profile": "프로필",
     "previous": "이전",
     "next": "다음",
@@ -82,7 +83,8 @@
     "placeholder": "댓글을 입력하세요…",
     "post": "댓글 등록",
     "posting": "등록 중…",
-    "confirmDelete": "이 댓글을 삭제할까요?"
+    "confirmDelete": "이 댓글을 삭제할까요?",
+    "signInToReply": "로그인하여 토론에 참여하세요."
   },
   "acl": {
     "title": "권한 관리",

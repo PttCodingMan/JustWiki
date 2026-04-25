@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from app.auth import require_admin
+from app.config import settings as app_settings
 from app.database import get_db
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -33,6 +34,11 @@ class SettingsResponse(BaseModel):
     login_subtitle: str
     home_page_slug: str
     footer_text: str
+    # Server-side toggle, surfaced read-only so the frontend can decide
+    # whether an unauthenticated visitor should be rendered as a guest
+    # (Layout + read-only UI) or bounced to /login. Driven by the
+    # ANONYMOUS_READ env var, not stored in site_settings.
+    anonymous_read: bool
 
 
 class SettingsUpdate(BaseModel):
@@ -52,7 +58,7 @@ async def _read_all() -> dict[str, str]:
 
 @router.get("", response_model=SettingsResponse)
 async def get_settings():
-    return await _read_all()
+    return {**(await _read_all()), "anonymous_read": app_settings.ANONYMOUS_READ}
 
 
 @router.put("", response_model=SettingsResponse)
@@ -76,4 +82,4 @@ async def update_settings(body: SettingsUpdate, _=Depends(require_admin)):
             (key, value),
         )
     await db.commit()
-    return await _read_all()
+    return {**(await _read_all()), "anonymous_read": app_settings.ANONYMOUS_READ}

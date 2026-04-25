@@ -50,6 +50,10 @@ def invalidate_readable_cache(user_id: int | None = None):
 
 
 async def _user_group_ids(db, user_id: int) -> list[int]:
+    # The synthetic anonymous user (id=0) is never in any group; skip the
+    # round-trip and return early so list/tree/search calls stay cheap.
+    if user_id == 0:
+        return []
     rows = await db.execute_fetchall(
         "SELECT group_id FROM group_members WHERE user_id = ?", (user_id,)
     )
@@ -233,7 +237,11 @@ async def can_read_media(db, user: dict, media_id: int) -> bool:
     )
 
     if not ref_rows:
-        # Orphan — uploader only.
+        # Orphan — uploader only. Short-circuit the synthetic guest so a
+        # future media row with `uploaded_by=0` (which shouldn't exist, but
+        # defensive) can't accidentally return True for every guest.
+        if user.get("anonymous") or user.get("id") == 0:
+            return False
         media = await db.execute_fetchall(
             "SELECT uploaded_by FROM media WHERE id = ?", (media_id,)
         )

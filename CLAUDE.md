@@ -112,6 +112,7 @@ Resolution logic (in `services/acl.py` — routers must use these helpers, never
 - Per-page ACL rows live in `page_acl (page_id, principal_type, principal_id, permission)` where principal is a user or group.
 - To resolve: walk the `parent_id` chain, find the shallowest ancestor with any ACL row (the "anchor"), and take the most-permissive matching row. If no anchor exists, the page is open by default (write for editors, read for viewers).
 - `viewer` role is capped at `read` even when ACL grants write.
+- When `ANONYMOUS_READ=true` (env), unauthenticated requests get a synthetic guest user (`id=0`, `role=viewer`, `anonymous=True`) instead of 401. ACL still gates everything — guests can only read pages with no ACL anchor (the open-default set). All write/personal endpoints (bookmarks, comments POST, watch, profile, tokens, AI) reject the guest via `auth.require_real_user`; admin endpoints reject via `require_admin`. `/api/auth/me` keeps returning 401 for unauthenticated requests so the frontend can distinguish guest from logged-in.
 - Frontend: `usePermissions` store caches per-slug; seeded from `effective_permission` on page-view responses. Helper functions `canEdit`, `canRead`, `canManageAcl` are exported from the store file.
 
 ## Themes

@@ -18,13 +18,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.auth import get_current_user
+from app.auth import get_current_user, require_real_user
 from app.config import settings
 from app.database import get_db
 from app.services.acl import list_readable_page_ids
 from app.services.search import segment
 
-router = APIRouter(prefix="/api/ai", tags=["ai"])
+# AI calls hit a paid upstream — never expose to anonymous traffic.
+router = APIRouter(
+    prefix="/api/ai",
+    tags=["ai"],
+    dependencies=[Depends(require_real_user)],
+)
 
 # FTS5 trigram tokenizer needs ≥3 chars; below that we fall back to LIKE —
 # same threshold as routers/search.py so retrieval behaves identically to

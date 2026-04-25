@@ -280,10 +280,21 @@ async def get_media(filename: str, request: Request):
     user = await get_optional_user(request)
 
     if user is None:
-        # Anonymous: public-page referenced media only.
-        if not await _media_is_public(db, filename):
-            raise HTTPException(status_code=404, detail="File not found")
-        return _safe_media_response(filepath)
+        # When ANONYMOUS_READ is on, fall through to the synthetic guest so
+        # media on open-default pages renders for visitors. Without this,
+        # demo-mode pages with images look broken — every <img src> 404s
+        # because get_optional_user returns None even when /api/pages/{slug}
+        # would have served the page to the same visitor as a guest viewer.
+        from app.config import settings as app_settings
+        from app.auth import anonymous_user
+        if app_settings.ANONYMOUS_READ:
+            user = anonymous_user()
+        else:
+            # Flag off → fall back to the legacy is_public path so existing
+            # share-a-public-page deployments keep working.
+            if not await _media_is_public(db, filename):
+                raise HTTPException(status_code=404, detail="File not found")
+            return _safe_media_response(filepath)
 
     # Authenticated: admin short-circuits, otherwise run the ACL check.
     if user.get("role") == "admin":

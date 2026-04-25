@@ -24,14 +24,22 @@ export default function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768)
   const [searchOpen, setSearchOpen] = useState(false)
 
+  const isGuest = !!user?.anonymous
+
   useEffect(() => {
     fetchTree()
+    if (isGuest) {
+      // Bookmarks / notifications are personal endpoints that 401 for the
+      // synthetic guest. Skip them entirely so we don't paint a transient
+      // error and don't pay for the wasted round-trips.
+      return undefined
+    }
     fetchBookmarks()
     fetchNotifications()
     // Poll for new notifications every 60s — cheap, and simple.
     const id = setInterval(() => fetchNotifications(), 60000)
     return () => clearInterval(id)
-  }, [])
+  }, [isGuest])
 
   const handleLogout = async () => {
     await logout()
@@ -74,30 +82,43 @@ export default function Layout({ children }) {
           <kbd className="text-xs text-text-secondary border border-border rounded px-1">⌘K</kbd>
         </button>
 
-        <button
-          onClick={() => navigate('/new')}
-          className="text-sm px-3 py-1.5 bg-primary text-primary-text rounded-lg hover:bg-primary-hover mr-3"
-          title={t('nav.newPage')}
-        >
-          {t('common.newPage')}
-        </button>
-        <NotificationBell />
+        {!isGuest && (
+          <button
+            onClick={() => navigate('/new')}
+            className="text-sm px-3 py-1.5 bg-primary text-primary-text rounded-lg hover:bg-primary-hover mr-3"
+            title={t('nav.newPage')}
+          >
+            {t('common.newPage')}
+          </button>
+        )}
+        {!isGuest && <NotificationBell />}
         <div className="mr-2">
           <ThemeSwitcher />
         </div>
         <div className="mr-2">
           <LanguageSwitcher />
         </div>
-        <Link
-          to="/profile"
-          className="text-sm text-text-secondary hover:text-text mr-3"
-          title={t('common.profile')}
-        >
-          {user?.username}
-        </Link>
-        <button onClick={handleLogout} className="text-sm text-text-secondary hover:text-text">
-          {t('common.logout')}
-        </button>
+        {!isGuest && (
+          <Link
+            to="/profile"
+            className="text-sm text-text-secondary hover:text-text mr-3"
+            title={t('common.profile')}
+          >
+            {user?.username}
+          </Link>
+        )}
+        {isGuest ? (
+          <button
+            onClick={() => navigate('/login')}
+            className="text-sm px-3 py-1.5 bg-primary text-primary-text rounded-lg hover:bg-primary-hover"
+          >
+            {t('common.signIn')}
+          </button>
+        ) : (
+          <button onClick={handleLogout} className="text-sm text-text-secondary hover:text-text">
+            {t('common.logout')}
+          </button>
+        )}
       </nav>
 
       {/* Main */}

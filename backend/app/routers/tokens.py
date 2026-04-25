@@ -22,11 +22,18 @@ from app.auth import (
     API_TOKEN_PREFIX,
     get_current_user,
     hash_api_token,
+    require_real_user,
 )
 from app.database import get_db
 from app.routers.activity import log_activity
 
-router = APIRouter(prefix="/api/auth/tokens", tags=["tokens"])
+# Personal API tokens are tied to a real account — no token issuance for
+# the anonymous guest.
+router = APIRouter(
+    prefix="/api/auth/tokens",
+    tags=["tokens"],
+    dependencies=[Depends(require_real_user)],
+)
 
 # Default lifetime for a new token. Callers can override down to 1 or up to
 # 365 days, or pass 0 to mean "never expires". The cap stops a token from
