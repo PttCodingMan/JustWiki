@@ -28,7 +28,8 @@ All your data = one `data/just-wiki.db` SQLite file + the `media/` folder. Backu
 ## Features
 
 **Editing & content**
-- **Markdown first** — Milkdown WYSIWYG editor with slash commands, Mermaid diagrams, KaTeX math, callout blocks
+- **Markdown-first WYSIWYG** — Milkdown lets non-technical users write naturally, while the storage stays plain Markdown so engineers can pipe it through Git or scripts; you're never locked into a proprietary format
+- **Slash commands & rich blocks** — Mermaid diagrams, KaTeX math, callout blocks
 - **Wikilinks** — `[[page]]` syntax with automatic backlink tracking
 - **Page hierarchy & templates** — nested page trees, one-click reusable templates
 - **Draw.io integration** — embedded diagram editor
@@ -56,10 +57,12 @@ All your data = one `data/just-wiki.db` SQLite file + the `media/` folder. Backu
 </p>
 
 **Collaboration & permissions**
-- **Multi-user + group ACL** — per-page permission control
-- **Version history** — page revisions with diff view
+- **Multi-user + group ACL** — per-page permission control (inherited from parent pages)
+- **Concurrent-edit safety** — optimistic locking (`base_version`) so simultaneous edits never silently clobber each other
+- **Version history** — page revisions with diff view; roll back when something gets broken
 - **Comments, bookmarks, tags, page subscriptions** — everything a small team needs
-- **Activity log & trash** — see recent changes, recover deleted pages
+- **Activity log & trash** — see recent changes; deletions are soft and recoverable
+- **SSO & API tokens** — built-in OIDC (Google, GitHub, custom), LDAP, and personal Bearer tokens for enterprise SSO and automation scripts
 
 **Export & deployment**
 - **Flexible export** — per-page Markdown / HTML / PDF (browser print), full-site static zip
