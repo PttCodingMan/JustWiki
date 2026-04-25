@@ -13,14 +13,28 @@ services:
     # mounted /app/data volume and treats the frontend nginx (port 3000) as
     # the public ingress — OIDC redirect_uri must round-trip through nginx.
     # TRUST_PROXY=true because nginx is the only reachable peer.
+    #
+    # PUBLIC_BASE_URL: hardcode the docker-correct value rather than
+    # `${PUBLIC_BASE_URL:-...}`, because the shipped .env.example sets the
+    # dev value (localhost:8000) and `:-default` only fires when unset, not
+    # when set-to-something. To override for prod, set PUBLIC_BASE_URL_DOCKER
+    # in your .env (e.g., https://wiki.example.com).
     environment:
       DATA_DIR: /app/data
       DB_PATH: /app/data/just-wiki.db
       MEDIA_DIR: /app/data/media
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL_DOCKER:-http://localhost:3000}
       TRUST_PROXY: "true"
+    # Block-style list: docker-compose's flow-sequence parser whitespace-
+    # splits long quoted strings into separate argv tokens. Each arg on its
+    # own line dodges that. The Python expression must stay single-statement
+    # for the same reason — `;` would be split too if it ever reverts.
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health',timeout=3).status==200 else 1)"]
+      test:
+        - CMD
+        - python
+        - -c
+        - "__import__('urllib.request',fromlist=['request']).urlopen('http://localhost:8000/api/health',timeout=3).read()"
       interval: 30s
       timeout: 5s
       start_period: 15s
