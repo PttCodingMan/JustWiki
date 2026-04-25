@@ -1,20 +1,26 @@
 /**
  * Left-to-right tree layout for `page_type='mindmap'` pages.
  *
- * Input:   `{ text, children: [...] }` tree produced by `renderMindmap`.
+ * Input:   `{ text, image, children: [...] }` tree produced by `renderMindmap`.
  * Output:  `{ nodes, edges, viewBox }` that `MindmapView` turns into JSX SVG.
  *
  * Geometry (matches the XMind-style logic chart the wiki targets):
  *   - Y direction: children of one parent are packed vertically and share a
- *     common width (per-parent width alignment), which keeps sibling rects
- *     visually flush without forcing distant nodes at the same depth to
- *     widen just because one cousin has a long label.
- *   - X direction: columns are aligned per depth using the widest node at
- *     that depth globally — so every node at depth N has the same x center,
- *     regardless of which parent it belongs to.
+ *     common height (per-parent alignment), which keeps sibling rects
+ *     visually flush in height when one has an image thumbnail.
+ *   - X direction: every node at depth N is widened to the widest natural
+ *     width at that depth globally and centered on the same x — so all
+ *     blocks at the same level are visually equal-width regardless of which
+ *     parent they belong to.
  *   - Edges: orthogonal rounded elbows that exit the parent's right edge
  *     midpoint, bend once at mid-x, and land on the child's left edge
  *     midpoint. Radius is clamped so the arc never exceeds its segment.
+ *
+ * Image support: when a node has `image: { src, alt }`, the rect is widened
+ * to `[PAD_X][IMG_SIZE][IMG_GAP][text][PAD_X]` and heightened to fit
+ * `IMG_SIZE + 2·PAD_Y`. The renderer is responsible for laying out the
+ * image and text within that rect using the `image` and `textW` fields the
+ * layout exports per node.
  */
 
 // Split FONT_FAMILY + FONT_SIZE so the measurement canvas and the rendered
@@ -26,6 +32,7 @@ const FONT_FAMILY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
 export const LAYOUT = Object.freeze({
   NODE_H: 28,
   PAD_X: 14,
+  PAD_Y: 6,
   GAP_Y: 10,
   RANK_GAP: 48,
   PAD_L: 20,
@@ -33,6 +40,8 @@ export const LAYOUT = Object.freeze({
   PAD_T: 16,
   PAD_B: 16,
   CORNER_R: 6,
+  IMG_SIZE: 48,
+  IMG_GAP: 8,
   FONT_SIZE,
   FONT_FAMILY,
   FONT: `${FONT_SIZE}px ${FONT_FAMILY}`,
@@ -152,6 +161,25 @@ export function buildEdgePath(x0, y0, x1, y1, radius) {
 // -----------------------------------------------------------------------------
 
 /**
+ * Width of the inner content (image + gap + text) before per-parent
+ * equalization. Used to compute `rectW` and exposed as `textW` so the
+ * renderer can place the text label without re-measuring.
+ */
+function naturalContentDims(node) {
+  const textW = node.text ? Math.ceil(measureText(node.text)) : 0
+  const hasImage = !!node.image
+  let inner = textW
+  if (hasImage) {
+    // Image-only node: just the thumbnail.
+    // Image + text node: thumb + gap + text.
+    inner = textW > 0 ? LAYOUT.IMG_SIZE + LAYOUT.IMG_GAP + textW : LAYOUT.IMG_SIZE
+  }
+  const rectW = inner + LAYOUT.PAD_X * 2
+  const rectH = hasImage ? LAYOUT.IMG_SIZE + LAYOUT.PAD_Y * 2 : LAYOUT.NODE_H
+  return { textW, rectW, rectH }
+}
+
+/**
  * Assign a stable id + depth to every node in the tree via pre-order DFS.
  * Mutates `node._id` and `node._depth` on clones (see `layoutMindmap`).
  */
@@ -164,18 +192,24 @@ function annotate(node, depth, parentId, out, nextId) {
 }
 
 /**
- * Post-order DFS: compute `rectW` for leaves from text width, then widen all
- * children of each node to the max sibling width (per-parent alignment), then
- * compute subtree vertical extent.
+ * Post-order DFS: compute `rectW` / `rectH` / `textW` for leaves from text +
+ * image dims, heighten all children of each node to the max sibling height
+ * (per-parent alignment so image and non-image siblings stay visually flush),
+ * then compute subtree vertical extent. Width equalization happens later, in
+ * a per-depth pass after the whole tree has been measured.
  */
 function measure(node) {
-  node.rectW = Math.ceil(measureText(node.text)) + LAYOUT.PAD_X * 2
-  node.rectH = LAYOUT.NODE_H
+  const dims = naturalContentDims(node)
+  node.textW = dims.textW
+  node.rectW = dims.rectW
+  node.rectH = dims.rectH
   for (const c of node.children) measure(c)
   if (node.children.length > 0) {
-    let maxChildW = 0
-    for (const c of node.children) if (c.rectW > maxChildW) maxChildW = c.rectW
-    for (const c of node.children) c.rectW = maxChildW
+    let maxChildH = 0
+    for (const c of node.children) {
+      if (c.rectH > maxChildH) maxChildH = c.rectH
+    }
+    for (const c of node.children) c.rectH = maxChildH
   }
   node.subtreeH =
     node.children.length === 0
@@ -203,7 +237,11 @@ function positionY(node, topY) {
  * would accumulate `rectW` / `_id` scribbles).
  */
 function cloneTree(node) {
-  return { text: node.text, children: node.children.map(cloneTree) }
+  return {
+    text: node.text,
+    image: node.image || null,
+    children: node.children.map(cloneTree),
+  }
 }
 
 /**
@@ -219,12 +257,15 @@ export function layoutMindmap(tree) {
   measure(root)
   positionY(root, LAYOUT.PAD_T)
 
-  // Column centers: per-depth max rectW accumulates along x.
+  // Per-depth width equalization: every node at depth d is widened to the
+  // widest natural rect at that depth, so all blocks on the same level read
+  // as equal-width regardless of which parent they descend from.
   const colMaxW = []
   for (const n of flat) {
     const d = n._depth
     if (colMaxW[d] === undefined || n.rectW > colMaxW[d]) colMaxW[d] = n.rectW
   }
+  for (const n of flat) n.rectW = colMaxW[n._depth]
   const colCenterX = []
   if (colMaxW.length > 0) {
     colCenterX[0] = LAYOUT.PAD_L + colMaxW[0] / 2
@@ -239,6 +280,8 @@ export function layoutMindmap(tree) {
     id: n._id,
     depth: n._depth,
     text: n.text,
+    image: n.image || null,
+    textW: n.textW,
     x: n.x,
     y: n.y,
     w: n.rectW,

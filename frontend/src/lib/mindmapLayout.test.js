@@ -101,7 +101,7 @@ describe('layoutMindmap — linear chain', () => {
   })
 })
 
-describe('layoutMindmap — per-parent width alignment', () => {
+describe('layoutMindmap — per-depth width alignment', () => {
   it('widens narrower siblings to the widest in the group', () => {
     const tree = node('R', [leaf('short'), leaf('a much longer label')])
     const { nodes } = layoutMindmap(tree)
@@ -110,7 +110,7 @@ describe('layoutMindmap — per-parent width alignment', () => {
     expect(left.w).toBeGreaterThan(0)
   })
 
-  it('allows different parents to give their children different widths', () => {
+  it('gives every node at the same depth the same width, even across parents', () => {
     // parent A has long children, parent B has short ones — both at depth 2.
     const tree = node('R', [
       node('A', [leaf('verrrrry long label one'), leaf('verrrrry long label two')]),
@@ -120,12 +120,11 @@ describe('layoutMindmap — per-parent width alignment', () => {
     const byText = new Map(nodes.map((n) => [n.text, n]))
     const aKids = [byText.get('verrrrry long label one'), byText.get('verrrrry long label two')]
     const bKids = [byText.get('x'), byText.get('y')]
-    // Per-parent equality:
+    // All depth-2 nodes share the same width — driven by the widest one.
     expect(aKids[0].w).toBe(aKids[1].w)
     expect(bKids[0].w).toBe(bKids[1].w)
-    // Different parents → different widths allowed:
-    expect(aKids[0].w).toBeGreaterThan(bKids[0].w)
-    // But per-depth column alignment — same x center at depth 2:
+    expect(aKids[0].w).toBe(bKids[0].w)
+    // Per-depth column alignment is preserved — same x center at depth 2.
     expect(aKids[0].x).toBeCloseTo(bKids[0].x, 5)
     expect(aKids[1].x).toBeCloseTo(bKids[1].x, 5)
   })
@@ -173,6 +172,51 @@ describe('layoutMindmap — does not mutate input', () => {
       expect(c._id).toBeUndefined()
       expect(c.rectW).toBeUndefined()
     }
+  })
+})
+
+describe('layoutMindmap — image support', () => {
+  const imgLeaf = (text, src = '/api/media/x.png', alt = '') => ({
+    text,
+    image: { src, alt },
+    children: [],
+  })
+
+  it('widens rectW to fit image + gap + text and lifts rectH to image height', () => {
+    const tree = node('R', [imgLeaf('hello')])
+    const { nodes } = layoutMindmap(tree)
+    const child = nodes[1]
+    // rectH must accommodate the IMG_SIZE thumbnail with PAD_Y on each side.
+    expect(child.h).toBe(LAYOUT.IMG_SIZE + LAYOUT.PAD_Y * 2)
+    // rectW must include image + IMG_GAP + text width + 2·PAD_X (>= a comparable text-only rect).
+    expect(child.w).toBeGreaterThan(LAYOUT.IMG_SIZE + LAYOUT.IMG_GAP + LAYOUT.PAD_X * 2)
+    // textW is exposed for the renderer to position the label.
+    expect(child.textW).toBeGreaterThan(0)
+  })
+
+  it('handles image-only nodes (empty text)', () => {
+    const tree = node('R', [imgLeaf('')])
+    const { nodes } = layoutMindmap(tree)
+    const child = nodes[1]
+    expect(child.text).toBe('')
+    expect(child.image).not.toBeNull()
+    // No text → rectW = IMG_SIZE + 2·PAD_X (no IMG_GAP).
+    expect(child.w).toBe(LAYOUT.IMG_SIZE + LAYOUT.PAD_X * 2)
+    expect(child.textW).toBe(0)
+  })
+
+  it('equalizes rectH per-parent so a sibling without image is heightened', () => {
+    const tree = node('R', [imgLeaf('with-image'), leaf('no-image')])
+    const { nodes } = layoutMindmap(tree)
+    const [, withImg, plain] = nodes
+    expect(withImg.h).toBe(plain.h)
+    expect(plain.h).toBeGreaterThanOrEqual(LAYOUT.IMG_SIZE + LAYOUT.PAD_Y * 2)
+  })
+
+  it('keeps the image reference on the layout node', () => {
+    const tree = node('R', [imgLeaf('x', '/api/media/foo.png', 'foo')])
+    const { nodes } = layoutMindmap(tree)
+    expect(nodes[1].image).toEqual({ src: '/api/media/foo.png', alt: 'foo' })
   })
 })
 

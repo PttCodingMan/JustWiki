@@ -190,9 +190,67 @@ body {
   margin: 0.5em 0;
 }
 
-.milkdown .editor h1 { font-size: 2em; font-weight: 700; margin: 0.67em 0; }
-.milkdown .editor h2 { font-size: 1.5em; font-weight: 600; margin: 0.75em 0; }
-.milkdown .editor h3 { font-size: 1.25em; font-weight: 600; margin: 0.75em 0; }
+.milkdown .editor :is(h1, h2, h3, h4, h5, h6)::before {
+  display: inline-block;
+  margin-right: 0.5em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  opacity: 0.6;
+  font-size: 0.7em;
+  vertical-align: 0.25em;
+  user-select: none;
+}
+.milkdown .editor h1 {
+  font-size: 2.2em;
+  font-weight: 800;
+  margin: 0.67em 0 0.5em;
+  padding-bottom: 0.2em;
+  border-bottom: 2px solid var(--color-border);
+  line-height: 1.2;
+}
+.milkdown .editor h1::before { content: "#"; }
+.milkdown .editor h2 {
+  font-size: 1.7em;
+  font-weight: 700;
+  margin: 1em 0 0.5em;
+  padding-bottom: 0.15em;
+  border-bottom: 1px solid var(--color-border);
+  line-height: 1.25;
+}
+.milkdown .editor h2::before { content: "##"; }
+.milkdown .editor h3 {
+  font-size: 1.4em;
+  font-weight: 700;
+  margin: 0.9em 0 0.4em;
+  line-height: 1.3;
+}
+.milkdown .editor h3::before { content: "###"; }
+.milkdown .editor h4 {
+  font-size: 1.18em;
+  font-weight: 700;
+  margin: 0.85em 0 0.35em;
+  line-height: 1.35;
+}
+.milkdown .editor h4::before { content: "####"; }
+.milkdown .editor h5 {
+  font-size: 1.05em;
+  font-weight: 700;
+  margin: 0.8em 0 0.3em;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+.milkdown .editor h5::before { content: "#####"; }
+.milkdown .editor h6 {
+  font-size: 0.95em;
+  font-weight: 700;
+  margin: 0.8em 0 0.3em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+.milkdown .editor h6::before { content: "######"; }
 
 .milkdown .editor ul {
   padding-left: 1.5em;
@@ -458,7 +516,8 @@ mark {
 .markdown-viewer code { background: var(--color-surface-hover); padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.9em; }
 .markdown-viewer pre { background: #1e293b; color: #e2e8f0; padding: 1em; border-radius: 8px; overflow-x: auto; }
 .markdown-viewer pre code { background: none; padding: 0; color: inherit; }
-.markdown-viewer img { max-width: 100%; border-radius: 8px; }
+.markdown-viewer img { max-width: 100%; border-radius: 8px; cursor: zoom-in; }
+.markdown-viewer a img { cursor: pointer; }
 .markdown-viewer a { color: var(--color-primary); text-decoration: underline; }
 .markdown-viewer table { border-collapse: collapse; width: 100%; margin: 0.75em 0; }
 .markdown-viewer th, .markdown-viewer td { border: 1px solid var(--color-border); padding: 0.5em 0.75em; }
@@ -605,6 +664,28 @@ mark {
 .drawio-clickable:hover {
   box-shadow: 0 0 0 2px #7ea7d8;
   border-radius: 8px;
+}
+
+/* Image zoom lightbox (mindmap thumbnails + viewer images) */
+.image-lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+  padding: 2rem;
+}
+.image-lightbox-image {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  cursor: default;
+  background: white;
 }
 
 /* Draw.io zoom lightbox */

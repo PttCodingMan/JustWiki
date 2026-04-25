@@ -3,8 +3,13 @@
  *
  * The layout + SVG rendering lives in `mindmapLayout.js` and `MindmapView`;
  * this module's only job is to turn markdown prose into a nested
- * `{ text, children }` tree, choosing between the heading strategy and the
- * bullet-list fallback, clamping level jumps, and sanitizing node text.
+ * `{ text, image, children }` tree, choosing between the heading strategy and
+ * the bullet-list fallback, clamping level jumps, and sanitizing node text.
+ *
+ * Image support: a heading or bullet may include a markdown image
+ * (`![alt](/api/media/...)`). The first image whose src points at the wiki's
+ * own media endpoint becomes the node's thumbnail; cross-origin and `data:` /
+ * `javascript:` URLs are rejected and the rest of the line is kept as text.
  */
 import MarkdownIt from 'markdown-it'
 
@@ -18,6 +23,13 @@ const MAX_NODE_TEXT = 30
 // and anything else a reader might legitimately want in a node label.
 const SANITIZE_STRIP_CHARS = /[「」『』]/g
 
+// Only same-origin uploaded media is allowed as a node thumbnail. This is a
+// strict allowlist: any scheme (`http:`, `data:`, `javascript:`) or
+// protocol-relative URL is rejected so the SVG <image href> can never reach
+// out cross-origin or trigger a script handler. The wiki's upload endpoint
+// returns paths of the shape `/api/media/{filename}` (see routers/media.py).
+const SAFE_IMG_PREFIX = '/api/media/'
+
 export class MindmapParseError extends Error {
   constructor(message) {
     super(message)
@@ -27,17 +39,41 @@ export class MindmapParseError extends Error {
 
 const md = new MarkdownIt({ html: false, linkify: false })
 
-function inlineText(inlineToken) {
-  if (!inlineToken || !Array.isArray(inlineToken.children)) return ''
-  let out = ''
+function safeImageSrc(src) {
+  if (typeof src !== 'string') return null
+  const trimmed = src.trim()
+  if (!trimmed.startsWith(SAFE_IMG_PREFIX)) return null
+  // Reject embedded whitespace / control chars that could confuse downstream
+  // URL handling. Media filenames are slugified so this is conservative.
+  if (/[\s"'<>]/.test(trimmed)) return null
+  return trimmed
+}
+
+function inlineParts(inlineToken) {
+  if (!inlineToken || !Array.isArray(inlineToken.children)) {
+    return { text: '', image: null }
+  }
+  let text = ''
+  let image = null
   for (const child of inlineToken.children) {
     if (child.type === 'text' || child.type === 'code_inline') {
-      out += child.content
+      text += child.content
     } else if (child.type === 'softbreak' || child.type === 'hardbreak') {
-      out += ' '
+      text += ' '
+    } else if (child.type === 'image' && image === null) {
+      const attrs = Array.isArray(child.attrs) ? child.attrs : []
+      const srcAttr = attrs.find((a) => a[0] === 'src')
+      const safeSrc = safeImageSrc(srcAttr ? srcAttr[1] : '')
+      if (safeSrc) {
+        // markdown-it stores the alt attr as an empty placeholder and writes
+        // the actual alt text into `child.content` (the source between the `[`
+        // and `]`). Prefer that.
+        const alt = child.content || ''
+        image = { src: safeSrc, alt: String(alt) }
+      }
     }
   }
-  return out
+  return { text, image }
 }
 
 export function sanitize(text) {
@@ -48,13 +84,37 @@ export function sanitize(text) {
 
 function collectHeadings(tokens) {
   const out = []
+  // Authors using Milkdown almost always insert images on their own line
+  // (the editor wraps pasted/uploaded images in a fresh paragraph). Attach
+  // those paragraph images to the most recently emitted heading when that
+  // heading hasn't already captured an inline image — this keeps the natural
+  // "## Section\n![pic](...)" layout working without forcing inline syntax.
+  let lastHeading = null
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i]
-    if (t.type !== 'heading_open') continue
-    const level = Number(t.tag.slice(1))
-    const inline = tokens[i + 1]
-    const text = sanitize(inlineText(inline))
-    if (text) out.push({ level, text })
+    if (t.type === 'heading_open') {
+      const level = Number(t.tag.slice(1))
+      const inline = tokens[i + 1]
+      const { text: rawText, image } = inlineParts(inline)
+      const text = sanitize(rawText)
+      if (text || image) {
+        const entry = { level, text, image }
+        out.push(entry)
+        lastHeading = entry
+      } else {
+        lastHeading = null
+      }
+    } else if (
+      t.type === 'paragraph_open' &&
+      lastHeading &&
+      !lastHeading.image
+    ) {
+      const inline = tokens[i + 1]
+      if (inline && inline.type === 'inline') {
+        const { image } = inlineParts(inline)
+        if (image) lastHeading.image = image
+      }
+    }
   }
   return out
 }
@@ -70,8 +130,9 @@ function collectBullets(tokens) {
       for (let j = i + 1; j < tokens.length; j++) {
         const inner = tokens[j]
         if (inner.type === 'inline') {
-          const text = sanitize(inlineText(inner))
-          if (text) out.push({ depth, text })
+          const { text: rawText, image } = inlineParts(inner)
+          const text = sanitize(rawText)
+          if (text || image) out.push({ depth, text, image })
           break
         }
         if (inner.type === 'list_item_close') break
@@ -83,10 +144,10 @@ function collectBullets(tokens) {
 
 /**
  * Given items with a `level` field (higher = deeper), return a list of
- * `{ text, level, parent }` entries with each item's parent index resolved via
- * a stack. Level jumps are clamped so no child is more than one level deeper
- * than the running top-of-stack (prevents phantom intermediate levels when
- * authors skip from H2 to H4).
+ * `{ text, image, level, parent }` entries with each item's parent index
+ * resolved via a stack. Level jumps are clamped so no child is more than one
+ * level deeper than the running top-of-stack (prevents phantom intermediate
+ * levels when authors skip from H2 to H4).
  */
 function buildLinearTree(items) {
   if (items.length === 0) return []
@@ -99,19 +160,29 @@ function buildLinearTree(items) {
     while (stack.length > 0 && stack[stack.length - 1].level >= lvl) stack.pop()
     const parentIndex = stack.length === 0 ? null : stack[stack.length - 1].index
     const index = tree.length
-    tree.push({ text: item.text, level: lvl, parent: parentIndex })
+    tree.push({
+      text: item.text,
+      image: item.image || null,
+      level: lvl,
+      parent: parentIndex,
+    })
     stack.push({ index, level: lvl })
   }
   return tree
 }
 
 /**
- * Attach a list of `{text, level, parent}` nodes as descendants of `root`,
- * producing the nested `{ text, children }` shape the layout walker expects.
+ * Attach a list of `{text, image, level, parent}` nodes as descendants of a
+ * synthetic root, producing the nested `{ text, image, children }` shape the
+ * layout walker expects.
  */
-function attachToRoot(rootText, nodes) {
-  const root = { text: rootText, children: [] }
-  const refs = nodes.map((n) => ({ text: n.text, children: [] }))
+function attachToRoot(rootInfo, nodes) {
+  const root = { text: rootInfo.text, image: rootInfo.image, children: [] }
+  const refs = nodes.map((n) => ({
+    text: n.text,
+    image: n.image || null,
+    children: [],
+  }))
   for (let i = 0; i < nodes.length; i++) {
     const parent = nodes[i].parent == null ? root : refs[nodes[i].parent]
     parent.children.push(refs[i])
@@ -122,32 +193,38 @@ function attachToRoot(rootText, nodes) {
 function buildFromHeadings(headings, title) {
   if (headings.length === 0) return null
   const rootTitle = sanitize(title || '') || 'Mindmap'
-  let root, rest
+  let rootInfo, rest
   const h1s = headings.filter((h) => h.level === 1)
   if (h1s.length === 1 && headings[0].level === 1) {
-    root = h1s[0].text
+    rootInfo = { text: h1s[0].text, image: h1s[0].image || null }
     rest = headings.slice(1)
   } else {
-    root = rootTitle
+    rootInfo = { text: rootTitle, image: null }
     rest = headings
   }
   if (rest.length === 0) return null
-  return attachToRoot(root, buildLinearTree(rest))
+  return attachToRoot(rootInfo, buildLinearTree(rest))
 }
 
-function buildFromBullets(bullets, title) {
+function buildFromBullets(bullets, title, rootImage) {
   if (bullets.length === 0) return null
   const capped = bullets.filter((b) => b.depth <= MAX_BULLET_DEPTH)
   if (capped.length === 0) return null
-  const rootTitle = sanitize(title || '') || 'Mindmap'
-  const items = capped.map((b) => ({ level: b.depth, text: b.text }))
-  return attachToRoot(rootTitle, buildLinearTree(items))
+  const rootText = sanitize(title || '') || 'Mindmap'
+  const items = capped.map((b) => ({
+    level: b.depth,
+    text: b.text,
+    image: b.image || null,
+  }))
+  return attachToRoot({ text: rootText, image: rootImage || null }, buildLinearTree(items))
 }
 
 /**
- * Parse markdown into a nested mindmap tree. Returns `{ text, children }`;
- * throws `MindmapParseError` when the document has no heading or bullet
- * structure to map onto a tree.
+ * Parse markdown into a nested mindmap tree. Returns
+ * `{ text, image, children }`; throws `MindmapParseError` when the document
+ * has no heading or bullet structure to map onto a tree. Every node carries
+ * `image` (either `{ src, alt }` or `null`) so consumers can branch without
+ * defensive checks.
  */
 export function renderMindmap(content, title = '') {
   const tokens = md.parse(content || '', {})
@@ -155,10 +232,11 @@ export function renderMindmap(content, title = '') {
   const fromHeadings = buildFromHeadings(headings, title)
   if (fromHeadings) return fromHeadings
 
-  const fallbackTitle =
-    headings.length === 1 && headings[0].level === 1 ? headings[0].text : title
+  const onlyH1 = headings.length === 1 && headings[0].level === 1
+  const fallbackTitle = onlyH1 ? headings[0].text : title
+  const fallbackImage = onlyH1 ? headings[0].image || null : null
   const bullets = collectBullets(tokens)
-  const fromBullets = buildFromBullets(bullets, fallbackTitle)
+  const fromBullets = buildFromBullets(bullets, fallbackTitle, fallbackImage)
   if (fromBullets) return fromBullets
 
   throw new MindmapParseError(

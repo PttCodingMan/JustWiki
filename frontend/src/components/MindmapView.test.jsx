@@ -66,6 +66,37 @@ describe('MindmapView', () => {
     expect(firstRect.getAttribute('fill')).toBe('var(--mindmap-lv0-fill)')
   })
 
+  it('renders an SVG <image> for nodes with a same-origin image', () => {
+    const md = `# Root\n\n## ![logo](/api/media/abc.png) Branded\n## Plain\n`
+    const { container } = render(<MindmapView content={md} title="" />)
+    const mindmap = container.querySelector('svg[role="img"]')
+    const images = mindmap.querySelectorAll('image')
+    expect(images.length).toBe(1)
+    const img = images[0]
+    // jsdom serializes the SVG `href` attribute as either `href` or `xlink:href`
+    // depending on React version; either is acceptable here.
+    expect(img.getAttribute('href') || img.getAttribute('xlink:href')).toBe(
+      '/api/media/abc.png',
+    )
+    expect(img.getAttribute('preserveAspectRatio')).toBe('xMidYMid meet')
+  })
+
+  it('omits the <image> element entirely when no image is parsed', () => {
+    const md = `# R\n\n## A\n`
+    const { container } = render(<MindmapView content={md} title="" />)
+    const mindmap = container.querySelector('svg[role="img"]')
+    expect(mindmap.querySelectorAll('image').length).toBe(0)
+  })
+
+  it('drops cross-origin image URLs but still renders the surrounding text', () => {
+    const md = `# R\n\n## ![bad](https://evil.example.com/x.png) Hello\n`
+    const { container } = render(<MindmapView content={md} title="" />)
+    const mindmap = container.querySelector('svg[role="img"]')
+    expect(mindmap.querySelectorAll('image').length).toBe(0)
+    const texts = [...mindmap.querySelectorAll('text')].map((t) => t.textContent)
+    expect(texts).toContain('Hello')
+  })
+
   it('persists a chosen palette to localStorage', () => {
     const md = `# R\n\n## A\n`
     render(<MindmapView content={md} title="" />)

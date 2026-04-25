@@ -73,6 +73,7 @@ export default function MarkdownViewer({
   const containerRef = useRef(null)
   const navigate = useNavigate()
   const [lightboxSvg, setLightboxSvg] = useState(null)
+  const [lightboxImg, setLightboxImg] = useState(null)
 
   // React 19 re-applies dangerouslySetInnerHTML on every re-render even when the
   // string is referentially equal, which wipes the Mermaid SVGs and transcluded
@@ -82,6 +83,18 @@ export default function MarkdownViewer({
   useLayoutEffect(() => {
     if (containerRef.current) containerRef.current.innerHTML = html
   }, [html])
+
+  useEffect(() => {
+    if (!lightboxSvg && !lightboxImg) return
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        setLightboxSvg(null)
+        setLightboxImg(null)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [lightboxSvg, lightboxImg])
 
   // Extract h1-h3 headings for the TOC. Runs after DOM is populated.
   useEffect(() => {
@@ -104,6 +117,22 @@ export default function MarkdownViewer({
         const href = link.getAttribute('href')
         if (href) navigate(href)
         return
+      }
+
+      // Inline image click → open lightbox. Skip when the image is wrapped in
+      // a link (the link wins) or sits inside a draw.io / mermaid block (those
+      // have their own handlers right below).
+      if (
+        e.target.tagName === 'IMG' &&
+        !e.target.closest('a') &&
+        !e.target.closest('.drawio-embed') &&
+        !e.target.closest('[data-mermaid]')
+      ) {
+        const src = e.target.getAttribute('src')
+        if (src) {
+          setLightboxImg({ src, alt: e.target.getAttribute('alt') || '' })
+          return
+        }
       }
 
       // Draw.io diagram click
@@ -241,6 +270,22 @@ export default function MarkdownViewer({
           <div
             className="drawio-lightbox-content"
             dangerouslySetInnerHTML={{ __html: lightboxSvg }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+      {lightboxImg && (
+        <div
+          className="image-lightbox-overlay"
+          onClick={() => setLightboxImg(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={lightboxImg.alt || 'Image preview'}
+        >
+          <img
+            src={lightboxImg.src}
+            alt={lightboxImg.alt}
+            className="image-lightbox-image"
             onClick={(e) => e.stopPropagation()}
           />
         </div>

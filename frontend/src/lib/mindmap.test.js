@@ -158,3 +158,119 @@ describe('renderMindmap — deterministic output', () => {
     expect(renderMindmap(md)).toEqual(renderMindmap(md))
   })
 })
+
+describe('renderMindmap — image support', () => {
+  it('attaches a same-origin image to a heading node', () => {
+    const md = `# Root\n\n## ![logo](/api/media/abc.png) Company\n`
+    const tree = renderMindmap(md)
+    const node = firstByText(tree, 'Company')
+    expect(node).not.toBeNull()
+    expect(node.image).toEqual({ src: '/api/media/abc.png', alt: 'logo' })
+  })
+
+  it('captures image-only headings (empty text)', () => {
+    const md = `# Root\n\n## ![diagram](/api/media/d.png)\n`
+    const tree = renderMindmap(md)
+    expect(tree.children).toHaveLength(1)
+    const node = tree.children[0]
+    expect(node.text).toBe('')
+    expect(node.image).toEqual({ src: '/api/media/d.png', alt: 'diagram' })
+  })
+
+  it('attaches an image to the H1 root', () => {
+    const md = `# ![brand](/api/media/r.png) Root Title\n\n## Child\n`
+    const tree = renderMindmap(md)
+    expect(tree.text).toBe('Root Title')
+    expect(tree.image).toEqual({ src: '/api/media/r.png', alt: 'brand' })
+  })
+
+  it('rejects cross-origin URLs and keeps the surrounding text', () => {
+    const md = `# Root\n\n## ![x](https://evil.example.com/x.png) Hello\n`
+    const tree = renderMindmap(md)
+    const node = firstByText(tree, 'Hello')
+    expect(node).not.toBeNull()
+    expect(node.image).toBeNull()
+  })
+
+  it('rejects data: and javascript: schemes', () => {
+    // markdown-it's own URL validator already drops these schemes (so the
+    // image never reaches our parser as an image token), but we still want
+    // to assert end-to-end that no node ends up with an unsafe image.
+    const cases = [
+      `# R\n\n## ![x](data:image/png;base64,abc) Caption\n`,
+      `# R\n\n## ![x](javascript:alert(1)) Caption\n`,
+    ]
+    for (const md of cases) {
+      const tree = renderMindmap(md)
+      const images = []
+      const walk = (n) => {
+        if (n.image) images.push(n.image)
+        n.children.forEach(walk)
+      }
+      walk(tree)
+      expect(images).toEqual([])
+    }
+  })
+
+  it('drops a node when its only content is an unsafe image', () => {
+    // Heading with an unsafe image and no text → no node (text gets sanitized
+    // to empty, image rejected).
+    const md = `# Root\n\n## ![](https://evil.example.com/x.png)\n## Real Child\n`
+    const tree = renderMindmap(md)
+    expect(tree.children.map((c) => c.text)).toEqual(['Real Child'])
+  })
+
+  it('captures images on bullet items', () => {
+    const md = `- ![pic](/api/media/p.png) Item A\n- Item B\n`
+    const tree = renderMindmap(md, 'T')
+    const a = firstByText(tree, 'Item A')
+    const b = firstByText(tree, 'Item B')
+    expect(a.image).toEqual({ src: '/api/media/p.png', alt: 'pic' })
+    expect(b.image).toBeNull()
+  })
+
+  it('takes only the first image per heading', () => {
+    const md = `# R\n\n## ![a](/api/media/1.png) ![b](/api/media/2.png) Title\n`
+    const tree = renderMindmap(md)
+    const node = firstByText(tree, 'Title')
+    expect(node.image).toEqual({ src: '/api/media/1.png', alt: 'a' })
+  })
+
+  it('attaches a paragraph image that follows a heading', () => {
+    // Milkdown wraps pasted/uploaded images in their own paragraph rather
+    // than embedding them inline in the heading text — make sure those still
+    // attach to the preceding heading.
+    const md = [
+      '# Root',
+      '',
+      '## Section',
+      '',
+      '![pic](/api/media/p.png)',
+      '',
+      '## Other',
+    ].join('\n')
+    const tree = renderMindmap(md)
+    const section = firstByText(tree, 'Section')
+    expect(section.image).toEqual({ src: '/api/media/p.png', alt: 'pic' })
+    const other = firstByText(tree, 'Other')
+    expect(other.image).toBeNull()
+  })
+
+  it('does not let a paragraph image override an inline heading image', () => {
+    const md = [
+      '## ![inline](/api/media/inline.png) Section',
+      '',
+      '![later](/api/media/later.png)',
+    ].join('\n')
+    const tree = renderMindmap(md, 'T')
+    const section = firstByText(tree, 'Section')
+    expect(section.image).toEqual({ src: '/api/media/inline.png', alt: 'inline' })
+  })
+
+  it('puts image: null on every node when no images are used', () => {
+    const md = `# A\n\n## B\n`
+    const tree = renderMindmap(md)
+    expect(tree.image).toBeNull()
+    expect(tree.children[0].image).toBeNull()
+  })
+})

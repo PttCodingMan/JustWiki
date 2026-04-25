@@ -119,6 +119,7 @@ function ThemeDropdown({ value, onChange }) {
 export default function MindmapView({ content, title }) {
   const mindmapTheme = useMindmapTheme((s) => s.theme)
   const setMindmapTheme = useMindmapTheme((s) => s.setTheme)
+  const [zoomed, setZoomed] = useState(null)
 
   const parsed = useMemo(() => {
     try {
@@ -133,6 +134,15 @@ export default function MindmapView({ content, title }) {
     () => (parsed.tree ? layoutMindmap(parsed.tree) : null),
     [parsed.tree],
   )
+
+  useEffect(() => {
+    if (!zoomed) return
+    const onKey = (e) => {
+      if (e.key === 'Escape') setZoomed(null)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [zoomed])
 
   if (parsed.error) {
     return (
@@ -170,6 +180,21 @@ export default function MindmapView({ content, title }) {
         <g className="mindmap-nodes" fontFamily={LAYOUT.FONT_FAMILY} fontSize={LAYOUT.FONT_SIZE}>
           {layout.nodes.map((n) => {
             const s = levelStyle(palette, n.depth)
+            const hasImage = !!n.image
+            const hasText = !!n.text
+            // Layout image + text within the node's local frame (origin = rect
+            // center). Image-and-text: a left-anchored block centered in the
+            // rect, image on the left. Image-only: image centered. Text-only:
+            // text centered (matches the legacy behavior).
+            let imgX = 0
+            let textX = 0
+            if (hasImage && hasText) {
+              const contentW = LAYOUT.IMG_SIZE + LAYOUT.IMG_GAP + n.textW
+              imgX = -contentW / 2
+              textX = imgX + LAYOUT.IMG_SIZE + LAYOUT.IMG_GAP + n.textW / 2
+            } else if (hasImage) {
+              imgX = -LAYOUT.IMG_SIZE / 2
+            }
             return (
               <g key={n.id} transform={`translate(${n.x},${n.y})`}>
                 <rect
@@ -183,20 +208,55 @@ export default function MindmapView({ content, title }) {
                   stroke={s.stroke}
                   strokeWidth="1.5"
                 />
-                <text
-                  x="0"
-                  y="0"
-                  fill={s.text}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                >
-                  {n.text}
-                </text>
+                {hasImage && (
+                  <image
+                    href={n.image.src}
+                    x={imgX}
+                    y={-LAYOUT.IMG_SIZE / 2}
+                    width={LAYOUT.IMG_SIZE}
+                    height={LAYOUT.IMG_SIZE}
+                    preserveAspectRatio="xMidYMid meet"
+                    style={{ cursor: 'zoom-in' }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setZoomed(n.image)
+                    }}
+                  >
+                    {n.image.alt ? <title>{n.image.alt}</title> : null}
+                  </image>
+                )}
+                {hasText && (
+                  <text
+                    x={textX}
+                    y="0"
+                    fill={s.text}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                  >
+                    {n.text}
+                  </text>
+                )}
               </g>
             )
           })}
         </g>
       </svg>
+      {zoomed && (
+        <div
+          className="image-lightbox-overlay"
+          onClick={() => setZoomed(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={zoomed.alt || 'Image preview'}
+        >
+          <img
+            src={zoomed.src}
+            alt={zoomed.alt || ''}
+            className="image-lightbox-image"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   )
 }
