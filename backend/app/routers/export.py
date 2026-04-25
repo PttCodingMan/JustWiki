@@ -270,6 +270,37 @@ async def export_page(
     })
 
 
+def build_site_files(pages):
+    """Render pages into ``[(filename, html), ...]`` for a static export.
+
+    Shared by the HTTP zip endpoint and the CLI demo-site builder so both
+    paths produce byte-identical output.
+    """
+    files = []
+    page_links = []
+    for p in pages:
+        page = dict(p)
+        html_content = _inline_media_srcs(md_to_simple_html(page["content_md"]))
+        safe_title = _html.escape(page["title"])
+        safe_slug = _html.escape(page["slug"])
+        full_html = HTML_TEMPLATE.format(
+            title=safe_title,
+            slug=safe_slug,
+            content=html_content,
+        )
+        files.append((f"{page['slug']}.html", full_html))
+        # Both href and link text need escaping — slug may contain chars
+        # that break the attribute, title may contain HTML.
+        page_links.append(
+            f'<li><a href="{urllib.parse.quote(page["slug"], safe="")}.html">'
+            f'{safe_title}</a></li>'
+        )
+
+    index_html = SITE_INDEX_TEMPLATE.format(page_list="\n".join(page_links))
+    files.append(("index.html", index_html))
+    return files
+
+
 @router.get("/site")
 async def export_site(
     format: str = Query("html"),
@@ -287,29 +318,8 @@ async def export_site(
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        # Generate page files
-        page_links = []
-        for p in pages:
-            page = dict(p)
-            html_content = _inline_media_srcs(md_to_simple_html(page["content_md"]))
-            safe_title = _html.escape(page["title"])
-            safe_slug = _html.escape(page["slug"])
-            full_html = HTML_TEMPLATE.format(
-                title=safe_title,
-                slug=safe_slug,
-                content=html_content,
-            )
-            zf.writestr(f"{page['slug']}.html", full_html)
-            # Both href and link text need escaping — slug may contain chars
-            # that break the attribute, title may contain HTML.
-            page_links.append(
-                f'<li><a href="{urllib.parse.quote(page["slug"], safe="")}.html">'
-                f'{safe_title}</a></li>'
-            )
-
-        # Generate index
-        index_html = SITE_INDEX_TEMPLATE.format(page_list="\n".join(page_links))
-        zf.writestr("index.html", index_html)
+        for filename, content in build_site_files(pages):
+            zf.writestr(filename, content)
 
     buf.seek(0)
     return StreamingResponse(
