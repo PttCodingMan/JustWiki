@@ -15,7 +15,7 @@ export default function Activity() {
 
   useEffect(() => {
     fetchActivity()
-    fetchStats()
+    fetchStats(true)
   }, [])
 
   const actionLabel = (action) => {
