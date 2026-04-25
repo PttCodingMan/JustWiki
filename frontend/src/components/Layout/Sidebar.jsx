@@ -5,6 +5,7 @@ import usePages from '../../store/usePages'
 import useBookmarks from '../../store/useBookmarks'
 import useAuth from '../../store/useAuth'
 import useChat from '../../store/useChat'
+import AppFooter from '../AppFooter'
 
 function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
   const { t } = useTranslation()
@@ -181,8 +182,8 @@ export default function Sidebar() {
   }, [aiStatus, checkAiStatus])
 
   return (
-    <aside className="w-60 min-w-60 bg-sidebar dark:bg-sidebar-dark border-r border-border overflow-y-auto">
-      <div className="p-3">
+    <aside className="w-60 min-w-60 h-full bg-sidebar dark:bg-sidebar-dark border-r border-border flex flex-col">
+      <div className="flex-1 overflow-y-auto p-3">
         {/* Quick links */}
         <div className="mb-4">
           <Link
@@ -284,6 +285,9 @@ export default function Sidebar() {
         {tree.map((node, i) => (
           <TreeNode key={node.id} node={node} parentId={null} index={i} />
         ))}
+      </div>
+      <div className="shrink-0 border-t border-border px-3 py-2">
+        <AppFooter />
       </div>
     </aside>
   )

@@ -708,5 +708,8 @@
       "username_collision": "Could not generate a username. Ask an admin to invite you.",
       "default": "Sign-in failed."
     }
+  },
+  "appFooter": {
+    "sourceCode": "View source on GitHub"
   }
 }

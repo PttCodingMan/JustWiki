@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import useAuth from '../store/useAuth'
 import useSettings from '../store/useSettings'
 import api from '../api/client'
+import AppFooter from '../components/AppFooter'
 
 // Only same-origin paths are allowed as a post-login destination. Refuse
 // protocol-relative ("//evil.com") or absolute URLs so a crafted link can't
@@ -139,6 +140,7 @@ export default function Login() {
             </>
           )}
         </div>
+        <AppFooter className="mt-6" />
       </div>
     </div>
   )

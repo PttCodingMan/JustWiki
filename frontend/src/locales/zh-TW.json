@@ -708,5 +708,8 @@
       "username_collision": "無法自動產生使用者名稱，請聯絡管理員邀請你。",
       "default": "登入失敗。"
     }
+  },
+  "appFooter": {
+    "sourceCode": "在 GitHub 檢視原始碼"
   }
 }

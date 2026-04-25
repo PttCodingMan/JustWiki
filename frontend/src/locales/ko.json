@@ -708,5 +708,8 @@
       "username_collision": "사용자명을 생성할 수 없습니다. 관리자에게 초대를 요청하세요.",
       "default": "로그인에 실패했습니다."
     }
+  },
+  "appFooter": {
+    "sourceCode": "GitHub에서 소스 코드 보기"
   }
 }

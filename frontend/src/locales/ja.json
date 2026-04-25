@@ -708,5 +708,8 @@
       "username_collision": "ユーザー名を生成できませんでした。管理者に招待を依頼してください。",
       "default": "サインインに失敗しました。"
     }
+  },
+  "appFooter": {
+    "sourceCode": "GitHub でソースコードを見る"
   }
 }
