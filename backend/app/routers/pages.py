@@ -209,19 +209,40 @@ async def page_graph(user=Depends(get_current_user)):
     readable = await list_readable_page_ids(db, user)
     id_clause, id_params = _build_id_clause(readable)
     pages = await db.execute_fetchall(
-        f"SELECT id, slug, title FROM pages WHERE deleted_at IS NULL AND {id_clause}",
+        f"SELECT id, slug, title, parent_id FROM pages WHERE deleted_at IS NULL AND {id_clause}",
         id_params,
     )
-    nodes = [{"id": p["id"], "slug": p["slug"], "title": p["title"]} for p in pages]
-
-    # Only show links between pages the user can see.
     visible_ids = {p["id"] for p in pages}
+
+    # A page is a "star" if any visible page lists it as parent. Stars get
+    # special rendering on the frontend (galaxy mode).
+    star_ids = {
+        p["parent_id"] for p in pages if p["parent_id"] is not None and p["parent_id"] in visible_ids
+    }
+    nodes = [
+        {
+            "id": p["id"],
+            "slug": p["slug"],
+            "title": p["title"],
+            "parent_id": p["parent_id"] if p["parent_id"] in visible_ids else None,
+            "is_star": p["id"] in star_ids,
+        }
+        for p in pages
+    ]
+
     backlinks = await db.execute_fetchall("SELECT source_page_id, target_page_id FROM backlinks")
     links = [
-        {"source": b["source_page_id"], "target": b["target_page_id"]}
+        {"source": b["source_page_id"], "target": b["target_page_id"], "type": "wikilink"}
         for b in backlinks
         if b["source_page_id"] in visible_ids and b["target_page_id"] in visible_ids
     ]
+    # Hierarchy edges (parent → child) so the graph reflects nesting, not just
+    # explicit wikilinks. Frontend renders these differently from wikilinks.
+    for p in pages:
+        if p["parent_id"] is not None and p["parent_id"] in visible_ids:
+            links.append(
+                {"source": p["parent_id"], "target": p["id"], "type": "hierarchy"}
+            )
 
     return {"nodes": nodes, "links": links}
 

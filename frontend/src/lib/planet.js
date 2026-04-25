@@ -178,6 +178,73 @@ function hslToColor(h, s, l) {
   return c
 }
 
+const STAR_FRAGMENT = /* glsl */ `
+${SIMPLEX_GLSL}
+uniform float uTime;
+uniform vec3 uCore;
+uniform vec3 uFlare;
+varying vec3 vObjPos;
+varying vec3 vNormal;
+varying vec3 vViewDir;
+
+void main() {
+  vec3 unit = normalize(vObjPos);
+  // Rolling plasma surface: two noise samples at different scales/speeds.
+  float n1 = snoise(unit * 2.5 + vec3(uTime * 0.6));
+  float n2 = snoise(unit * 5.0 - vec3(uTime * 0.9));
+  float heat = 0.5 + 0.5 * (n1 * 0.6 + n2 * 0.4);
+  vec3 col = mix(uCore, uFlare, smoothstep(0.3, 0.95, heat));
+  // Strong fresnel halo so bloom can latch onto the rim.
+  float rim = pow(1.0 - max(dot(normalize(vNormal), normalize(vViewDir)), 0.0), 2.0);
+  col += uFlare * rim * 1.4;
+  gl_FragColor = vec4(col, 1.0);
+}
+`
+
+// A glowing star — used for pages that have children. Bright, emissive-feeling
+// material that interacts well with UnrealBloomPass. No light/shading: stars
+// emit, they don't receive.
+export function buildStarObject(node) {
+  const params = planetParams(node)
+  const group = new THREE.Group()
+  // Stars read bigger than planets so they anchor the system visually.
+  const baseR = 5.5 * params.radius
+
+  const geometry = new THREE.SphereGeometry(baseR, 48, 32)
+  // Star colour: warm yellow-orange biased by the page's hue, so it still
+  // varies per page but reads as a star, not a random planet.
+  const coreHue = (params.hue * 0.2 + 0.08) % 1.0
+  const flareHue = (coreHue + 0.04) % 1.0
+  const material = new THREE.ShaderMaterial({
+    vertexShader: VERTEX_SHADER,
+    fragmentShader: STAR_FRAGMENT,
+    uniforms: {
+      uTime: { value: 0 },
+      uCore: { value: hslToColor(coreHue, 0.85, 0.7) },
+      uFlare: { value: hslToColor(flareHue, 1.0, 0.85) },
+    },
+  })
+  const sphere = new THREE.Mesh(geometry, material)
+  sphere.onBeforeRender = () => {
+    material.uniforms.uTime.value = performance.now() * 0.001
+  }
+  group.add(sphere)
+
+  // Soft corona — additive sprite-like shell that fakes glow even without bloom,
+  // and gives bloom something extra to latch onto when it's enabled.
+  const coronaGeom = new THREE.SphereGeometry(baseR * 1.6, 32, 24)
+  const coronaMat = new THREE.MeshBasicMaterial({
+    color: hslToColor(flareHue, 1.0, 0.7),
+    transparent: true,
+    opacity: 0.18,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  })
+  group.add(new THREE.Mesh(coronaGeom, coronaMat))
+
+  return group
+}
+
 // Build a procedural planet mesh. Each node gets its own ShaderMaterial
 // instance (uniforms differ) but three.js dedups the program compile
 // because the shader source is identical across all planets.
