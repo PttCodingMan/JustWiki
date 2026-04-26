@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.auth import get_current_user, require_real_user
+from app.auth import require_real_user
 from app.config import settings
 from app.database import get_db
 from app.services.acl import list_readable_page_ids
@@ -230,7 +230,7 @@ async def _stream_llm(messages: list[dict]):
 
 
 @router.get("/status")
-async def status(user=Depends(get_current_user)):
+async def status(user=Depends(require_real_user)):
     """Lets the frontend decide whether to surface the chat UI.
 
     Returns `enabled: True` only when the feature flag is on AND an API key
@@ -243,7 +243,7 @@ async def status(user=Depends(get_current_user)):
 
 
 @router.post("/chat")
-async def chat(req: ChatRequest, user=Depends(get_current_user)):
+async def chat(req: ChatRequest, user=Depends(require_real_user)):
     if not settings.AI_ENABLED:
         raise HTTPException(status_code=404, detail="AI feature is not enabled")
     if not settings.AI_API_KEY.get_secret_value():

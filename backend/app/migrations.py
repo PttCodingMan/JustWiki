@@ -30,7 +30,11 @@ Migration = tuple[int, str, MigrationFn]
 
 
 async def _column_exists(db: aiosqlite.Connection, table: str, col: str) -> bool:
-    rows = await db.execute_fetchall(f"PRAGMA table_info({table})")
+    # PRAGMA doesn't accept bind params for the table name, so quote the
+    # identifier defensively. Today every caller passes a hard-coded literal,
+    # but quoting blocks injection if a future caller ever feeds user input.
+    safe = table.replace('"', '""')
+    rows = await db.execute_fetchall(f'PRAGMA table_info("{safe}")')
     return any(r["name"] == col for r in rows)
 
 

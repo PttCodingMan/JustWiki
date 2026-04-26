@@ -6,6 +6,7 @@ from app.schemas import LoginRequest, UserResponse
 from typing import Optional
 from pydantic import BaseModel
 from app.auth import (
+    hash_password,
     verify_password_async,
     create_token,
     hash_password_async,
@@ -24,6 +25,12 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 _login_attempts: dict[str, list[float]] = defaultdict(list)
 _RATE_LIMIT_MAX = 5
 _RATE_LIMIT_WINDOW = 60  # seconds
+
+# Pre-computed bcrypt hash for the constant-time login path. Verifying
+# against this when the username doesn't exist (or is a shell account with
+# password_hash='!') keeps the wall-time of failed logins indistinguishable
+# from successful ones, so an attacker can't enumerate usernames by timing.
+_DUMMY_PASSWORD_HASH = hash_password("dummy-constant-time-guard")
 
 
 def _check_rate_limit(ip: str):
@@ -53,8 +60,13 @@ async def login(body: LoginRequest, request: Request, response: Response):
     #    this check so bcrypt can't coincidentally accept an empty / short
     #    password; they must sign in via SSO or LDAP instead.
     user = None
-    if rows and rows[0]["password_hash"] != "!" and await verify_password_async(body.password, rows[0]["password_hash"]):
-        user = dict(rows[0])
+    if rows and rows[0]["password_hash"] != "!":
+        if await verify_password_async(body.password, rows[0]["password_hash"]):
+            user = dict(rows[0])
+    else:
+        # Equalise wall-time against the username-not-found / SSO-only-user
+        # paths so login latency doesn't enumerate usernames.
+        await verify_password_async(body.password, _DUMMY_PASSWORD_HASH)
 
     # 2. LDAP fallback. The service is imported lazily so sites without LDAP
     #    never pay the `ldap3` import cost on every login attempt.
@@ -66,8 +78,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
             # Configuration/connectivity problem — log but still return 401
             # rather than 500 so a misconfigured LDAP doesn't reveal to the
             # world that LDAP is enabled.
-            import logging
-            logging.getLogger(__name__).error("LDAP login error: %s", e)
+            logger.error("LDAP login error: %s", e)
             lu = None
         if lu is not None:
             try:

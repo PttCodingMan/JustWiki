@@ -111,23 +111,21 @@ async def _would_create_parent_cycle(db, page_id: int, new_parent_id: int | None
         return False
     if new_parent_id == page_id:
         return True
-    # Walk the chain upward from new_parent_id. If we hit page_id, a cycle
-    # would form; if we hit NULL or revisit a node, we're safe.
-    current = new_parent_id
-    seen: set[int] = set()
-    while current is not None:
-        if current == page_id:
-            return True
-        if current in seen:
-            return False
-        seen.add(current)
-        rows = await db.execute_fetchall(
-            "SELECT parent_id FROM pages WHERE id = ?", (current,)
-        )
-        if not rows:
-            return False
-        current = rows[0]["parent_id"]
-    return False
+    # Recursive CTE walks the ancestor chain upward from new_parent_id in a
+    # single round-trip. depth cap defends against pre-existing cycles in
+    # corrupt data (without it the CTE would loop forever).
+    rows = await db.execute_fetchall(
+        """WITH RECURSIVE chain(id, parent_id, depth) AS (
+               SELECT id, parent_id, 0 FROM pages WHERE id = ?
+               UNION ALL
+               SELECT p.id, p.parent_id, c.depth + 1
+               FROM pages p JOIN chain c ON p.id = c.parent_id
+               WHERE c.parent_id IS NOT NULL AND c.depth < 100
+           )
+           SELECT 1 FROM chain WHERE id = ? LIMIT 1""",
+        (new_parent_id, page_id),
+    )
+    return bool(rows)
 
 
 @router.get("", response_model=PageListResponse)

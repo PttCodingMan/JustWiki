@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Literal, Optional
+from typing import Literal
 from datetime import datetime
 
 
@@ -23,37 +23,37 @@ class UserResponse(BaseModel):
     id: int
     username: str
     role: str
-    display_name: Optional[str] = ""
-    email: Optional[str] = ""
-    created_at: Optional[str] = None
+    display_name: str | None = ""
+    email: str | None = ""
+    created_at: str | None = None
 
 
 # ── Pages ──
 class PageCreate(BaseModel):
     title: str
     content_md: str = ""
-    parent_id: Optional[int] = None
+    parent_id: int | None = None
     sort_order: int = 0
-    template_id: Optional[int] = None
-    slug: Optional[str] = None
+    template_id: int | None = None
+    slug: str | None = None
     page_type: PageType = "document"
-    mindmap_layout: Optional[MindmapLayout] = None
+    mindmap_layout: MindmapLayout | None = None
 
 
 class PageUpdate(BaseModel):
-    title: Optional[str] = None
-    content_md: Optional[str] = None
-    parent_id: Optional[int] = None
-    sort_order: Optional[int] = None
-    is_public: Optional[bool] = None
-    page_type: Optional[PageType] = None
-    mindmap_layout: Optional[MindmapLayout] = None
-    base_version: Optional[int] = None  # for optimistic locking
+    title: str | None = None
+    content_md: str | None = None
+    parent_id: int | None = None
+    sort_order: int | None = None
+    is_public: bool | None = None
+    page_type: PageType | None = None
+    mindmap_layout: MindmapLayout | None = None
+    base_version: int | None = None  # for optimistic locking
 
 
 class PageMoveRequest(BaseModel):
-    parent_id: Optional[int] = None
-    sort_order: Optional[int] = None
+    parent_id: int | None = None
+    sort_order: int | None = None
 
 
 class PageResponse(BaseModel):
@@ -61,18 +61,18 @@ class PageResponse(BaseModel):
     slug: str
     title: str
     content_md: str
-    parent_id: Optional[int] = None
+    parent_id: int | None = None
     sort_order: int = 0
     view_count: int = 0
     version: int = 1
     is_public: bool = False
     page_type: PageType = "document"
-    mindmap_layout: Optional[MindmapLayout] = None
-    created_by: Optional[int] = None
-    author_name: Optional[str] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
-    effective_permission: Optional[str] = None
+    mindmap_layout: MindmapLayout | None = None
+    created_by: int | None = None
+    author_name: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    effective_permission: str | None = None
 
 
 class PublicPageResponse(BaseModel):
@@ -80,9 +80,9 @@ class PublicPageResponse(BaseModel):
     title: str
     content_md: str
     page_type: PageType = "document"
-    mindmap_layout: Optional[MindmapLayout] = None
-    updated_at: Optional[str] = None
-    author_name: Optional[str] = None
+    mindmap_layout: MindmapLayout | None = None
+    updated_at: str | None = None
+    author_name: str | None = None
     diagrams: dict[str, str] = {}
 
 
@@ -101,9 +101,9 @@ class TemplateCreate(BaseModel):
 
 
 class TemplateUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    content_md: Optional[str] = None
+    name: str | None = None
+    description: str | None = None
+    content_md: str | None = None
 
 
 class TemplateResponse(BaseModel):
@@ -111,8 +111,8 @@ class TemplateResponse(BaseModel):
     name: str
     description: str
     content_md: str
-    created_by: Optional[int] = None
-    created_at: Optional[str] = None
+    created_by: int | None = None
+    created_at: str | None = None
 
 
 # ── Media ──
@@ -122,9 +122,9 @@ class MediaResponse(BaseModel):
     original_name: str
     filepath: str
     mime_type: str
-    size_bytes: Optional[int] = None
-    uploaded_by: Optional[int] = None
-    uploaded_at: Optional[str] = None
+    size_bytes: int | None = None
+    uploaded_by: int | None = None
+    uploaded_at: str | None = None
     url: str = ""
 
 
@@ -139,10 +139,10 @@ class MediaListItem(BaseModel):
     filename: str
     original_name: str
     mime_type: str
-    size_bytes: Optional[int] = None
-    uploaded_by: Optional[int] = None
-    uploaded_by_name: Optional[str] = None
-    uploaded_at: Optional[str] = None
+    size_bytes: int | None = None
+    uploaded_by: int | None = None
+    uploaded_by_name: str | None = None
+    uploaded_at: str | None = None
     url: str = ""
     reference_count: int = 0
     referenced_pages: list[MediaReferencedPage] = []
@@ -152,25 +152,25 @@ class MediaListItem(BaseModel):
 class DiagramCreate(BaseModel):
     name: str
     xml_data: str
-    page_id: Optional[int] = None
+    page_id: int | None = None
 
 
 class DiagramUpdate(BaseModel):
-    name: Optional[str] = None
-    xml_data: Optional[str] = None
-    svg_cache: Optional[str] = None
-    page_id: Optional[int] = None
+    name: str | None = None
+    xml_data: str | None = None
+    svg_cache: str | None = None
+    page_id: int | None = None
 
 
 class DiagramResponse(BaseModel):
     id: int
-    page_id: Optional[int] = None
+    page_id: int | None = None
     name: str
     xml_data: str
-    svg_cache: Optional[str] = None
-    created_by: Optional[int] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    svg_cache: str | None = None
+    created_by: int | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
 
 
 class DiagramReferencedPage(BaseModel):
@@ -183,11 +183,11 @@ class DiagramReferencedPage(BaseModel):
 class DiagramListItem(BaseModel):
     id: int
     name: str
-    page_id: Optional[int] = None
+    page_id: int | None = None
     has_svg: bool = False
-    created_by: Optional[int] = None
-    created_by_name: Optional[str] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    created_by: int | None = None
+    created_by_name: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
     reference_count: int = 0
     referenced_pages: list[DiagramReferencedPage] = []
