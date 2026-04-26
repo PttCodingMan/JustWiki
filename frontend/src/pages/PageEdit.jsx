@@ -29,6 +29,10 @@ export default function PageEdit() {
   const [original, setOriginal] = useState({ title: '', content: '' })
   const baseVersionRef = useRef(null)
   const editorRef = useRef(null)
+  const saveBtnRef = useRef(null)
+  const handleEditorTabOut = useCallback(() => {
+    saveBtnRef.current?.focus()
+  }, [])
 
   const dirty = !!page && (title !== original.title || content !== original.content)
 
@@ -261,6 +265,12 @@ export default function PageEdit() {
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab' && !e.shiftKey) {
+              e.preventDefault()
+              editorRef.current?.focus()
+            }
+          }}
           className="text-2xl font-bold text-text bg-transparent border-none outline-none w-full"
           placeholder={t('pageEdit.titlePlaceholder')}
         />
@@ -316,6 +326,7 @@ export default function PageEdit() {
               onChange={setContent}
               onDrawioOpen={handleDrawioOpen}
               onMediaPickerOpen={handleMediaPickerOpen}
+              onTabOut={handleEditorTabOut}
             />
           </div>
 
@@ -388,6 +399,7 @@ export default function PageEdit() {
           {t('pageEdit.cancel')}
         </button>
         <button
+          ref={saveBtnRef}
           onClick={handleSave}
           disabled={saving}
           className="fab-btn fab-btn-primary"

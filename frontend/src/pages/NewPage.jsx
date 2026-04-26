@@ -52,6 +52,10 @@ export default function NewPage() {
   const [error, setError] = useState('')
   const [editorKey, setEditorKey] = useState(0)
   const editorRef = useRef(null)
+  const createBtnRef = useRef(null)
+  const handleEditorTabOut = useCallback(() => {
+    createBtnRef.current?.focus()
+  }, [])
   const dirty = !saved && !showTemplates && (title.trim() !== '' || content.trim() !== '')
 
   // Draw.io state
@@ -269,6 +273,12 @@ export default function NewPage() {
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab' && !e.shiftKey) {
+              e.preventDefault()
+              editorRef.current?.focus()
+            }
+          }}
           className="text-2xl font-bold text-text bg-transparent border-none outline-none flex-1 mr-4"
           placeholder={t('newPage.titlePlaceholder')}
           autoFocus
@@ -281,6 +291,7 @@ export default function NewPage() {
             {t('newPage.cancel')}
           </button>
           <button
+            ref={createBtnRef}
             onClick={handleSave}
             disabled={saving || !title.trim()}
             className="px-3 py-1.5 text-sm bg-primary text-primary-text rounded-lg hover:bg-primary-hover disabled:opacity-50"
@@ -324,6 +335,7 @@ export default function NewPage() {
           onChange={setContent}
           onDrawioOpen={handleDrawioOpen}
           onMediaPickerOpen={handleMediaPickerOpen}
+          onTabOut={handleEditorTabOut}
         />
       </div>
 

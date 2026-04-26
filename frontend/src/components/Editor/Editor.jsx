@@ -382,13 +382,14 @@ class WikilinkMenu {
 
 const wikilinkPluginKey = new PluginKey('wikilink-autocomplete')
 
-const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawioOpen, onMediaPickerOpen }, ref) {
+const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawioOpen, onMediaPickerOpen, onTabOut }, ref) {
   const { t } = useTranslation()
   const editorRef = useRef(null)
   const containerRef = useRef(null)
   const onChangeRef = useRef(onChange)
   const drawioHandlerRef = useRef(onDrawioOpen)
   const mediaHandlerRef = useRef(onMediaPickerOpen)
+  const onTabOutRef = useRef(onTabOut)
   const editorViewRef = useRef(null)
   // The slash menu and wikilink menu both render plain DOM (not React),
   // so they cannot read t() from context. Snapshot translated strings into
@@ -412,6 +413,10 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
     mediaHandlerRef.current = onMediaPickerOpen || null
   }, [onMediaPickerOpen])
 
+  useEffect(() => {
+    onTabOutRef.current = onTabOut || null
+  }, [onTabOut])
+
   useImperativeHandle(ref, () => ({
     insertText(text) {
       const view = editorViewRef.current
@@ -419,6 +424,11 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
       const { state, dispatch } = view
       const pos = state.selection.from
       dispatch(state.tr.insertText(text, pos))
+    },
+    focus() {
+      const view = editorViewRef.current
+      if (!view) return
+      view.focus()
     }
   }), [])
 
@@ -478,6 +488,28 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
       })
     })
 
+    const tabOutPlugin = $prose(() => {
+      return new Plugin({
+        props: {
+          handleKeyDown(view, event) {
+            if (event.key !== 'Tab' || event.shiftKey) return false
+            if (event.isComposing || event.keyCode === 229) return false
+            if (!onTabOutRef.current) return false
+            const { $from } = view.state.selection
+            for (let depth = $from.depth; depth >= 0; depth--) {
+              const name = $from.node(depth).type.name
+              if (['list_item', 'bullet_list', 'ordered_list', 'code_block', 'table'].includes(name)) {
+                return false
+              }
+            }
+            event.preventDefault()
+            onTabOutRef.current()
+            return true
+          },
+        },
+      })
+    })
+
     const init = async () => {
       const editor = await MilkdownEditor.make()
         .config((ctx) => {
@@ -508,6 +540,7 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
         .use(slash)
         .use(wikilink)
         .use(wikilinkPlugin)
+        .use(tabOutPlugin)
         .create()
 
       // StrictMode: if cleanup ran while we were awaiting, destroy immediately
