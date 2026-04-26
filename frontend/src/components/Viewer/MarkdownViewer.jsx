@@ -59,6 +59,12 @@ function sanitizeMarkdownHtml(dirty) {
 // Stable default so non-publicMode callers don't retrigger effects every render.
 const EMPTY_DIAGRAMS = Object.freeze({})
 
+// Cap how deep ![[transclusion]] chains can recurse. Five levels is a soft
+// ceiling — beyond that an include chain is almost certainly accidental, and
+// the cap keeps a runaway loop from generating an unbounded tree even if the
+// per-path visited check is somehow defeated.
+const MAX_TRANSCLUSION_DEPTH = 5
+
 export default function MarkdownViewer({
   content,
   onDiagramClick,
@@ -178,44 +184,19 @@ export default function MarkdownViewer({
     })
   }, [])
 
-  // Load transclusions (disabled in publicMode: we never fetch private page
-  // content anonymously; show a placeholder instead — see Q2 in to-do.md)
-  useEffect(() => {
-    if (!containerRef.current) return
-    const elements = containerRef.current.querySelectorAll('[data-transclude]')
-    if (publicMode) {
-      elements.forEach((el) => {
-        el.innerHTML =
-          '<em class="text-text-secondary">(transclusion disabled on public pages)</em>'
-      })
-      return
-    }
-    elements.forEach(async (el) => {
-      const slug = el.dataset.transclude
-      try {
-        const res = await api.get(`/pages/${slug}`)
-        el.innerHTML = sanitizeMarkdownHtml(renderMarkdown(res.data.content_md || ''))
-        await renderMermaidIn(el)
-      } catch {
-        el.innerHTML = '<em class="text-gray-400">Page not found</em>'
-      }
-    })
-  }, [html, publicMode, renderMermaidIn])
-
-  // Render Mermaid diagrams
-  useEffect(() => {
-    renderMermaidIn(containerRef.current)
-  }, [html, renderMermaidIn])
-
-  // Load Draw.io diagram SVGs.
+  // Hoisted so transcluded subtrees can be diagram-loaded after their HTML is
+  // injected — without this, [[wiki]]-embedded pages would render with stuck
+  // "Loading Draw.io..." placeholders.
   //
   // In publicMode we don't have access to /api/diagrams/* — the caller passes
   // already-resolved SVGs via the `diagrams` prop (keyed by diagram id).
-  useEffect(() => {
-    if (!containerRef.current) return
-    const blocks = containerRef.current.querySelectorAll('[data-diagram-id]')
+  const renderDiagramsIn = useCallback(async (root) => {
+    if (!root) return
+    const blocks = root.querySelectorAll('[data-diagram-id]:not([data-diagram-rendered])')
+    if (blocks.length === 0) return
     if (publicMode) {
       blocks.forEach((el) => {
+        el.setAttribute('data-diagram-rendered', '1')
         const id = el.dataset.diagramId
         const svg = diagrams[id]
         if (svg) {
@@ -231,6 +212,7 @@ export default function MarkdownViewer({
       return
     }
     blocks.forEach(async (el) => {
+      el.setAttribute('data-diagram-rendered', '1')
       const id = el.dataset.diagramId
       try {
         const res = await api.get(`/diagrams/${id}`)
@@ -247,7 +229,86 @@ export default function MarkdownViewer({
         el.innerHTML = `<div class="drawio-placeholder drawio-error">Diagram #${id} not found</div>`
       }
     })
-  }, [html, publicMode, diagrams])
+  }, [publicMode, diagrams])
+
+  // Load transclusions (disabled in publicMode: we never fetch private page
+  // content anonymously; show a placeholder instead — see Q2 in to-do.md)
+  //
+  // The recursive loader is defined inside the effect so its self-reference
+  // doesn't run afoul of the react-hooks accessed-before-declared rule, and
+  // because there's no caller outside this effect that needs a stable
+  // reference to it.
+  //
+  //   1. Find [data-transclude] inside `root` we haven't claimed yet.
+  //   2. Mark each claimed (data-transclude-loaded) so a re-fired effect
+  //      doesn't fire a duplicate fetch while the original is still in
+  //      flight. This is per-element, NOT per-slug — the same slug embedded
+  //      in two places will still load both times.
+  //   3. Refuse to recurse if the slug is already on the current path
+  //      (per-path `visited` so two siblings can include the same page),
+  //      or if depth has reached the cap.
+  //   4. After injecting the page body, recurse into the new subtree, then
+  //      kick the imperative diagram/mermaid renderers on it.
+  useEffect(() => {
+    if (!containerRef.current) return
+    if (publicMode) {
+      containerRef.current.querySelectorAll('[data-transclude]').forEach((el) => {
+        el.innerHTML =
+          '<em class="text-text-secondary">(transclusion disabled on public pages)</em>'
+      })
+      return
+    }
+    const loadTransclusionsIn = async (root, depth, visited) => {
+      if (!root) return
+      const elements = root.querySelectorAll('[data-transclude]:not([data-transclude-loaded])')
+      if (elements.length === 0) return
+
+      await Promise.all(Array.from(elements).map(async (el) => {
+        el.setAttribute('data-transclude-loaded', '1')
+        const slug = el.dataset.transclude
+
+        if (visited.has(slug)) {
+          el.innerHTML = '<em class="text-text-secondary">(circular transclusion)</em>'
+          return
+        }
+        if (depth >= MAX_TRANSCLUSION_DEPTH) {
+          el.innerHTML = '<em class="text-text-secondary">(max transclusion depth reached)</em>'
+          return
+        }
+
+        try {
+          const res = await api.get(`/pages/${slug}`)
+          el.innerHTML = sanitizeMarkdownHtml(renderMarkdown(res.data.content_md || ''))
+          const nextVisited = new Set(visited).add(slug)
+          await loadTransclusionsIn(el, depth + 1, nextVisited)
+          await renderMermaidIn(el)
+          await renderDiagramsIn(el)
+        } catch (err) {
+          const status = err?.response?.status
+          if (status === 404) {
+            el.innerHTML = '<em class="text-gray-400">Page not found</em>'
+          } else if (status === 403) {
+            el.innerHTML = '<em class="text-text-secondary">(no access)</em>'
+          } else {
+            el.innerHTML = '<em class="text-gray-400">Failed to load transclusion</em>'
+          }
+        }
+      }))
+    }
+    loadTransclusionsIn(containerRef.current, 0, new Set())
+  }, [html, publicMode, renderMermaidIn, renderDiagramsIn])
+
+  // Top-level Mermaid pass — transcluded subtrees get their own
+  // renderMermaidIn call from inside loadTransclusionsIn.
+  useEffect(() => {
+    renderMermaidIn(containerRef.current)
+  }, [html, renderMermaidIn])
+
+  // Top-level Draw.io pass — transcluded subtrees are handled by the
+  // loadTransclusionsIn recursion.
+  useEffect(() => {
+    renderDiagramsIn(containerRef.current)
+  }, [html, renderDiagramsIn])
 
   // Add rel="nofollow" to every wikilink when rendering a public page, so
   // crawlers don't waste budget on private slugs (see Q13 in to-do.md).
