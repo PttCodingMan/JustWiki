@@ -18,20 +18,39 @@ router = APIRouter(prefix="/api/public", tags=["public"])
 _HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
 
 # In-memory rate limit: 60 requests per IP per 60 seconds.
-# Single-process only — see to-do Known Limitations.
+#
+# Threat model: gentle DoS / scrape protection on a public-by-definition
+# endpoint, not a security boundary. The counter is per-process and resets
+# on restart; an attacker who can rotate IPs (or trigger restarts) gets
+# fresh budget. Acceptable for a self-hosted small-team wiki.
+#
+# Memory: empty buckets are dropped after the prune so a one-off visitor
+# doesn't leave a permanent entry; if the dict still grows past _MAX_IPS
+# we drop the oldest-touched entries. Without this, an IP-rotating scraper
+# would leak memory linearly.
 _access_log: dict[str, list[float]] = defaultdict(list)
 _RATE_LIMIT_MAX = 60
 _RATE_LIMIT_WINDOW = 60  # seconds
+_MAX_IPS = 10_000
 
 
 def _check_rate_limit(ip: str):
     now = time.monotonic()
-    log = _access_log[ip]
+    # pop+reinsert so the dict's insertion order tracks recency — the
+    # eviction step below can then drop true LRU entries.
+    log = _access_log.pop(ip, [])
     pruned = [t for t in log if now - t < _RATE_LIMIT_WINDOW]
-    _access_log[ip] = pruned
     if len(pruned) >= _RATE_LIMIT_MAX:
+        _access_log[ip] = pruned
         raise HTTPException(status_code=429, detail="Too many requests")
     pruned.append(now)
+    _access_log[ip] = pruned
+
+    if len(_access_log) > _MAX_IPS:
+        # Cap memory against IP-rotating scrapers. Drop oldest-touched
+        # entries first; cheap one-shot pop loop only when we hit the cap.
+        for stale in list(_access_log)[: len(_access_log) - _MAX_IPS]:
+            _access_log.pop(stale, None)
 
 
 @router.get("/pages/{slug}")
