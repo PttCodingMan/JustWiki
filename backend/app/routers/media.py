@@ -23,8 +23,14 @@ MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20 MB
 # still force `Content-Disposition: attachment` + `X-Content-Type-Options:
 # nosniff` when serving SVG, so a crafted file can never run as HTML in the
 # app's origin even if it slips through this filter.
+#   - <script>, <foreignObject>, <iframe>: direct script injection
+#   - <use>: can pull external SVG via xlink:href / href
+#   - <animate>, <set>: can mutate href to javascript: at runtime
+#   - on*= attributes: inline event handlers
+#   - javascript: URI in any attribute (covers <a href="javascript:...">)
 _SVG_SCRIPT_RE = re.compile(
-    rb"<\s*script|on[a-z]+\s*=|javascript:|<\s*foreignObject|<\s*iframe",
+    rb"<\s*(?:script|use|animate|set|foreignObject|iframe)[\s>/]"
+    rb"|on[a-z]+\s*=|javascript:",
     re.IGNORECASE,
 )
 
@@ -291,7 +297,13 @@ async def get_media(filename: str, request: Request):
             user = anonymous_user()
         else:
             # Flag off → fall back to the legacy is_public path so existing
-            # share-a-public-page deployments keep working.
+            # share-a-public-page deployments keep working. This is the
+            # asymmetric piece: /api/pages/{slug} returns 401 for the same
+            # unauthenticated request, but a public page is served by
+            # routers/public.py which embeds <img src="/api/media/...">,
+            # and those tags must resolve without a session. Keep the two
+            # paths aligned on what counts as "public": only media that
+            # lives on a page with is_public=1.
             if not await _media_is_public(db, filename):
                 raise HTTPException(status_code=404, detail="File not found")
             return _safe_media_response(filepath)

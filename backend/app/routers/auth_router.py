@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from collections import defaultdict
@@ -91,6 +92,11 @@ async def login(body: LoginRequest, request: Request, response: Response):
         logger.warning(
             "login failed for user=%r ip=%s", body.username, client_ip(request)
         )
+        # The in-memory counter resets on process restart, so add a fixed
+        # latency cost on top of bcrypt to keep brute-force throughput low
+        # even in restart-loop scenarios. Tiny enough that a real user
+        # mistyping their password barely notices.
+        await asyncio.sleep(0.5)
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     logger.info("login ok user=%s role=%s", user["username"], user["role"])

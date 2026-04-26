@@ -151,9 +151,15 @@ async def _post_many(urls: list[str], payload: dict) -> None:
 
 
 async def _post_one(client: httpx.AsyncClient, url: str, payload: dict) -> None:
-    # Re-check at dispatch time — the stored URL's hostname may have started
-    # resolving to an internal address since it was saved. Silently drop
-    # rather than contribute to the attacker's oracle.
+    # Defence in depth against DNS rebinding. validate_webhook_url ran at
+    # store-time, but TTL=0 lets an attacker flip the answer between then
+    # and now; re-validate immediately before each request so the resolved
+    # IP we accept is a fresh one. Doing this just before client.post
+    # narrows (but cannot fully close) the TOCTOU window — httpx will
+    # resolve the host again at connect time. Closing that final gap needs
+    # socket-level peer validation, which breaks SNI/cert verification for
+    # HTTPS webhooks; given webhooks are admin-only and the attack surface
+    # is post-compromise pivot, the narrowed window is acceptable.
     try:
         validate_webhook_url(url)
     except ValueError as exc:

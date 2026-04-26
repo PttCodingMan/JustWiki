@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import html as _html
 import io
@@ -255,7 +256,12 @@ async def export_page(
     page = dict(rows[0])
     if await resolve_page_permission(db, user, page["id"]) == "none":
         raise HTTPException(status_code=404, detail="Page not found")
-    html_content = _inline_media_srcs(md_to_simple_html(page["content_md"]))
+    # Render + inline media in a thread: _inline_media_srcs reads files
+    # synchronously and md_to_simple_html does CPU work. Pages with many
+    # embedded images would otherwise stall the event loop.
+    html_content = await asyncio.to_thread(
+        lambda: _inline_media_srcs(md_to_simple_html(page["content_md"]))
+    )
     # Escape title/slug: they're rendered into <title>, <h1>, and a meta
     # breadcrumb as raw text, so a page title containing e.g. `<script>` would
     # execute when the exported HTML is opened locally (file:// context).
@@ -316,12 +322,17 @@ async def export_site(
         "SELECT id, slug, title, content_md FROM pages WHERE deleted_at IS NULL ORDER BY title"
     )
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for filename, content in build_site_files(pages):
-            zf.writestr(filename, content)
+    # File reads (_inline_media_srcs), HTML rendering, and zip compression
+    # are all blocking; do the whole bundle off the event loop.
+    def _build_zip() -> io.BytesIO:
+        out = io.BytesIO()
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+            for filename, content in build_site_files(pages):
+                zf.writestr(filename, content)
+        out.seek(0)
+        return out
 
-    buf.seek(0)
+    buf = await asyncio.to_thread(_build_zip)
     return StreamingResponse(
         buf,
         media_type="application/zip",
