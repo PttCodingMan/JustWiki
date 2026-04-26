@@ -130,7 +130,13 @@
     "submit": "變更密碼"
   },
   "mindmap": {
-    "themeLabel": "心智圖主題"
+    "themeLabel": "心智圖主題",
+    "layout": {
+      "label": "佈局",
+      "lr": "向右展開",
+      "rl": "向左展開",
+      "radial": "放射"
+    }
   },
   "admin": {
     "title": "管理",

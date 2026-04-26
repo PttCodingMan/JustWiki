@@ -109,7 +109,11 @@ export default function PublicPageView({ notFound }) {
         </div>
         <article className="bg-surface rounded-xl shadow-sm border border-border p-6 sm:p-8">
           {page.page_type === 'mindmap' ? (
-            <MindmapView content={page.content_md} title={page.title} />
+            <MindmapView
+              content={page.content_md}
+              title={page.title}
+              layout={page.mindmap_layout || 'lr'}
+            />
           ) : (
             <MarkdownViewer
               content={page.content_md}

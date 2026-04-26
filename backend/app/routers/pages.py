@@ -286,9 +286,9 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
         candidate = await unique_slug(db, slugify(body.title, body.slug))
         try:
             cursor = await db.execute(
-                """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, version, page_type, created_by)
-                   VALUES (?, ?, ?, ?, ?, 1, ?, ?)""",
-                (candidate, body.title, content, body.parent_id, body.sort_order, body.page_type, user["id"]),
+                """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, version, page_type, mindmap_layout, created_by)
+                   VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)""",
+                (candidate, body.title, content, body.parent_id, body.sort_order, body.page_type, body.mindmap_layout, user["id"]),
             )
             slug = candidate
             page_id = cursor.lastrowid
@@ -421,6 +421,15 @@ async def update_page(slug: str, body: PageUpdate, user=Depends(get_current_user
     is_public = body.is_public if body.is_public is not None else current_is_public
     current_page_type = current.get("page_type") or "document"
     page_type = body.page_type if body.page_type is not None else current_page_type
+    # mindmap_layout is `Optional[Literal[...]]` — explicit NULL is meaningful
+    # (revert to default), so distinguish "field not in payload" from
+    # "field set to None" via model_fields_set, like parent_id above.
+    current_mindmap_layout = current.get("mindmap_layout")
+    mindmap_layout = (
+        body.mindmap_layout
+        if "mindmap_layout" in body.model_fields_set
+        else current_mindmap_layout
+    )
 
     content_changed = body.content_md is not None and body.content_md != current["content_md"]
     title_changed = body.title is not None and body.title != current["title"]
@@ -436,8 +445,8 @@ async def update_page(slug: str, body: PageUpdate, user=Depends(get_current_user
 
     await db.execute(
         """UPDATE pages SET title = ?, content_md = ?, parent_id = ?, sort_order = ?,
-           is_public = ?, page_type = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?""",
-        (title, content, parent_id, sort_order, 1 if is_public else 0, page_type, new_version, slug),
+           is_public = ?, page_type = ?, mindmap_layout = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?""",
+        (title, content, parent_id, sort_order, 1 if is_public else 0, page_type, mindmap_layout, new_version, slug),
     )
 
     # Update search index

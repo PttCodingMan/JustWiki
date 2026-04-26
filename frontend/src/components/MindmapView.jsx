@@ -116,7 +116,7 @@ function ThemeDropdown({ value, onChange }) {
   )
 }
 
-export default function MindmapView({ content, title }) {
+export default function MindmapView({ content, title, layout: layoutStrategy }) {
   const mindmapTheme = useMindmapTheme((s) => s.theme)
   const setMindmapTheme = useMindmapTheme((s) => s.setTheme)
   const [zoomed, setZoomed] = useState(null)
@@ -131,8 +131,8 @@ export default function MindmapView({ content, title }) {
   }, [content, title])
 
   const layout = useMemo(
-    () => (parsed.tree ? layoutMindmap(parsed.tree) : null),
-    [parsed.tree],
+    () => (parsed.tree ? layoutMindmap(parsed.tree, { layout: layoutStrategy || 'lr' }) : null),
+    [parsed.tree, layoutStrategy],
   )
 
   useEffect(() => {

@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS pages (
     version     INTEGER NOT NULL DEFAULT 1,
     is_public   INTEGER NOT NULL DEFAULT 0,
     page_type   TEXT NOT NULL DEFAULT 'document',
+    mindmap_layout TEXT,
     deleted_at  TIMESTAMP,
     created_by  INTEGER REFERENCES users(id),
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

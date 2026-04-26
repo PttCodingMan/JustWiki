@@ -125,8 +125,12 @@ Docker Compose: backend (uvicorn, port 8000) + frontend (nginx, port 3000). Shar
 
 ## Development Workflow
 
-After completing any development task, always run the following before reporting the task as done:
+Standard loop for every task:
 
-1. **Tests** — run `make test` (or the relevant subset: `make test-backend` / `make test-frontend`) and make sure everything passes.
-2. **Lint** — run `make lint` for frontend changes.
-3. **Code review** — perform a self-review of the diff for non-trivial changes.
+1. **Develop** — implement the change.
+2. **Test** — `make test` (or relevant subset: `make test-backend` / `make test-frontend`). Must pass.
+3. **Code review** — self-review the diff. If issues found, return to step 1.
+
+Repeat until the review surfaces no further issues. Then report done.
+
+Frontend changes also require `make lint` before review.

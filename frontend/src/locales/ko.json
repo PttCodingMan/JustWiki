@@ -130,7 +130,13 @@
     "submit": "비밀번호 변경"
   },
   "mindmap": {
-    "themeLabel": "마인드맵 테마"
+    "themeLabel": "마인드맵 테마",
+    "layout": {
+      "label": "레이아웃",
+      "lr": "왼쪽에서 오른쪽",
+      "rl": "오른쪽에서 왼쪽",
+      "radial": "방사형"
+    }
   },
   "admin": {
     "title": "관리",

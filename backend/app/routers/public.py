@@ -40,7 +40,7 @@ async def get_public_page(slug: str, request: Request):
 
     db = await get_db()
     rows = await db.execute_fetchall(
-        """SELECT p.slug, p.title, p.content_md, p.page_type, p.updated_at,
+        """SELECT p.slug, p.title, p.content_md, p.page_type, p.mindmap_layout, p.updated_at,
                   CASE WHEN u.display_name IS NOT NULL AND u.display_name != ''
                        THEN u.display_name ELSE u.username END AS author_name
            FROM pages p

@@ -9,6 +9,7 @@ import Editor from '../components/Editor/Editor'
 import MediaPickerModal from '../components/Editor/MediaPickerModal'
 import MarkdownViewer from '../components/Viewer/MarkdownViewer'
 import MindmapView from '../components/MindmapView'
+import MindmapLayoutSelect from '../components/MindmapLayoutSelect'
 import DrawioModal from '../components/DrawioModal'
 import useUnsavedWarning from '../hooks/useUnsavedWarning'
 import { stripBrTags } from '../lib/markdown'
@@ -23,10 +24,11 @@ export default function PageEdit() {
   const [page, setPage] = useState(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
+  const [mindmapLayout, setMindmapLayout] = useState('lr')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [conflict, setConflict] = useState(null)  // { currentVersion } on 409
-  const [original, setOriginal] = useState({ title: '', content: '' })
+  const [original, setOriginal] = useState({ title: '', content: '', mindmapLayout: 'lr' })
   const baseVersionRef = useRef(null)
   const editorRef = useRef(null)
   const saveBtnRef = useRef(null)
@@ -34,7 +36,11 @@ export default function PageEdit() {
     saveBtnRef.current?.focus()
   }, [])
 
-  const dirty = !!page && (title !== original.title || content !== original.content)
+  const dirty =
+    !!page &&
+    (title !== original.title ||
+      content !== original.content ||
+      mindmapLayout !== original.mindmapLayout)
 
   // Preview state. Document pages default to off; mindmap pages default to
   // on (set inside the page load effect below, so the initial render of a
@@ -69,7 +75,9 @@ export default function PageEdit() {
       setPage(p)
       setTitle(p.title)
       setContent(p.content_md)
-      setOriginal({ title: p.title, content: p.content_md })
+      const initialLayout = p.mindmap_layout || 'lr'
+      setMindmapLayout(initialLayout)
+      setOriginal({ title: p.title, content: p.content_md, mindmapLayout: initialLayout })
       baseVersionRef.current = p.version
       // React Router keeps PageEdit mounted across slug transitions, so
       // ALWAYS reset preview to the per-page default — not just the mindmap
@@ -170,14 +178,20 @@ export default function PageEdit() {
       // Milkdown round-trips pasted <br> tags as raw HTML; normalize to
       // markdown hard breaks before persisting so new content stays clean.
       const cleanContent = stripBrTags(content)
-      const updated = await updatePage(slug, {
+      const payload = {
         title,
         content_md: cleanContent,
         base_version: baseVersionRef.current,
-      })
+      }
+      // Only include layout for mindmap pages — sending it for documents
+      // would be a no-op storage write and clutters activity logs.
+      if (page?.page_type === 'mindmap') {
+        payload.mindmap_layout = mindmapLayout
+      }
+      const updated = await updatePage(slug, payload)
       baseVersionRef.current = updated.version
       await fetchTree()
-      setOriginal({ title, content: cleanContent })
+      setOriginal({ title, content: cleanContent, mindmapLayout })
       setSaving(false)
       navigate(`/page/${slug}`)
     } catch (err) {
@@ -198,15 +212,21 @@ export default function PageEdit() {
       }
       setSaving(false)
     }
-  }, [slug, title, content, saving, navigate, fetchTree, updatePage, t])
+  }, [slug, title, content, mindmapLayout, page, saving, navigate, fetchTree, updatePage, t])
 
   const handleReloadLatest = useCallback(async () => {
     try {
       const latest = await getPage(slug)
       if (confirm(t('pageEdit.conflict.confirmDiscard'))) {
+        const latestLayout = latest.mindmap_layout || 'lr'
         setTitle(latest.title)
         setContent(latest.content_md)
-        setOriginal({ title: latest.title, content: latest.content_md })
+        setMindmapLayout(latestLayout)
+        setOriginal({
+          title: latest.title,
+          content: latest.content_md,
+          mindmapLayout: latestLayout,
+        })
         baseVersionRef.current = latest.version
         setConflict(null)
       }
@@ -367,11 +387,16 @@ export default function PageEdit() {
         {showPreview && (
           <div className="edit-split-preview">
             <div className="bg-surface rounded-xl shadow-sm border border-border min-h-[500px] p-6 overflow-auto">
-              <div className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-4 pb-2 border-b border-border">
-                {page?.page_type === 'mindmap' ? t('pageEdit.mindmapPreview') : t('pageEdit.preview')}
+              <div className="flex items-center justify-between mb-4 pb-2 border-b border-border">
+                <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+                  {page?.page_type === 'mindmap' ? t('pageEdit.mindmapPreview') : t('pageEdit.preview')}
+                </span>
+                {page?.page_type === 'mindmap' && (
+                  <MindmapLayoutSelect value={mindmapLayout} onChange={setMindmapLayout} />
+                )}
               </div>
               {page?.page_type === 'mindmap' ? (
-                <MindmapView content={content} title={title} />
+                <MindmapView content={content} title={title} layout={mindmapLayout} />
               ) : (
                 <MarkdownViewer content={content} />
               )}

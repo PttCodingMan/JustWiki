@@ -459,7 +459,11 @@ export default function PageView() {
         </div>
         <div className="bg-surface rounded-xl shadow-sm border border-border p-8">
           {page.page_type === 'mindmap' ? (
-            <MindmapView content={page.content_md} title={page.title} />
+            <MindmapView
+              content={page.content_md}
+              title={page.title}
+              layout={page.mindmap_layout || 'lr'}
+            />
           ) : (
             <MarkdownViewer content={page.content_md} onHeadings={handleHeadings} />
           )}

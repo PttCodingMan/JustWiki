@@ -130,7 +130,13 @@
     "submit": "パスワードを変更"
   },
   "mindmap": {
-    "themeLabel": "マインドマップのテーマ"
+    "themeLabel": "マインドマップのテーマ",
+    "layout": {
+      "label": "レイアウト",
+      "lr": "左から右",
+      "rl": "右から左",
+      "radial": "放射状"
+    }
   },
   "admin": {
     "title": "管理",

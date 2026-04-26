@@ -130,7 +130,13 @@
     "submit": "Change Password"
   },
   "mindmap": {
-    "themeLabel": "Mindmap theme"
+    "themeLabel": "Mindmap theme",
+    "layout": {
+      "label": "Layout",
+      "lr": "Left to right",
+      "rl": "Right to left",
+      "radial": "Radial"
+    }
   },
   "admin": {
     "title": "Admin",

@@ -8,6 +8,10 @@ from datetime import datetime
 # Add new types here (plus a frontend renderer) — no migration required.
 PageType = Literal["document", "mindmap"]
 
+# Mindmap layout strategy. Author-chosen, persisted on the page row. NULL is
+# treated as 'lr' by the frontend so existing rows render unchanged.
+MindmapLayout = Literal["lr", "rl", "radial"]
+
 
 # ── Auth ──
 class LoginRequest(BaseModel):
@@ -33,6 +37,7 @@ class PageCreate(BaseModel):
     template_id: Optional[int] = None
     slug: Optional[str] = None
     page_type: PageType = "document"
+    mindmap_layout: Optional[MindmapLayout] = None
 
 
 class PageUpdate(BaseModel):
@@ -42,6 +47,7 @@ class PageUpdate(BaseModel):
     sort_order: Optional[int] = None
     is_public: Optional[bool] = None
     page_type: Optional[PageType] = None
+    mindmap_layout: Optional[MindmapLayout] = None
     base_version: Optional[int] = None  # for optimistic locking
 
 
@@ -61,6 +67,7 @@ class PageResponse(BaseModel):
     version: int = 1
     is_public: bool = False
     page_type: PageType = "document"
+    mindmap_layout: Optional[MindmapLayout] = None
     created_by: Optional[int] = None
     author_name: Optional[str] = None
     created_at: Optional[str] = None
@@ -73,6 +80,7 @@ class PublicPageResponse(BaseModel):
     title: str
     content_md: str
     page_type: PageType = "document"
+    mindmap_layout: Optional[MindmapLayout] = None
     updated_at: Optional[str] = None
     author_name: Optional[str] = None
     diagrams: dict[str, str] = {}
