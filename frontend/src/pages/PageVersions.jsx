@@ -107,10 +107,12 @@ export default function PageVersions() {
   const [selectedV2, setSelectedV2] = useState(null)
   const [reverting, setReverting] = useState(false)
   const [confirmRevert, setConfirmRevert] = useState(null)
+  const [pageVersion, setPageVersion] = useState(null)
 
   useEffect(() => {
     api.get(`/pages/${slug}/versions`).then((res) => {
       setVersions(res.data.versions)
+      setPageVersion(res.data.page_version)
       setLoading(false)
       // Auto-select latest two for diff
       if (res.data.versions.length >= 2) {
@@ -138,7 +140,9 @@ export default function PageVersions() {
   const handleRevert = async (versionNum) => {
     setReverting(true)
     try {
-      await api.post(`/pages/${slug}/revert/${versionNum}`)
+      // Pin to the page version we loaded so a concurrent edit returns 409
+      // instead of silently clobbering the other user's change.
+      await api.post(`/pages/${slug}/revert/${versionNum}`, { base_version: pageVersion })
       setConfirmRevert(null)
       navigate(`/page/${slug}`)
     } catch (err) {

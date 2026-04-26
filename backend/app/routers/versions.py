@@ -1,5 +1,6 @@
 import difflib
 from fastapi import APIRouter, HTTPException, Depends, Query
+from pydantic import BaseModel
 from app.auth import get_current_user
 from app.database import get_db, write_transaction
 from app.services.acl import require_page_read
@@ -7,6 +8,10 @@ from app.services.search import rebuild_search_index
 from app.services.wikilink import parse_and_update_backlinks
 from app.services.media_ref import parse_and_update_media_refs
 from app.routers.activity import log_activity
+
+
+class RevertRequest(BaseModel):
+    base_version: int | None = None  # for optimistic locking, mirrors PUT /pages/{slug}
 
 router = APIRouter(prefix="/api/pages", tags=["versions"])
 
@@ -57,8 +62,14 @@ async def list_versions(
            LIMIT ? OFFSET ?""",
         (page_id, per_page, offset),
     )
+    # Carry the page's current version number so the revert UI can pass
+    # base_version back without an extra round-trip.
+    page_version_row = await db.execute_fetchall(
+        "SELECT version FROM pages WHERE id = ?", (page_id,)
+    )
     return {
         "versions": [dict(v) for v in versions],
+        "page_version": page_version_row[0]["version"] if page_version_row else None,
         "total": total,
         "page": page,
         "per_page": per_page,
@@ -126,7 +137,12 @@ async def diff_versions(
 
 
 @router.post("/{slug}/revert/{num}")
-async def revert_to_version(slug: str, num: int, user=Depends(get_current_user)):
+async def revert_to_version(
+    slug: str,
+    num: int,
+    body: RevertRequest = RevertRequest(),
+    user=Depends(get_current_user),
+):
     if user.get("role") == "viewer":
         raise HTTPException(status_code=403, detail="Viewers cannot revert pages")
 
@@ -143,6 +159,21 @@ async def revert_to_version(slug: str, num: int, user=Depends(get_current_user))
         raise HTTPException(
             status_code=403,
             detail="You do not have write permission on this page",
+        )
+
+    # Optimistic lock — same contract as PUT /pages/{slug}. Reverting always
+    # changes content, so the client must pin to a known base_version. If
+    # someone else edited the page between the user opening the versions
+    # page and clicking revert, return 409 instead of silently clobbering.
+    if body.base_version is not None and body.base_version != current["version"]:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "conflict",
+                "message": "This page was modified by someone else. Reload the versions list and try again.",
+                "current_version": current["version"],
+                "your_version": body.base_version,
+            },
         )
 
     version = await db.execute_fetchall(
