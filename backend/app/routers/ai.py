@@ -22,7 +22,7 @@ from app.auth import get_current_user, require_real_user
 from app.config import settings
 from app.database import get_db
 from app.services.acl import list_readable_page_ids
-from app.services.search import segment
+from app.services.search import build_fts_query, build_like_words
 
 # AI calls hit a paid upstream — never expose to anonymous traffic.
 router = APIRouter(
@@ -31,10 +31,6 @@ router = APIRouter(
     dependencies=[Depends(require_real_user)],
 )
 
-# FTS5 trigram tokenizer needs ≥3 chars; below that we fall back to LIKE —
-# same threshold as routers/search.py so retrieval behaves identically to
-# the sidebar search for short CJK queries.
-_TRIGRAM_MIN_LEN = 3
 _LIKE_ESCAPE = "\\"
 
 
@@ -83,15 +79,51 @@ def _escape_like(s: str) -> str:
     )
 
 
-def _escape_fts_phrase(s: str) -> str:
-    return s.replace('"', '""')
+async def _fts_lookup(db, fts_query: str, readable_json: str, limit: int):
+    sql = """
+        SELECT p.slug, p.title, p.content_md
+        FROM search_index
+        JOIN pages p ON CAST(search_index.page_id AS INTEGER) = p.id
+        WHERE search_index MATCH ? AND p.deleted_at IS NULL
+          AND p.id IN (SELECT value FROM json_each(?))
+        ORDER BY search_index.rank
+        LIMIT ?
+    """
+    return await db.execute_fetchall(sql, [fts_query, readable_json, limit])
+
+
+async def _like_lookup(db, words: list[str], readable_json: str, limit: int):
+    like_clauses = " OR ".join(
+        f"p.title LIKE ? ESCAPE '{_LIKE_ESCAPE}' "
+        f"OR p.content_md LIKE ? ESCAPE '{_LIKE_ESCAPE}'"
+        for _ in words
+    )
+    like_params: list[str] = []
+    for w in words:
+        pattern = f"%{_escape_like(w)}%"
+        like_params.extend([pattern, pattern])
+    sql = f"""
+        SELECT p.slug, p.title, p.content_md
+        FROM pages p
+        WHERE ({like_clauses}) AND p.deleted_at IS NULL
+          AND p.id IN (SELECT value FROM json_each(?))
+        ORDER BY p.updated_at DESC
+        LIMIT ?
+    """
+    return await db.execute_fetchall(sql, like_params + [readable_json, limit])
 
 
 async def _retrieve_context(db, user: dict, question: str) -> list[dict]:
-    """ACL-filtered top-K retrieval from the FTS5 index."""
-    q_seg = segment(question)
-    words = [w for w in q_seg.split() if w]
-    if not words:
+    """ACL-filtered top-K retrieval from the FTS5 index.
+
+    Tries FTS first; if the question's trigrams don't overlap any indexed
+    page (common for natural-language CJK questions where the keywords show
+    up only as 2-char terms), falls back to LIKE so 'find pages about 志工'
+    still surfaces a page that mentions 志工 once.
+    """
+    fts_query = build_fts_query(question)
+    like_words = build_like_words(question)
+    if fts_query is None and not like_words:
         return []
 
     readable = await list_readable_page_ids(db, user)
@@ -100,39 +132,11 @@ async def _retrieve_context(db, user: dict, question: str) -> list[dict]:
     readable_json = json.dumps(list(readable))
     limit = settings.AI_MAX_CONTEXT_PAGES
 
-    use_fts = all(len(w) >= _TRIGRAM_MIN_LEN for w in words)
-
-    if use_fts:
-        fts_query = " OR ".join(f'"{_escape_fts_phrase(w)}"' for w in words)
-        sql = """
-            SELECT p.slug, p.title, p.content_md
-            FROM search_index
-            JOIN pages p ON CAST(search_index.page_id AS INTEGER) = p.id
-            WHERE search_index MATCH ? AND p.deleted_at IS NULL
-              AND p.id IN (SELECT value FROM json_each(?))
-            ORDER BY search_index.rank
-            LIMIT ?
-        """
-        rows = await db.execute_fetchall(sql, [fts_query, readable_json, limit])
-    else:
-        like_clauses = " OR ".join(
-            f"p.title LIKE ? ESCAPE '{_LIKE_ESCAPE}' "
-            f"OR p.content_md LIKE ? ESCAPE '{_LIKE_ESCAPE}'"
-            for _ in words
-        )
-        like_params = []
-        for w in words:
-            pattern = f"%{_escape_like(w)}%"
-            like_params.extend([pattern, pattern])
-        sql = f"""
-            SELECT p.slug, p.title, p.content_md
-            FROM pages p
-            WHERE ({like_clauses}) AND p.deleted_at IS NULL
-              AND p.id IN (SELECT value FROM json_each(?))
-            ORDER BY p.updated_at DESC
-            LIMIT ?
-        """
-        rows = await db.execute_fetchall(sql, like_params + [readable_json, limit])
+    rows = []
+    if fts_query is not None:
+        rows = await _fts_lookup(db, fts_query, readable_json, limit)
+    if not rows and like_words:
+        rows = await _like_lookup(db, like_words, readable_json, limit)
 
     excerpt_chars = settings.AI_EXCERPT_CHARS
     out = []

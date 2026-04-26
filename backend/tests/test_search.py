@@ -167,6 +167,31 @@ async def test_search_like_escapes_wildcards(auth_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not _has_trigram, reason="SQLite < 3.43 — trigram not available")
+async def test_search_cjk_natural_language_question(auth_client):
+    """A CJK question whose keywords appear in the page (but the question
+    itself is not a substring of the page) must still find that page.
+
+    This is the regression for the AI chat bug where '志工相關的頁面在哪'
+    found nothing despite a page containing '志工'.
+    """
+    await auth_client.post("/api/pages", json={
+        "title": "志工名單",
+        "content_md": "本頁列出本社所有志工的聯絡方式。",
+        "slug": "volunteer-list-zh",
+    })
+
+    # Long natural-language question — the question itself is NOT a
+    # substring of the page, so naïve FTS phrase matching would miss.
+    resp = await auth_client.get(
+        "/api/search", params={"q": "志工相關的頁面在哪"}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert any(r["slug"] == "volunteer-list-zh" for r in data["results"])
+
+
+@pytest.mark.asyncio
 async def test_search_or_semantics_in_like_fallback(auth_client):
     """Multi-word short queries should match pages containing ANY term (OR), not all."""
     await auth_client.post("/api/pages", json={

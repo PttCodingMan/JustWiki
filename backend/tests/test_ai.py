@@ -166,6 +166,37 @@ async def test_chat_unauthenticated_returns_401():
 
 
 @pytest.mark.asyncio
+async def test_chat_retrieves_page_for_cjk_natural_question(
+    auth_client, ai_enabled
+):
+    """Regression: a CJK natural-language question whose keywords appear
+    in the page (but the whole question doesn't) must still retrieve that
+    page. Originally the FTS phrase query required the entire question to
+    appear contiguously, so questions like '志工相關的頁面在哪' returned
+    422 even when a page mentioned 志工.
+    """
+    await auth_client.post(
+        "/api/pages",
+        json={
+            "title": "志工名單",
+            "slug": "ai-volunteer-list-zh",
+            "content_md": "本頁列出本社所有志工的聯絡方式。",
+        },
+    )
+
+    fake = _mock_httpx_client()
+    with patch("app.routers.ai.httpx.AsyncClient", return_value=fake):
+        resp = await auth_client.post(
+            "/api/ai/chat",
+            json={"message": "志工相關的頁面在哪"},
+        )
+    assert resp.status_code == 200
+    citations = _extract_citations(resp.text)
+    slugs = {c["slug"] for c in citations}
+    assert "ai-volunteer-list-zh" in slugs
+
+
+@pytest.mark.asyncio
 async def test_chat_no_matching_pages_returns_422(auth_client, ai_enabled):
     # Unique token that won't hit any page.
     resp = await auth_client.post(

@@ -5,12 +5,10 @@ from fastapi import APIRouter, Depends, Query
 from app.auth import get_current_user
 from app.database import get_db
 from app.services.acl import list_readable_page_ids
-from app.services.search import segment
+from app.services.search import build_fts_query, build_like_words
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
-# FTS5 trigram requires ≥3-char terms; shorter ones fall back to LIKE.
-_TRIGRAM_MIN_LEN = 3
 # LIKE wildcards that need escaping so user input like "100%" is treated literally.
 _LIKE_ESCAPE = "\\"
 
@@ -21,11 +19,6 @@ def _escape_like(s: str) -> str:
         .replace("%", _LIKE_ESCAPE + "%")
         .replace("_", _LIKE_ESCAPE + "_")
     )
-
-
-def _escape_fts_phrase(s: str) -> str:
-    # FTS5 phrase syntax escapes an embedded " by doubling it.
-    return s.replace('"', '""')
 
 
 def make_snippet(text: str, query: str, max_len: int = 200) -> str:
@@ -199,10 +192,9 @@ async def search_pages(
     db = await get_db()
     offset = (page - 1) * per_page
 
-    # Segment query for FTS5
-    q_seg = segment(q)
-    words = [w for w in q_seg.split() if w]
-    if not words:
+    fts_query = build_fts_query(q)
+    like_words = build_like_words(q)
+    if fts_query is None and not like_words:
         return {"results": [], "total": 0, "page": page, "per_page": per_page}
 
     readable = await list_readable_page_ids(db, user)
@@ -210,18 +202,18 @@ async def search_pages(
         return {"results": [], "total": 0, "page": page, "per_page": per_page}
     readable_json = json.dumps(list(readable))
 
-    # FTS5 trigram tokenizer needs at least 3 characters per term.
-    # For shorter queries (common in CJK), fall back to LIKE.
-    use_fts = all(len(w) >= _TRIGRAM_MIN_LEN for w in words)
-
-    if use_fts:
-        fts_query = " OR ".join(f'"{_escape_fts_phrase(w)}"' for w in words)
+    rows: list = []
+    total = 0
+    if fts_query is not None:
         rows, total = await _search_fts(
             db, fts_query, tag, readable_json, per_page, offset
         )
-    else:
+    # FTS may legitimately return zero rows when the question's trigrams don't
+    # overlap any indexed page (typical for natural-language CJK questions).
+    # Fall back to LIKE — slower but matches keywords as substrings.
+    if total == 0 and like_words:
         rows, total = await _search_like(
-            db, words, tag, readable_json, per_page, offset
+            db, like_words, tag, readable_json, per_page, offset
         )
 
     results = []
