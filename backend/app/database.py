@@ -2,6 +2,7 @@ import asyncio
 import logging
 import re
 import sqlite3
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import aiosqlite
@@ -1352,6 +1353,25 @@ async def get_db() -> aiosqlite.Connection:
             await conn.execute("PRAGMA foreign_keys=ON")
             _db = conn
     return _db
+
+
+# All requests share one aiosqlite connection (see `_db` above), so concurrent
+# writers' statements interleave inside a single implicit transaction; the
+# next commit() flushes both. This lock serialises multi-step write critical
+# sections and rolls back partial writes on exception so a failed handler
+# can't be committed by an unrelated request that runs next.
+_write_lock = asyncio.Lock()
+
+
+@asynccontextmanager
+async def write_transaction(db):
+    async with _write_lock:
+        try:
+            yield
+            await db.commit()
+        except BaseException:
+            await db.rollback()
+            raise
 
 
 async def rebuild_all_search_indexes(db):

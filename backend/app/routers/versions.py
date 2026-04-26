@@ -1,7 +1,7 @@
 import difflib
 from fastapi import APIRouter, HTTPException, Depends, Query
 from app.auth import get_current_user
-from app.database import get_db
+from app.database import get_db, write_transaction
 from app.services.acl import require_page_read
 from app.services.search import rebuild_search_index
 from app.services.wikilink import parse_and_update_backlinks
@@ -152,24 +152,24 @@ async def revert_to_version(slug: str, num: int, user=Depends(get_current_user))
     if not version:
         raise HTTPException(status_code=404, detail="Version not found")
 
-    # Save current state as a new version before reverting
-    await save_version(db, current["id"], current["title"], current["content_md"], user["id"])
+    async with write_transaction(db):
+        # Save current state as a new version before reverting
+        await save_version(db, current["id"], current["title"], current["content_md"], user["id"])
 
-    # Revert — bump the optimistic lock version so concurrent editors get a 409
-    new_version = current["version"] + 1
-    await db.execute(
-        """UPDATE pages SET title = ?, content_md = ?, version = ?,
-           updated_at = CURRENT_TIMESTAMP WHERE slug = ?""",
-        (version[0]["title"], version[0]["content_md"], new_version, slug),
-    )
-    await rebuild_search_index(db, current["id"], version[0]["title"], version[0]["content_md"])
-    await parse_and_update_backlinks(db, current["id"], version[0]["content_md"])
-    await parse_and_update_media_refs(db, current["id"], version[0]["content_md"])
-    await log_activity(
-        db, user["id"], "reverted", "page", current["id"],
-        {"title": version[0]["title"], "slug": slug, "to_version": num},
-    )
-    await db.commit()
+        # Revert — bump the optimistic lock version so concurrent editors get a 409
+        new_version = current["version"] + 1
+        await db.execute(
+            """UPDATE pages SET title = ?, content_md = ?, version = ?,
+               updated_at = CURRENT_TIMESTAMP WHERE slug = ?""",
+            (version[0]["title"], version[0]["content_md"], new_version, slug),
+        )
+        await rebuild_search_index(db, current["id"], version[0]["title"], version[0]["content_md"])
+        await parse_and_update_backlinks(db, current["id"], version[0]["content_md"])
+        await parse_and_update_media_refs(db, current["id"], version[0]["content_md"])
+        await log_activity(
+            db, user["id"], "reverted", "page", current["id"],
+            {"title": version[0]["title"], "slug": slug, "to_version": num},
+        )
 
     rows = await db.execute_fetchall("SELECT * FROM pages WHERE slug = ?", (slug,))
     return dict(rows[0])

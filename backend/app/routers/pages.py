@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from app.config import settings
 from app.schemas import PageCreate, PageUpdate, PageResponse, PageListResponse, PageMoveRequest
 from app.auth import get_current_user
-from app.database import get_db
+from app.database import get_db, write_transaction
 from app.services.acl import invalidate_readable_cache, list_readable_page_ids, resolve_page_permission
 from app.services.search import rebuild_search_index, remove_from_search_index
 from app.services.wikilink import parse_and_update_backlinks
@@ -280,34 +280,34 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
     # Retry on the rare race where two concurrent create_page calls resolve the
     # same slug before either INSERT commits. unique_slug makes the collision
     # window small, and the UNIQUE constraint backstops correctness.
-    page_id = None
-    slug = None
-    for _attempt in range(5):
-        candidate = await unique_slug(db, slugify(body.title, body.slug))
-        try:
-            cursor = await db.execute(
-                """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, version, page_type, mindmap_layout, created_by)
-                   VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)""",
-                (candidate, body.title, content, body.parent_id, body.sort_order, body.page_type, body.mindmap_layout, user["id"]),
-            )
-            slug = candidate
-            page_id = cursor.lastrowid
-            break
-        except aiosqlite.IntegrityError:
-            # Another request grabbed the slug first; try the next candidate.
-            continue
-    if page_id is None:
-        raise HTTPException(status_code=409, detail="Could not allocate a unique slug; please retry")
+    async with write_transaction(db):
+        page_id = None
+        slug = None
+        for _attempt in range(5):
+            candidate = await unique_slug(db, slugify(body.title, body.slug))
+            try:
+                cursor = await db.execute(
+                    """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, version, page_type, mindmap_layout, created_by)
+                       VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)""",
+                    (candidate, body.title, content, body.parent_id, body.sort_order, body.page_type, body.mindmap_layout, user["id"]),
+                )
+                slug = candidate
+                page_id = cursor.lastrowid
+                break
+            except aiosqlite.IntegrityError:
+                # Another request grabbed the slug first; try the next candidate.
+                continue
+        if page_id is None:
+            raise HTTPException(status_code=409, detail="Could not allocate a unique slug; please retry")
 
-    # Update search index
-    await rebuild_search_index(db, page_id, body.title, content)
-    # Parse wikilinks → update backlinks
-    await parse_and_update_backlinks(db, page_id, content)
-    # Parse media URLs → update media_references
-    await parse_and_update_media_refs(db, page_id, content)
-    # Log activity
-    await log_activity(db, user["id"], "created", "page", page_id, {"title": body.title, "slug": slug})
-    await db.commit()
+        # Update search index
+        await rebuild_search_index(db, page_id, body.title, content)
+        # Parse wikilinks → update backlinks
+        await parse_and_update_backlinks(db, page_id, content)
+        # Parse media URLs → update media_references
+        await parse_and_update_media_refs(db, page_id, content)
+        # Log activity
+        await log_activity(db, user["id"], "created", "page", page_id, {"title": body.title, "slug": slug})
     invalidate_readable_cache()
 
     rows = await db.execute_fetchall("SELECT * FROM pages WHERE id = ?", (page_id,))
@@ -435,33 +435,33 @@ async def update_page(slug: str, body: PageUpdate, user=Depends(get_current_user
     title_changed = body.title is not None and body.title != current["title"]
     public_changed = body.is_public is not None and bool(body.is_public) != current_is_public
 
-    # Save current state as a version before updating (only if content/title actually changed).
-    # Publicity/page_type toggles are metadata, not content, so they don't create a version.
-    if content_changed or title_changed:
-        await save_version(db, current["id"], current["title"], current["content_md"], user["id"])
-
     # is_public / page_type changes do NOT bump version (metadata, not content)
     new_version = current["version"] + 1 if (content_changed or title_changed) else current["version"]
 
-    await db.execute(
-        """UPDATE pages SET title = ?, content_md = ?, parent_id = ?, sort_order = ?,
-           is_public = ?, page_type = ?, mindmap_layout = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?""",
-        (title, content, parent_id, sort_order, 1 if is_public else 0, page_type, mindmap_layout, new_version, slug),
-    )
+    async with write_transaction(db):
+        # Save current state as a version before updating (only if content/title actually changed).
+        # Publicity/page_type toggles are metadata, not content, so they don't create a version.
+        if content_changed or title_changed:
+            await save_version(db, current["id"], current["title"], current["content_md"], user["id"])
 
-    # Update search index
-    await rebuild_search_index(db, current["id"], title, content)
-    # Parse wikilinks → update backlinks
-    await parse_and_update_backlinks(db, current["id"], content)
-    # Parse media URLs → update media_references
-    await parse_and_update_media_refs(db, current["id"], content)
-    # Log activity
-    if content_changed or title_changed:
-        await log_activity(db, user["id"], "updated", "page", current["id"], {"title": title, "slug": slug})
-    if public_changed:
-        action = "made_public" if is_public else "made_private"
-        await log_activity(db, user["id"], action, "page", current["id"], {"title": title, "slug": slug})
-    await db.commit()
+        await db.execute(
+            """UPDATE pages SET title = ?, content_md = ?, parent_id = ?, sort_order = ?,
+               is_public = ?, page_type = ?, mindmap_layout = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?""",
+            (title, content, parent_id, sort_order, 1 if is_public else 0, page_type, mindmap_layout, new_version, slug),
+        )
+
+        # Update search index
+        await rebuild_search_index(db, current["id"], title, content)
+        # Parse wikilinks → update backlinks
+        await parse_and_update_backlinks(db, current["id"], content)
+        # Parse media URLs → update media_references
+        await parse_and_update_media_refs(db, current["id"], content)
+        # Log activity
+        if content_changed or title_changed:
+            await log_activity(db, user["id"], "updated", "page", current["id"], {"title": title, "slug": slug})
+        if public_changed:
+            action = "made_public" if is_public else "made_private"
+            await log_activity(db, user["id"], action, "page", current["id"], {"title": title, "slug": slug})
     if "parent_id" in body.model_fields_set and parent_id != current["parent_id"]:
         invalidate_readable_cache()  # parent change alters inherited ACL
 
@@ -611,16 +611,16 @@ async def delete_page(slug: str, user=Depends(get_current_user)):
     page_id = rows[0]["id"]
     page_title = rows[0]["title"]
 
-    # Soft delete: mark as deleted but keep the row, versions, and backlinks intact.
-    await db.execute(
-        "UPDATE pages SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?", (page_id,)
-    )
-    # Remove from search index so deleted pages don't appear in search
-    await remove_from_search_index(db, page_id)
-    # Log activity
-    await log_activity(db, user["id"], "deleted", "page", page_id, {"title": page_title, "slug": slug})
+    async with write_transaction(db):
+        # Soft delete: mark as deleted but keep the row, versions, and backlinks intact.
+        await db.execute(
+            "UPDATE pages SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?", (page_id,)
+        )
+        # Remove from search index so deleted pages don't appear in search
+        await remove_from_search_index(db, page_id)
+        # Log activity
+        await log_activity(db, user["id"], "deleted", "page", page_id, {"title": page_title, "slug": slug})
 
-    await db.commit()
     invalidate_readable_cache()
 
     # Fire notification
