@@ -60,7 +60,7 @@ def _rate_limit_ok(user_id: int) -> bool:
 
 class ChatMessage(BaseModel):
     role: str = Field(pattern="^(user|assistant)$")
-    content: str
+    content: str = Field(max_length=4000)
 
 
 class ChatRequest(BaseModel):
@@ -206,9 +206,10 @@ async def _stream_llm(messages: list[dict]):
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream("POST", url, headers=headers, json=payload) as resp:
                 if resp.status_code >= 400:
-                    body = await resp.aread()
-                    detail = body.decode("utf-8", errors="replace")[:500]
-                    err = json.dumps({"error": f"upstream {resp.status_code}: {detail}"})
+                    # Don't forward upstream body — it can leak API URL, account
+                    # IDs, partial keys, or quota details to authenticated users.
+                    await resp.aread()
+                    err = json.dumps({"error": f"upstream error ({resp.status_code})"})
                     yield f"data: {err}\n\n".encode()
                     return
                 async for line in resp.aiter_lines():

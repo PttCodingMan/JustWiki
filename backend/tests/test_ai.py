@@ -58,9 +58,10 @@ async def _add_acl(db, page_id, principal_type, principal_id, permission):
 class _FakeStreamResponse:
     """Mimics the async-context-manager returned by httpx.AsyncClient.stream."""
 
-    def __init__(self, status_code: int, lines: list[str]):
+    def __init__(self, status_code: int, lines: list[str], body: bytes = b""):
         self.status_code = status_code
         self._lines = lines
+        self._body = body
 
     async def __aenter__(self):
         return self
@@ -69,14 +70,14 @@ class _FakeStreamResponse:
         return False
 
     async def aread(self):
-        return b""
+        return self._body
 
     async def aiter_lines(self):
         for line in self._lines:
             yield line
 
 
-def _mock_httpx_client(status_code=200, lines=None):
+def _mock_httpx_client(status_code=200, lines=None, body: bytes = b""):
     """Build a MagicMock that replaces httpx.AsyncClient for one call."""
     if lines is None:
         lines = [
@@ -89,7 +90,7 @@ def _mock_httpx_client(status_code=200, lines=None):
     fake_client.__aenter__ = AsyncMock(return_value=fake_client)
     fake_client.__aexit__ = AsyncMock(return_value=False)
     fake_client.stream = MagicMock(
-        return_value=_FakeStreamResponse(status_code, lines)
+        return_value=_FakeStreamResponse(status_code, lines, body)
     )
     return fake_client
 
@@ -335,7 +336,10 @@ async def test_chat_upstream_error_surfaces_as_sse_event(auth_client, ai_enabled
         },
     )
 
-    fake = _mock_httpx_client(status_code=401, lines=[])
+    # Body would normally carry provider-side detail (URL, account info,
+    # partial keys). The router must redact it; only the status code may surface.
+    sensitive_body = b'{"error":{"message":"Invalid API key sk-leak-1234","code":"auth"}}'
+    fake = _mock_httpx_client(status_code=401, lines=[], body=sensitive_body)
     with patch("app.routers.ai.httpx.AsyncClient", return_value=fake):
         resp = await auth_client.post(
             "/api/ai/chat",
@@ -343,7 +347,9 @@ async def test_chat_upstream_error_surfaces_as_sse_event(auth_client, ai_enabled
         )
     assert resp.status_code == 200  # HTTP 200 with an error SSE event inside
     assert '"error"' in resp.text
-    assert "upstream 401" in resp.text
+    assert "401" in resp.text
+    assert "sk-leak-1234" not in resp.text
+    assert "Invalid API key" not in resp.text
 
 
 @pytest.mark.asyncio

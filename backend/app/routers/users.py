@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 
-from app.auth import get_current_user, require_admin, require_real_user, hash_password
+from app.auth import get_current_user, require_admin, require_real_user, hash_password_async
 from app.database import get_db
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -141,7 +141,7 @@ async def create_user(body: UserCreate, user=Depends(require_admin)):
     )
     if existing:
         raise HTTPException(status_code=409, detail="Username already exists")
-    pw_hash = hash_password(body.password)
+    pw_hash = await hash_password_async(body.password)
     cursor = await db.execute(
         "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
         (body.username, pw_hash, body.role),
@@ -248,7 +248,7 @@ async def update_user(user_id: int, body: UserUpdate, user=Depends(require_admin
         values.append(body.role)
     if body.password is not None:
         updates.append("password_hash = ?")
-        values.append(hash_password(body.password))
+        values.append(await hash_password_async(body.password))
 
     if updates:
         values.append(user_id)

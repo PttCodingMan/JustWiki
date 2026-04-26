@@ -6,9 +6,9 @@ from app.schemas import LoginRequest, UserResponse
 from typing import Optional
 from pydantic import BaseModel
 from app.auth import (
-    verify_password,
+    verify_password_async,
     create_token,
-    hash_password,
+    hash_password_async,
     require_real_user,
     resolve_request_credentials,
 )
@@ -53,7 +53,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
     #    this check so bcrypt can't coincidentally accept an empty / short
     #    password; they must sign in via SSO or LDAP instead.
     user = None
-    if rows and rows[0]["password_hash"] != "!" and verify_password(body.password, rows[0]["password_hash"]):
+    if rows and rows[0]["password_hash"] != "!" and await verify_password_async(body.password, rows[0]["password_hash"]):
         user = dict(rows[0])
 
     # 2. LDAP fallback. The service is imported lazily so sites without LDAP
@@ -187,12 +187,12 @@ async def change_password(body: ChangePasswordRequest, user=Depends(require_real
             status_code=400,
             detail="This account is managed by SSO/LDAP; password cannot be changed here.",
         )
-    if not verify_password(body.old_password, rows[0]["password_hash"]):
+    if not await verify_password_async(body.old_password, rows[0]["password_hash"]):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
     await db.execute(
         "UPDATE users SET password_hash = ? WHERE id = ?",
-        (hash_password(body.new_password), user["id"]),
+        (await hash_password_async(body.new_password), user["id"]),
     )
     await db.commit()
     return {"ok": True}

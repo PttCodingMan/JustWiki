@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException, status, Request
@@ -55,6 +56,17 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
+
+
+# bcrypt is intentionally slow (~100-500ms). Async handlers must use these
+# wrappers so a login doesn't block the entire event loop. The sync versions
+# above are kept for startup code (ensure_admin_exists) and test fixtures.
+async def hash_password_async(password: str) -> str:
+    return await asyncio.to_thread(hash_password, password)
+
+
+async def verify_password_async(password: str, hashed: str) -> bool:
+    return await asyncio.to_thread(verify_password, password, hashed)
 
 
 def create_token(user_id: int, username: str, role: str) -> str:
