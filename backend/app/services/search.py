@@ -45,6 +45,24 @@ def _escape_fts_phrase(s: str) -> str:
     return s.replace('"', '""')
 
 
+# ── LIKE fallback escaping ─────────────────────────────────────────────────
+#
+# When FTS misses we fall back to LIKE patterns. SQLite LIKE treats `%` and
+# `_` as wildcards; we escape them with a backslash and tell SQLite about it
+# via `ESCAPE '\\'`. The escape character itself must also be escaped.
+
+LIKE_ESCAPE = "\\"
+
+
+def escape_like(s: str) -> str:
+    """Escape `%`, `_`, and `\\` so the value is matched literally by LIKE."""
+    return (
+        s.replace(LIKE_ESCAPE, LIKE_ESCAPE * 2)
+        .replace("%", LIKE_ESCAPE + "%")
+        .replace("_", LIKE_ESCAPE + "_")
+    )
+
+
 def build_fts_query(question: str) -> str | None:
     """Build an FTS5 MATCH expression that aligns with the trigram index.
 

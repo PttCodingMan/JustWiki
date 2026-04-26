@@ -5,20 +5,9 @@ from fastapi import APIRouter, Depends, Query
 from app.auth import get_current_user
 from app.database import get_db
 from app.services.acl import list_readable_page_ids
-from app.services.search import build_fts_query, build_like_words
+from app.services.search import LIKE_ESCAPE, build_fts_query, build_like_words, escape_like
 
 router = APIRouter(prefix="/api/search", tags=["search"])
-
-# LIKE wildcards that need escaping so user input like "100%" is treated literally.
-_LIKE_ESCAPE = "\\"
-
-
-def _escape_like(s: str) -> str:
-    return (
-        s.replace(_LIKE_ESCAPE, _LIKE_ESCAPE * 2)
-        .replace("%", _LIKE_ESCAPE + "%")
-        .replace("_", _LIKE_ESCAPE + "_")
-    )
 
 
 def make_snippet(text: str, query: str, max_len: int = 200) -> str:
@@ -118,14 +107,14 @@ async def _search_like(db, words, tag, readable_json, per_page, offset):
     `%` and `_` in user input are escaped so they are treated literally.
     """
     like_clauses = " OR ".join(
-        f"p.title LIKE ? ESCAPE '{_LIKE_ESCAPE}' "
-        f"OR p.content_md LIKE ? ESCAPE '{_LIKE_ESCAPE}'"
+        f"p.title LIKE ? ESCAPE '{LIKE_ESCAPE}' "
+        f"OR p.content_md LIKE ? ESCAPE '{LIKE_ESCAPE}'"
         for _ in words
     )
     like_clauses = f"({like_clauses})"
     like_params = []
     for w in words:
-        pattern = f"%{_escape_like(w)}%"
+        pattern = f"%{escape_like(w)}%"
         like_params.extend([pattern, pattern])
 
     if tag:

@@ -22,7 +22,7 @@ from app.auth import require_real_user
 from app.config import settings
 from app.database import get_db
 from app.services.acl import list_readable_page_ids
-from app.services.search import build_fts_query, build_like_words
+from app.services.search import LIKE_ESCAPE, build_fts_query, build_like_words, escape_like
 
 # AI calls hit a paid upstream — never expose to anonymous traffic.
 router = APIRouter(
@@ -30,8 +30,6 @@ router = APIRouter(
     tags=["ai"],
     dependencies=[Depends(require_real_user)],
 )
-
-_LIKE_ESCAPE = "\\"
 
 
 # ── rate limiting (per user, in-memory sliding window) ─────────────────
@@ -71,14 +69,6 @@ class ChatRequest(BaseModel):
 # ── retrieval ──────────────────────────────────────────────────────────
 
 
-def _escape_like(s: str) -> str:
-    return (
-        s.replace(_LIKE_ESCAPE, _LIKE_ESCAPE * 2)
-        .replace("%", _LIKE_ESCAPE + "%")
-        .replace("_", _LIKE_ESCAPE + "_")
-    )
-
-
 async def _fts_lookup(db, fts_query: str, readable_json: str, limit: int):
     sql = """
         SELECT p.slug, p.title, p.content_md
@@ -94,13 +84,13 @@ async def _fts_lookup(db, fts_query: str, readable_json: str, limit: int):
 
 async def _like_lookup(db, words: list[str], readable_json: str, limit: int):
     like_clauses = " OR ".join(
-        f"p.title LIKE ? ESCAPE '{_LIKE_ESCAPE}' "
-        f"OR p.content_md LIKE ? ESCAPE '{_LIKE_ESCAPE}'"
+        f"p.title LIKE ? ESCAPE '{LIKE_ESCAPE}' "
+        f"OR p.content_md LIKE ? ESCAPE '{LIKE_ESCAPE}'"
         for _ in words
     )
     like_params: list[str] = []
     for w in words:
-        pattern = f"%{_escape_like(w)}%"
+        pattern = f"%{escape_like(w)}%"
         like_params.extend([pattern, pattern])
     sql = f"""
         SELECT p.slug, p.title, p.content_md

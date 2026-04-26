@@ -150,17 +150,6 @@ async def _m009_page_type(db: aiosqlite.Connection) -> None:
         )
 
 
-async def _m011_mindmap_layout(db: aiosqlite.Connection) -> None:
-    """Add `mindmap_layout` to pages so authors can pick LR / RL / Radial.
-
-    Nullable TEXT — NULL means "use the frontend default" (`'lr'`), so legacy
-    rows render unchanged. Validation is enforced by Pydantic Literal in
-    schemas.MindmapLayout, not at the DB layer (matches `page_type`).
-    """
-    if not await _column_exists(db, "pages", "mindmap_layout"):
-        await db.execute("ALTER TABLE pages ADD COLUMN mindmap_layout TEXT")
-
-
 async def _m010_site_settings(db: aiosqlite.Connection) -> None:
     """Create site_settings for branding overrides and the home-page slug.
 
@@ -177,6 +166,17 @@ async def _m010_site_settings(db: aiosqlite.Connection) -> None:
         )
         """
     )
+
+
+async def _m011_mindmap_layout(db: aiosqlite.Connection) -> None:
+    """Add `mindmap_layout` to pages so authors can pick LR / RL / Radial.
+
+    Nullable TEXT — NULL means "use the frontend default" (`'lr'`), so legacy
+    rows render unchanged. Validation is enforced by Pydantic Literal in
+    schemas.MindmapLayout, not at the DB layer (matches `page_type`).
+    """
+    if not await _column_exists(db, "pages", "mindmap_layout"):
+        await db.execute("ALTER TABLE pages ADD COLUMN mindmap_layout TEXT")
 
 
 MIGRATIONS: list[Migration] = [

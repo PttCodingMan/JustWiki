@@ -20,6 +20,7 @@ Resolution model (see /docs or the original plan for the full rationale):
   (no live references) is accessible to its uploader and admins only.
 """
 
+import json
 import time
 
 from fastapi import HTTPException
@@ -34,6 +35,20 @@ _MAX_CHAIN_DEPTH = 50
 # Cleared by invalidate_readable_cache() on ACL / group-membership writes.
 _readable_cache: dict[int, tuple[float, frozenset[int]]] = {}
 _READABLE_CACHE_TTL = 30  # seconds
+
+
+def build_id_clause(ids, column: str = "id") -> tuple[str, list]:
+    """SQL fragment + params for ``{column} IN (SELECT value FROM json_each(?))``.
+
+    Uses ``json_each`` rather than inline ``IN (?,?,...)`` to avoid hitting
+    SQLite's ``SQLITE_MAX_VARIABLE_NUMBER`` (default 999) when callers feed
+    in the full readable-page set on a wiki with thousands of pages. For an
+    empty set returns a clause that never matches so downstream SQL can be
+    composed without branching.
+    """
+    if not ids:
+        return "0 = 1", []
+    return f"{column} IN (SELECT value FROM json_each(?))", [json.dumps(list(ids))]
 
 
 def invalidate_readable_cache(user_id: int | None = None):

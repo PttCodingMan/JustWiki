@@ -10,12 +10,17 @@ from app.config import settings
 from app.schemas import PageCreate, PageUpdate, PageResponse, PageListResponse, PageMoveRequest
 from app.auth import get_current_user
 from app.database import get_db, write_transaction
-from app.services.acl import invalidate_readable_cache, list_readable_page_ids, resolve_page_permission
+from app.services.acl import build_id_clause, invalidate_readable_cache, list_readable_page_ids, resolve_page_permission
 from app.services.search import rebuild_search_index, remove_from_search_index
 from app.services.wikilink import parse_and_update_backlinks
 from app.services.media_ref import parse_and_update_media_refs
 from app.routers.activity import log_activity
 from app.routers.versions import save_version
+from app.services.notifications import (
+    notify_page_created,
+    notify_page_deleted,
+    notify_page_updated,
+)
 
 router = APIRouter(prefix="/api/pages", tags=["pages"])
 
@@ -58,20 +63,6 @@ async def _should_count_view(db, user_id: int, page_id: int) -> bool:
             "DELETE FROM view_dedup WHERE last_viewed_at < ?", (cutoff,)
         )
     return True
-
-
-def _build_id_clause(ids: set[int], column: str = "id") -> tuple[str, list]:
-    """Produce a parameterized ``column IN (SELECT value FROM json_each(?))``
-    clause plus params.
-
-    Uses ``json_each`` instead of ``IN (?,?,...)`` to avoid hitting
-    SQLite's ``SQLITE_MAX_VARIABLE_NUMBER`` limit on large page sets.
-    For the empty set, returns a clause that never matches so downstream
-    SQL can be composed without branching.
-    """
-    if not ids:
-        return "0 = 1", []
-    return f"{column} IN (SELECT value FROM json_each(?))", [json.dumps(list(ids))]
 
 
 def slugify(title: str, existing_slug: str | None = None) -> str:
@@ -139,7 +130,7 @@ async def list_pages(
     offset = (page - 1) * per_page
 
     readable = await list_readable_page_ids(db, user)
-    id_clause, id_params = _build_id_clause(readable)
+    id_clause, id_params = build_id_clause(readable)
 
     where = f"WHERE deleted_at IS NULL AND {id_clause}"
     params: list = list(id_params)
@@ -164,7 +155,7 @@ async def list_pages(
 async def page_tree(user=Depends(get_current_user)):
     db = await get_db()
     readable = await list_readable_page_ids(db, user)
-    id_clause, id_params = _build_id_clause(readable)
+    id_clause, id_params = build_id_clause(readable)
     rows = await db.execute_fetchall(
         f"SELECT id, slug, title, parent_id, sort_order FROM pages "
         f"WHERE deleted_at IS NULL AND {id_clause} "
@@ -205,7 +196,7 @@ async def page_tree(user=Depends(get_current_user)):
 async def page_graph(user=Depends(get_current_user)):
     db = await get_db()
     readable = await list_readable_page_ids(db, user)
-    id_clause, id_params = _build_id_clause(readable)
+    id_clause, id_params = build_id_clause(readable)
     pages = await db.execute_fetchall(
         f"SELECT id, slug, title, parent_id FROM pages WHERE deleted_at IS NULL AND {id_clause}",
         id_params,
@@ -312,7 +303,6 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
     new_page = dict(rows[0])
 
     # Fire notification
-    from app.services.notifications import notify_page_created
     await notify_page_created(db, new_page, user)
 
     return new_page
@@ -468,7 +458,6 @@ async def update_page(slug: str, body: PageUpdate, user=Depends(get_current_user
 
     # Fire notifications if content/title actually changed
     if content_changed or title_changed:
-        from app.services.notifications import notify_page_updated
         await notify_page_updated(db, updated, user, {"title_changed": title_changed, "content_changed": content_changed})
 
     return updated
@@ -487,7 +476,7 @@ async def get_children(slug: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Page not found")
 
     readable = await list_readable_page_ids(db, user)
-    id_clause, id_params = _build_id_clause(readable)
+    id_clause, id_params = build_id_clause(readable)
     children = await db.execute_fetchall(
         f"SELECT * FROM pages WHERE parent_id = ? AND deleted_at IS NULL AND {id_clause} "
         f"ORDER BY sort_order, title",
@@ -509,7 +498,7 @@ async def get_backlinks(slug: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Page not found")
 
     readable = await list_readable_page_ids(db, user)
-    id_clause, id_params = _build_id_clause(readable, column="p.id")
+    id_clause, id_params = build_id_clause(readable, column="p.id")
     backlinks = await db.execute_fetchall(
         f"""SELECT p.id, p.slug, p.title
            FROM backlinks b
@@ -622,7 +611,6 @@ async def delete_page(slug: str, user=Depends(get_current_user)):
     invalidate_readable_cache()
 
     # Fire notification
-    from app.services.notifications import notify_page_deleted
     await notify_page_deleted(db, {"id": page_id, "title": page_title, "slug": slug}, user)
 
     return {"ok": True}

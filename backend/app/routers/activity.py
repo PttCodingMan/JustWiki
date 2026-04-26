@@ -2,7 +2,7 @@ import json
 from fastapi import APIRouter, Depends, Query
 from app.auth import get_current_user
 from app.database import get_db
-from app.services.acl import list_readable_page_ids
+from app.services.acl import build_id_clause, list_readable_page_ids
 
 router = APIRouter(prefix="/api/activity", tags=["activity"])
 
@@ -28,10 +28,10 @@ def _readable_clause(readable: frozenset[int] | set[int]) -> tuple[str, list]:
     if not readable:
         # No readable pages → drop every page-targeted row.
         return "(a.target_type != 'page')", []
-    placeholders = ",".join("?" * len(readable))
+    id_clause, id_params = build_id_clause(readable, column="a.target_id")
     return (
-        f"(a.target_type != 'page' OR a.target_id IN ({placeholders}))",
-        list(readable),
+        f"(a.target_type != 'page' OR {id_clause})",
+        id_params,
     )
 
 
@@ -99,32 +99,32 @@ async def activity_stats(user=Depends(get_current_user)):
             "total_users": 0,
         }
 
-    placeholders = ",".join("?" * len(readable))
-    readable_params = list(readable)
+    id_clause, id_params = build_id_clause(readable)
+    p_id_clause, p_id_params = build_id_clause(readable, column="p.id")
 
     top_viewed = await db.execute_fetchall(
         f"""SELECT id, slug, title, view_count FROM pages
-           WHERE id IN ({placeholders})
+           WHERE {id_clause}
            ORDER BY view_count DESC LIMIT 10""",
-        readable_params,
+        id_params,
     )
 
     recently_updated = await db.execute_fetchall(
         f"""SELECT p.id, p.slug, p.title, p.updated_at
            FROM pages p
-           WHERE p.id IN ({placeholders})
+           WHERE {p_id_clause}
            ORDER BY p.updated_at DESC LIMIT 10""",
-        readable_params,
+        p_id_params,
     )
 
     orphan_pages = await db.execute_fetchall(
         f"""SELECT p.id, p.slug, p.title, p.view_count
            FROM pages p
-           WHERE p.id IN ({placeholders})
+           WHERE {p_id_clause}
              AND p.id NOT IN (SELECT target_page_id FROM backlinks)
              AND p.parent_id IS NULL
            ORDER BY p.updated_at DESC LIMIT 20""",
-        readable_params,
+        p_id_params,
     )
 
     # total_pages reflects what *this user* can read, not the global count.
