@@ -356,6 +356,15 @@
       "media": { "label": "Media Library", "desc": "Pick from uploaded files" }
     }
   },
+  "tableTooltip": {
+    "addRowAbove": "Insert row above",
+    "addRowBelow": "Insert row below",
+    "addColLeft": "Insert column left",
+    "addColRight": "Insert column right",
+    "deleteRow": "Delete row",
+    "deleteCol": "Delete column",
+    "deleteTable": "Delete table"
+  },
   "mediaPicker": {
     "title": "Insert from Library",
     "close": "Close",

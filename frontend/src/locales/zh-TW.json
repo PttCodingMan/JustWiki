@@ -356,6 +356,15 @@
       "media": { "label": "媒體庫", "desc": "從已上傳檔案中選擇" }
     }
   },
+  "tableTooltip": {
+    "addRowAbove": "上方插入列",
+    "addRowBelow": "下方插入列",
+    "addColLeft": "左側插入欄",
+    "addColRight": "右側插入欄",
+    "deleteRow": "刪除此列",
+    "deleteCol": "刪除此欄",
+    "deleteTable": "刪除整個表格"
+  },
   "mediaPicker": {
     "title": "從媒體庫插入",
     "close": "關閉",

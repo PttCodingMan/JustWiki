@@ -13,6 +13,7 @@ import { $prose } from '@milkdown/kit/utils'
 import api from '../../api/client'
 import { wikilink } from './wikilink'
 import { math, mathBlockSchema } from './math'
+import { tableTooltip } from './tableTooltip'
 
 const SLASH_ITEM_DEFS = [
   { id: 'h1', icon: 'H1' },
@@ -400,9 +401,19 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
   // refs before the editor's init effect runs.
   const slashItemsRef = useRef(null)
   const wikilinkEmptyRef = useRef('')
+  const tableTooltipLabelsRef = useRef(null)
   useEffect(() => {
     slashItemsRef.current = buildSlashItems(t)
     wikilinkEmptyRef.current = t('slash.wikilinkEmpty')
+    tableTooltipLabelsRef.current = {
+      addRowAbove: t('tableTooltip.addRowAbove'),
+      addRowBelow: t('tableTooltip.addRowBelow'),
+      addColLeft: t('tableTooltip.addColLeft'),
+      addColRight: t('tableTooltip.addColRight'),
+      deleteRow: t('tableTooltip.deleteRow'),
+      deleteCol: t('tableTooltip.deleteCol'),
+      deleteTable: t('tableTooltip.deleteTable'),
+    }
   }, [t])
 
   useEffect(() => {
@@ -555,6 +566,7 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
         .use(wikilink)
         .use(wikilinkPlugin)
         .use(tabOutPlugin)
+        .use(tableTooltip(tableTooltipLabelsRef.current))
         .create()
 
       // StrictMode: if cleanup ran while we were awaiting, destroy immediately

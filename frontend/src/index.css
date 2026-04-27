@@ -463,6 +463,49 @@ body {
   color: var(--color-text-secondary);
 }
 
+/* Table tooltip (in-editor row/column controls) */
+.table-tooltip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  padding: 4px;
+}
+
+.table-tooltip-btn {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+  cursor: pointer;
+  line-height: 1;
+  min-width: 32px;
+  height: 28px;
+}
+
+.table-tooltip-btn:hover {
+  background: var(--color-surface-hover);
+}
+
+.table-tooltip-btn.is-danger:hover {
+  background: rgba(220, 38, 38, 0.12);
+  color: rgb(185, 28, 28);
+}
+
+.table-tooltip-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--color-border);
+  margin: 0 4px;
+}
+
 /* Atomic wikilink node inside the editor (Milkdown) */
 .milkdown a.wikilink-node {
   display: inline-block;

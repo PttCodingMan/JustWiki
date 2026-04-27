@@ -356,6 +356,15 @@
       "media": { "label": "メディアライブラリ", "desc": "アップロード済みのファイルから選択" }
     }
   },
+  "tableTooltip": {
+    "addRowAbove": "上に行を挿入",
+    "addRowBelow": "下に行を挿入",
+    "addColLeft": "左に列を挿入",
+    "addColRight": "右に列を挿入",
+    "deleteRow": "この行を削除",
+    "deleteCol": "この列を削除",
+    "deleteTable": "テーブルを削除"
+  },
   "mediaPicker": {
     "title": "ライブラリから挿入",
     "close": "閉じる",

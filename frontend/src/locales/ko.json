@@ -356,6 +356,15 @@
       "media": { "label": "미디어 라이브러리", "desc": "업로드된 파일에서 선택" }
     }
   },
+  "tableTooltip": {
+    "addRowAbove": "위에 행 삽입",
+    "addRowBelow": "아래에 행 삽입",
+    "addColLeft": "왼쪽에 열 삽입",
+    "addColRight": "오른쪽에 열 삽입",
+    "deleteRow": "이 행 삭제",
+    "deleteCol": "이 열 삭제",
+    "deleteTable": "표 삭제"
+  },
   "mediaPicker": {
     "title": "라이브러리에서 삽입",
     "close": "닫기",
