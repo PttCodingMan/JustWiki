@@ -143,6 +143,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version from git
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//')"
+          fi
+          echo "Resolved version: $VERSION"
+          echo "$VERSION" > VERSION
 
       - name: Skip if component didn't change
         id: check
