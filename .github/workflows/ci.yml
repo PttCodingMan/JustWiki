@@ -2,7 +2,7 @@ name: CI/CD
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, beta ]
     tags: ['v*']
     paths-ignore:
       - '**.md'
@@ -126,7 +126,7 @@ jobs:
     if: |
       always() &&
       github.event_name != 'pull_request' &&
-      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta' || startsWith(github.ref, 'refs/tags/v')) &&
       (startsWith(github.ref, 'refs/tags/v') ||
         needs.changes.outputs.backend == 'true' ||
         needs.changes.outputs.frontend == 'true') &&
@@ -181,8 +181,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE_PREFIX }}/${{ matrix.component }}
+          flavor: |
+            latest=false
           tags: |
-            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=beta,enable=${{ github.ref == 'refs/heads/beta' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=

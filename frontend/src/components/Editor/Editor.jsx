@@ -136,6 +136,7 @@ class SlashMenuView {
       content: this.content,
       debounce: 50,
       shouldShow: (view) => {
+        if (view.composing) return false
         const currentText = this.provider.getContent(
           view,
           (node) => ['paragraph', 'heading'].includes(node.type.name)
@@ -230,6 +231,9 @@ class SlashMenuView {
   update(view) {
     this.view = view
     this.editorViewRef.current = view
+    // Don't query or mutate menu state mid-IME — coordsAtPos / DOM writes
+    // triggered here can drop in-flight composition characters on Windows.
+    if (view.composing) return
     this.provider.update(view)
   }
 
@@ -453,6 +457,10 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
           return {
             update(view) {
               wikilinkMenu._view = view
+              // Bail during IME composition: coordsAtPos + DOM writes from
+              // show()/hide() can disturb the active composition on Windows,
+              // making characters disappear and the cursor jump.
+              if (view.composing) return
               const { state } = view
               const { selection } = state
               if (!(selection instanceof TextSelection)) {
@@ -516,6 +524,12 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
           ctx.set(rootCtx, containerRef.current)
           ctx.set(defaultValueCtx, defaultValue)
           ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
+            // Skip parent state updates while IME composition is active —
+            // the React re-render they trigger can interrupt composition on
+            // Windows. ProseMirror dispatches a final transaction at
+            // compositionend, which fires the listener again with the
+            // committed text, so no input is lost.
+            if (editorViewRef.current?.composing) return
             onChangeRef.current?.(markdown)
           })
           let slashMenuView = null
