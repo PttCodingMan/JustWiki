@@ -132,11 +132,12 @@ export default function GraphView() {
   useEffect(() => {
     if (!graphData) return
     let cancelled = false
+    let timer = null
     const apply = () => {
       if (cancelled) return
       const g = graphRef.current
       if (!g || typeof g.d3Force !== 'function') {
-        setTimeout(apply, 50)
+        timer = setTimeout(apply, 50)
         return
       }
       const charge = g.d3Force('charge')
@@ -147,11 +148,23 @@ export default function GraphView() {
         // wikilinks longer so unrelated systems drift apart.
         link.distance((l) => (l.type === 'hierarchy' ? 70 : 160))
       }
-      if (typeof g.d3ReheatSimulation === 'function') g.d3ReheatSimulation()
+      // Reheating must run after three-forcegraph's debounced first update has
+      // populated `state.layout`. On synchronous 2D ↔ 3D mode toggles our
+      // effect fires in the same tick as mount, before that 1ms debounce; if
+      // we set engineRunning=true now, the next tickFrame crashes with
+      // "Cannot read properties of undefined (reading 'tick')" and the canvas
+      // goes black. Defer the reheat to the next macrotask so the layout is
+      // ready.
+      timer = setTimeout(() => {
+        if (cancelled) return
+        const g2 = graphRef.current
+        if (g2 && typeof g2.d3ReheatSimulation === 'function') g2.d3ReheatSimulation()
+      }, 50)
     }
     apply()
     return () => {
       cancelled = true
+      if (timer) clearTimeout(timer)
     }
   }, [graphData, mode])
 
