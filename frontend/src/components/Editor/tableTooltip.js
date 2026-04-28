@@ -7,10 +7,6 @@ import {
   addRowAfterCommand,
   addColBeforeCommand,
   addColAfterCommand,
-  selectRowCommand,
-  selectColCommand,
-  selectTableCommand,
-  deleteSelectedCellsCommand,
 } from '@milkdown/preset-gfm'
 
 const CELL_TYPES = ['table_cell', 'table_header']
@@ -35,10 +31,79 @@ function locateTable(state) {
   const colIndex = findNodeIndex(row.node, cell.node)
   if (rowIndex < 0 || colIndex < 0) return null
   return {
-    tablePos: table.from,
+    table,
+    row,
     rowIndex,
     colIndex,
   }
+}
+
+// Direct node-range deletion. Bypasses prosemirror-tables `TableMap` so it
+// keeps working on ragged/malformed tables where the gfm select-then-delete
+// path silently no-ops.
+function deleteTableNode(view, table) {
+  view.dispatch(view.state.tr.delete(table.from, table.to).scrollIntoView())
+}
+
+function countRows(tableNode) {
+  let n = 0
+  tableNode.forEach((child) => {
+    if (ROW_TYPES.includes(child.type.name)) n += 1
+  })
+  return n
+}
+
+function deleteRowNode(view, location) {
+  const { table, row } = location
+  if (countRows(table.node) <= 1) {
+    deleteTableNode(view, table)
+    return
+  }
+  view.dispatch(view.state.tr.delete(row.from, row.to).scrollIntoView())
+}
+
+function deleteColumnAtIndex(view, location) {
+  const { table, colIndex } = location
+  // Collect cell ranges to delete and rows that must go entirely (because the
+  // column being removed is their only cell). Walk in document order, then
+  // apply in reverse so earlier deletes don't shift later positions.
+  const ranges = []
+  let survivingRows = 0
+  let cursor = table.from + 1 // position right after table opening token
+  table.node.forEach((rowNode) => {
+    const rowFrom = cursor
+    const rowTo = rowFrom + rowNode.nodeSize
+    cursor = rowTo
+    if (!ROW_TYPES.includes(rowNode.type.name)) {
+      survivingRows += 1
+      return
+    }
+    if (rowNode.childCount <= colIndex) {
+      // Ragged row with no cell at this column — leave it alone.
+      survivingRows += 1
+      return
+    }
+    if (rowNode.childCount === 1) {
+      // Removing the only cell would leave an invalid empty row — drop the row.
+      ranges.push([rowFrom, rowTo])
+      return
+    }
+    let cellOffset = 0
+    for (let i = 0; i < colIndex; i += 1) cellOffset += rowNode.child(i).nodeSize
+    const cellFrom = rowFrom + 1 + cellOffset
+    const cellTo = cellFrom + rowNode.child(colIndex).nodeSize
+    ranges.push([cellFrom, cellTo])
+    survivingRows += 1
+  })
+  if (!ranges.length) return
+  if (survivingRows === 0) {
+    deleteTableNode(view, table)
+    return
+  }
+  ranges.sort((a, b) => b[0] - a[0])
+  const tr = view.state.tr
+  ranges.forEach(([from, to]) => tr.delete(from, to))
+  view.dispatch(tr.scrollIntoView())
 }
 
 class TableTooltip {
@@ -112,7 +177,7 @@ class TableTooltip {
       return
     }
     this.location = next
-    this.tableDom = view.nodeDOM(next.tablePos) || null
+    this.tableDom = view.nodeDOM(next.table.from) || null
     if (!this.tableDom || this.tableDom.nodeType !== 1) {
       this.hide()
       return
@@ -148,11 +213,10 @@ class TableTooltip {
   runAction(id) {
     if (!this.view) return
     const commands = this.ctx.get(commandsCtx)
-    // Re-resolve row/col index from current state — `this.location` may be stale
-    // by the time a click handler runs (e.g. after a prior add-row/col op).
+    // Re-resolve row/col positions from current state — `this.location` may be
+    // stale by the time a click handler runs (e.g. after a prior add-row/col op).
     const fresh = locateTable(this.view.state)
     if (!fresh) return
-    const { rowIndex, colIndex } = fresh
 
     switch (id) {
       case 'rowAbove':
@@ -168,16 +232,13 @@ class TableTooltip {
         commands.call(addColAfterCommand.key)
         break
       case 'delRow':
-        commands.call(selectRowCommand.key, { index: rowIndex })
-        commands.call(deleteSelectedCellsCommand.key)
+        deleteRowNode(this.view, fresh)
         break
       case 'delCol':
-        commands.call(selectColCommand.key, { index: colIndex })
-        commands.call(deleteSelectedCellsCommand.key)
+        deleteColumnAtIndex(this.view, fresh)
         break
       case 'delTable':
-        commands.call(selectTableCommand.key)
-        commands.call(deleteSelectedCellsCommand.key)
+        deleteTableNode(this.view, fresh.table)
         break
       default:
         break
