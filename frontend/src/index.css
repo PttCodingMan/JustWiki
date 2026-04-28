@@ -314,11 +314,26 @@ body {
   border: 1px solid var(--color-border);
   padding: 0.5em 0.75em;
   text-align: left;
+  position: relative;
 }
 
 .milkdown .editor th {
   background: var(--color-bg);
   font-weight: 600;
+}
+
+/* Multi-cell selection (prosemirror-tables marks each cell in a CellSelection
+   with the .selectedCell class via a node decoration). Without this overlay,
+   only the cursor's cell shows the browser's native text-selection background,
+   making range selections look like single-cell selections. */
+.milkdown .editor .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--color-primary-soft);
+  opacity: 0.55;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .milkdown .editor a {
