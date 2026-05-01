@@ -1,114 +1,16 @@
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state'
 import { $prose } from '@milkdown/kit/utils'
-import { commandsCtx } from '@milkdown/kit/core'
-import { findParent } from '@milkdown/prose'
 import {
-  addRowBeforeCommand,
-  addRowAfterCommand,
-  addColBeforeCommand,
-  addColAfterCommand,
-} from '@milkdown/preset-gfm'
-
-const CELL_TYPES = ['table_cell', 'table_header']
-const ROW_TYPES = ['table_row', 'table_header_row']
-
-function findNodeIndex(parent, child) {
-  for (let i = 0; i < parent.childCount; i += 1) {
-    if (parent.child(i) === child) return i
-  }
-  return -1
-}
-
-function locateTable(state) {
-  const { selection } = state
-  const $pos = selection.$from
-  const table = findParent((n) => n.type.name === 'table')($pos)
-  if (!table) return null
-  const row = findParent((n) => ROW_TYPES.includes(n.type.name))($pos)
-  const cell = findParent((n) => CELL_TYPES.includes(n.type.name))($pos)
-  if (!row || !cell) return null
-  const rowIndex = findNodeIndex(table.node, row.node)
-  const colIndex = findNodeIndex(row.node, cell.node)
-  if (rowIndex < 0 || colIndex < 0) return null
-  return {
-    table,
-    row,
-    rowIndex,
-    colIndex,
-  }
-}
-
-// Direct node-range deletion. Bypasses prosemirror-tables `TableMap` so it
-// keeps working on ragged/malformed tables where the gfm select-then-delete
-// path silently no-ops.
-function deleteTableNode(view, table) {
-  view.dispatch(view.state.tr.delete(table.from, table.to).scrollIntoView())
-}
-
-function countRows(tableNode) {
-  let n = 0
-  tableNode.forEach((child) => {
-    if (ROW_TYPES.includes(child.type.name)) n += 1
-  })
-  return n
-}
-
-function deleteRowNode(view, location) {
-  const { table, row } = location
-  if (countRows(table.node) <= 1) {
-    deleteTableNode(view, table)
-    return
-  }
-  view.dispatch(view.state.tr.delete(row.from, row.to).scrollIntoView())
-}
-
-function deleteColumnAtIndex(view, location) {
-  const { table, colIndex } = location
-  // Collect cell ranges to delete and rows that must go entirely (because the
-  // column being removed is their only cell). Walk in document order, then
-  // apply in reverse so earlier deletes don't shift later positions.
-  const ranges = []
-  let survivingRows = 0
-  let cursor = table.from + 1 // position right after table opening token
-  table.node.forEach((rowNode) => {
-    const rowFrom = cursor
-    const rowTo = rowFrom + rowNode.nodeSize
-    cursor = rowTo
-    if (!ROW_TYPES.includes(rowNode.type.name)) {
-      survivingRows += 1
-      return
-    }
-    if (rowNode.childCount <= colIndex) {
-      // Ragged row with no cell at this column — leave it alone.
-      survivingRows += 1
-      return
-    }
-    if (rowNode.childCount === 1) {
-      // Removing the only cell would leave an invalid empty row — drop the row.
-      ranges.push([rowFrom, rowTo])
-      return
-    }
-    let cellOffset = 0
-    for (let i = 0; i < colIndex; i += 1) cellOffset += rowNode.child(i).nodeSize
-    const cellFrom = rowFrom + 1 + cellOffset
-    const cellTo = cellFrom + rowNode.child(colIndex).nodeSize
-    ranges.push([cellFrom, cellTo])
-    survivingRows += 1
-  })
-  if (!ranges.length) return
-  if (survivingRows === 0) {
-    deleteTableNode(view, table)
-    return
-  }
-  ranges.sort((a, b) => b[0] - a[0])
-  const tr = view.state.tr
-  ranges.forEach(([from, to]) => tr.delete(from, to))
-  view.dispatch(tr.scrollIntoView())
-}
+  locateTable,
+  deleteTable,
+  deleteRow,
+  deleteColumn,
+  addRow,
+  addColumn,
+} from './tableOps'
 
 class TableTooltip {
-  constructor(ctx, labels) {
-    this.ctx = ctx
+  constructor(labels) {
     this.labels = labels
     this.view = null
     this.location = null
@@ -199,7 +101,6 @@ class TableTooltip {
   reposition() {
     if (!this.tableDom) return
     const rect = this.tableDom.getBoundingClientRect()
-    // Render once to measure
     const tipRect = this.el.getBoundingClientRect()
     let top = rect.top - tipRect.height - 6
     if (top < 4) top = rect.bottom + 6
@@ -212,37 +113,25 @@ class TableTooltip {
 
   runAction(id) {
     if (!this.view) return
-    const commands = this.ctx.get(commandsCtx)
-    // Re-resolve row/col positions from current state — `this.location` may be
-    // stale by the time a click handler runs (e.g. after a prior add-row/col op).
+    // Re-resolve the location from current state — `this.location` is from
+    // the last `update`, which may be stale by the time the click fires
+    // (e.g. after a previous add/delete shifted positions).
     const fresh = locateTable(this.view.state)
     if (!fresh) return
 
+    const state = this.view.state
+    let tr = null
     switch (id) {
-      case 'rowAbove':
-        commands.call(addRowBeforeCommand.key)
-        break
-      case 'rowBelow':
-        commands.call(addRowAfterCommand.key)
-        break
-      case 'colLeft':
-        commands.call(addColBeforeCommand.key)
-        break
-      case 'colRight':
-        commands.call(addColAfterCommand.key)
-        break
-      case 'delRow':
-        deleteRowNode(this.view, fresh)
-        break
-      case 'delCol':
-        deleteColumnAtIndex(this.view, fresh)
-        break
-      case 'delTable':
-        deleteTableNode(this.view, fresh.table)
-        break
-      default:
-        break
+      case 'rowAbove': tr = addRow(state, fresh, 'before'); break
+      case 'rowBelow': tr = addRow(state, fresh, 'after'); break
+      case 'colLeft':  tr = addColumn(state, fresh, 'before'); break
+      case 'colRight': tr = addColumn(state, fresh, 'after'); break
+      case 'delRow':   tr = deleteRow(state, fresh); break
+      case 'delCol':   tr = deleteColumn(state, fresh); break
+      case 'delTable': tr = deleteTable(state, fresh); break
+      default: break
     }
+    if (tr) this.view.dispatch(tr.scrollIntoView())
     this.view.focus()
   }
 
@@ -256,12 +145,12 @@ class TableTooltip {
 const tableTooltipKey = new PluginKey('jw-table-tooltip')
 
 export function tableTooltip(labels) {
-  return $prose((ctx) => {
+  return $prose(() => {
     let tooltip = null
     return new Plugin({
       key: tableTooltipKey,
       view(editorView) {
-        tooltip = new TableTooltip(ctx, labels)
+        tooltip = new TableTooltip(labels)
         tooltip.attach(editorView)
         tooltip.update(editorView)
         return {

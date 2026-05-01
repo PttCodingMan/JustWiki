@@ -14,6 +14,7 @@ import api from '../../api/client'
 import { wikilink } from './wikilink'
 import { math, mathBlockSchema } from './math'
 import { tableTooltip } from './tableTooltip'
+import { tablePasteExpand } from './tablePasteExpand'
 
 const SLASH_ITEM_DEFS = [
   { id: 'h1', icon: 'H1' },
@@ -556,6 +557,7 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
             },
           })
         })
+        .use(tablePasteExpand)
         .use(commonmark)
         .use(gfm)
         .use(math)
