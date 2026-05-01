@@ -1,5 +1,5 @@
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state'
-import { Fragment } from '@milkdown/kit/prose/model'
+import { Fragment, Slice } from '@milkdown/kit/prose/model'
 import { $prose } from '@milkdown/kit/utils'
 import { handlePaste as pmTableHandlePaste, isInTable } from '@milkdown/prose/tables'
 
@@ -59,6 +59,50 @@ function isTrivialSingleCell(rows) {
   return true
 }
 
+// Round-tripping a body-only row through the OS clipboard hands ProseMirror
+// HTML like `<table data-pm-slice="1 1 -2 []"><tbody><tr><td>…</td></tr></tbody></table>`.
+// The schema requires `table = table_header_row table_row+`, so the parser
+// auto-fills an empty `table_header_row` ahead of the body row to satisfy it.
+// prosemirror-tables' pastedCells then sees TWO rows in the slice, and
+// clipCells happily picks the leading empty one when fitting it into a
+// single-row CellSelection — wiping the target row.
+//
+// Strip that auto-filled empty header before delegating, so the slice that
+// reaches pmTableHandlePaste reflects only the rows the user actually
+// copied.
+function stripAutofilledHeader(slice) {
+  let { content, openStart, openEnd } = slice
+
+  // Mirror pastedCells' table-wrapper unwrap so we operate on the raw rows.
+  let depth = 0
+  while (
+    content.childCount === 1 &&
+    content.child(0).type.spec.tableRole === 'table'
+  ) {
+    content = content.child(0).content
+    depth += 1
+  }
+  if (depth === 0) return slice
+
+  const rows = []
+  content.forEach((c) => rows.push(c))
+  if (
+    rows.length >= 2 &&
+    rows[0].type.name === 'table_header_row' &&
+    !rowHasContent(rows[0])
+  ) {
+    rows.shift()
+  } else {
+    return slice
+  }
+
+  return new Slice(
+    Fragment.from(rows),
+    Math.max(0, openStart - depth),
+    Math.max(0, openEnd - depth),
+  )
+}
+
 function buildStandaloneTable(schema, rows) {
   const tableType = schema.nodes.table
   const headerRowType = schema.nodes.table_header_row
@@ -109,6 +153,7 @@ export const __test__ = {
   collectRows,
   isTrivialSingleCell,
   buildStandaloneTable,
+  stripAutofilledHeader,
 }
 
 export const tablePasteExpand = $prose(() => {
@@ -117,7 +162,7 @@ export const tablePasteExpand = $prose(() => {
     props: {
       handlePaste(view, event, slice) {
         if (isInTable(view.state)) {
-          return pmTableHandlePaste(view, event, slice)
+          return pmTableHandlePaste(view, event, stripAutofilledHeader(slice))
         }
         const rows = collectRows(slice)
         if (rows.length === 0) return false
