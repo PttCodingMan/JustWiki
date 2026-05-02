@@ -19,6 +19,8 @@
   --color-text: #3e4b5e;
   --color-text-secondary: #7a8798;
   --color-border: #e6ecf4;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 /* ── Theme Overrides ── */
@@ -179,6 +181,17 @@ body {
   color: var(--color-text);
 }
 
+/* Use JetBrains Mono everywhere code shows up — both rendering paths
+   (Milkdown editor and the simple-markdown viewer) plus generic <code>/<pre>
+   elements anywhere else in the UI. */
+code, kbd, samp, pre,
+.milkdown .editor code,
+.milkdown .editor pre,
+.markdown-viewer code,
+.markdown-viewer pre {
+  font-family: var(--font-mono);
+}
+
 /* Milkdown editor styles */
 .milkdown .editor {
   outline: none;
@@ -193,7 +206,7 @@ body {
 .milkdown .editor :is(h1, h2, h3, h4, h5, h6)::before {
   display: inline-block;
   margin-right: 0.5em;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
   color: var(--color-text-secondary);
   opacity: 0.6;
@@ -658,7 +671,7 @@ mark {
   display: block;
   width: 100%;
   min-height: 3em;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.9em;
   line-height: 1.45;
   padding: 0.5em 0.75em;
@@ -674,7 +687,7 @@ mark {
   box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.2);
 }
 .math-inline-editor {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.9em;
   padding: 0 0.35em;
   border: 1px solid #d0d7de;

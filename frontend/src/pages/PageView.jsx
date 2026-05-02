@@ -394,7 +394,7 @@ export default function PageView() {
   )
 
   return (
-    <div className="max-w-6xl mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_220px] lg:gap-8">
+    <div className="max-w-6xl xl:max-w-7xl 2xl:max-w-[100rem] mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_220px] 2xl:grid-cols-[minmax(0,1fr)_260px] lg:gap-8 2xl:gap-12">
       <article>
         <div className="flex items-center gap-3 mb-4 flex-wrap">
           <h1 className="text-3xl font-bold text-text">{page.title}</h1>
