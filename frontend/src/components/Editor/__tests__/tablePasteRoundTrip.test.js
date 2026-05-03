@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import { DOMSerializer, DOMParser as PMDOMParser, Slice, Fragment } from 'prosemirror-model'
 import { CellSelection, handlePaste as pmTableHandlePaste } from 'prosemirror-tables'
+import { EditorState } from 'prosemirror-state'
 import { __test__ } from '../tablePasteExpand'
 import {
   testSchema,
@@ -173,7 +174,6 @@ describe('table row copy/paste round-trip', () => {
     let lastZ4Cell = z4RowStart + 1
     for (let i = 0; i < z4.childCount - 1; i += 1) lastZ4Cell += z4.child(i).nodeSize
 
-    const { EditorState } = require('prosemirror-state')
     const z4State = EditorState.create({
       doc,
       schema: s,
