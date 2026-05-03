@@ -3,7 +3,16 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import { buildPlanetObject, buildStarObject, planetColor, planetParams } from '../lib/planet'
-import { buildStarfield, disposeStarfield, makeBloomPass } from '../lib/galaxy'
+import {
+  buildStarfield,
+  createSpace2D,
+  disposeStarfield,
+  drawLinkGlow2D,
+  drawNode2D,
+  drawSpace2D,
+  makeBloomPass,
+  paintNodePointer2D,
+} from '../lib/galaxy'
 
 const ForceGraph3D = lazy(() => import('react-force-graph-3d'))
 const ForceGraph2D = lazy(() => import('react-force-graph-2d'))
@@ -250,6 +259,15 @@ export default function GraphView() {
     link.type === 'hierarchy' ? 'rgba(255, 196, 120, 0.7)' : 'rgba(140, 200, 255, 0.45)'
   const linkWidthFor = (link) => (link.type === 'hierarchy' ? 1.2 : 0.4)
 
+  // Stable starfield + nebula geometry for the 2D galaxy view. Generated once
+  // so the field doesn't reshuffle on every frame; it's also independent of
+  // the graph data, so toggling pages doesn't disturb the background.
+  const space2D = useMemo(() => createSpace2D(), [])
+  const selectedId = selectedNode?.id
+  const drawNode2DCb = (node, ctx, globalScale) =>
+    drawNode2D(node, ctx, globalScale, node.id === selectedId)
+  const renderFramePre2D = (ctx, globalScale) => drawSpace2D(ctx, space2D, globalScale)
+
   if (loading) return <div className="text-text-secondary">{t('common.loading')}</div>
 
   const hasData = graphData && graphData.nodes.length > 0
@@ -262,7 +280,7 @@ export default function GraphView() {
           <div className="text-sm text-text-secondary">
             {t('graph.stats', { pages: graphData?.nodes?.length || 0, links: graphData?.links?.length || 0 })}
           </div>
-          {hasData && webglSupported && mode === '3d' && (
+          {hasData && (mode === '2d' || webglSupported) && (
             <button
               type="button"
               onClick={() => setGalaxy((v) => !v)}
@@ -334,14 +352,21 @@ export default function GraphView() {
                   graphData={enrichedData}
                   width={size.width}
                   height={size.height}
+                  backgroundColor={galaxy ? '#04060d' : 'rgba(0,0,0,0)'}
                   nodeLabel="title"
                   nodeRelSize={4}
                   nodeVal={sizeFor}
                   nodeColor={colorFor}
+                  nodeCanvasObject={galaxy ? drawNode2DCb : undefined}
+                  nodeCanvasObjectMode={galaxy ? () => 'replace' : undefined}
+                  nodePointerAreaPaint={galaxy ? paintNodePointer2D : undefined}
                   linkColor={linkColorFor}
                   linkWidth={linkWidthFor}
+                  linkCanvasObject={galaxy ? drawLinkGlow2D : undefined}
+                  linkCanvasObjectMode={galaxy ? () => 'before' : undefined}
                   linkDirectionalArrowLength={(l) => (l.type === 'hierarchy' ? 0 : 4)}
                   linkDirectionalArrowRelPos={1}
+                  onRenderFramePre={galaxy ? renderFramePre2D : undefined}
                   onNodeClick={handleNodeClick}
                   onBackgroundClick={() => setSelectedNode(null)}
                 />
