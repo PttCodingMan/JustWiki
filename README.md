@@ -48,10 +48,6 @@
 - **權限敏感** — 遵循 ACL，模型只讀得到使用者本身有權閱讀的頁面
 - **自選模型** — 任何 OpenAI 相容端點都可接（OpenAI、Gemini、Ollama、Groq、DeepSeek…）
 
-<p align="center">
-  <img src="docs/images/ai-chat.png" alt="AI 問答介面：串流回應並在底部顯示引用的 wiki 頁面" width="90%">
-</p>
-
 **協作與權限**
 - **多使用者 + 群組 ACL** — 頁面層級的權限控制（權限由父頁面繼承）
 - **併發編輯保護** — 樂觀鎖機制（`base_version`），多人同時編輯不會默默互蓋

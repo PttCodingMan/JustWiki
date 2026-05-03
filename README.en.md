@@ -52,10 +52,6 @@ All your data = one `data/just-wiki.db` SQLite file + the `media/` folder. Backu
 - **Permission-aware** — respects ACL; the model only sees pages the current user can read
 - **Bring your own model** — any OpenAI-compatible endpoint works (OpenAI, Gemini, Ollama, Groq, DeepSeek…)
 
-<p align="center">
-  <img src="docs/images/ai-chat.png" alt="AI chat interface: streaming response with cited wiki pages shown as pills below" width="90%">
-</p>
-
 **Collaboration & permissions**
 - **Multi-user + group ACL** — per-page permission control (inherited from parent pages)
 - **Concurrent-edit safety** — optimistic locking (`base_version`) so simultaneous edits never silently clobber each other
