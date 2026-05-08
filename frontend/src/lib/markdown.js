@@ -140,6 +140,56 @@ function mathBlockRule(state, startLine, endLine, silent) {
   return true
 }
 
+// ── Inline rule: @mention `@username` and `@@groupname`
+// Ordering note: this rule must register BEFORE the wikilink and link
+// rules (and before markdown-it's `text` rule consumes `@`) so the `@`
+// character isn't swallowed as plain text first.
+//
+// Boundary rules: a mention may not be preceded by another `@`, by `/`
+// (URL paths like `github.com/@octo`), or by an alphanumeric/underscore.
+// That keeps `foo@bar.com` an email and `@@@bob` parses as junk rather
+// than as nested mentions. Group must be tested BEFORE user — `@@bob`
+// is a group, never a user.
+const MENTION_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*/
+
+function mentionRule(state, silent) {
+  const src = state.src
+  const start = state.pos
+  if (src.charCodeAt(start) !== 0x40 /* @ */) return false
+
+  // Boundary check (negative lookbehind, hand-rolled because the
+  // character before may be outside the inline parse window).
+  if (start > 0) {
+    const prev = src.charCodeAt(start - 1)
+    const isWordChar =
+      (prev >= 0x30 && prev <= 0x39) /* 0-9 */ ||
+      (prev >= 0x41 && prev <= 0x5a) /* A-Z */ ||
+      (prev >= 0x61 && prev <= 0x7a) /* a-z */ ||
+      prev === 0x5f /* _ */ ||
+      prev === 0x40 /* @ — rules out @@@ noise */ ||
+      prev === 0x2f /* / — rules out URL paths */
+    if (isWordChar) return false
+  }
+
+  const isGroup = src.charCodeAt(start + 1) === 0x40
+  const nameStart = start + (isGroup ? 2 : 1)
+  // Disallow `@@@bob` etc. — once we've consumed up to `nameStart`, the
+  // next char must be a name char, not another `@`.
+  if (src.charCodeAt(nameStart) === 0x40) return false
+
+  const tail = src.slice(nameStart)
+  const m = tail.match(MENTION_NAME_RE)
+  if (!m) return false
+  const name = m[0]
+
+  if (!silent) {
+    const token = state.push('mention', '', 0)
+    token.meta = { name, group: isGroup }
+  }
+  state.pos = nameStart + name.length
+  return true
+}
+
 // ── Inline rule: Wikilinks [[slug]] / [[slug|display]] / ![[slug]]
 function wikilinkRule(state, silent) {
   const src = state.src
@@ -330,6 +380,17 @@ export function createMarkdown() {
   md.renderer.rules.math_block = (tokens, idx) =>
     `<div class="katex-block">${renderKatex(tokens[idx].content.trim(), true)}</div>`
 
+  // Mentions (must run before `link` so `@` isn't consumed as plain text)
+  md.inline.ruler.before('link', 'mention', mentionRule)
+  md.renderer.rules.mention = (tokens, idx) => {
+    const { name, group } = tokens[idx].meta
+    const safe = md.utils.escapeHtml(name)
+    const cls = group ? 'mention mention-group' : 'mention mention-user'
+    const sigil = group ? '@@' : '@'
+    const dataAttr = group ? 'data-group' : 'data-user'
+    return `<span class="${cls}" ${dataAttr}="${safe}">${sigil}${safe}</span>`
+  }
+
   // Wikilinks (must run before `link` so `[[` isn't consumed as `[`)
   md.inline.ruler.before('link', 'wikilink', wikilinkRule)
   md.renderer.rules.wikilink = (tokens, idx) => {
@@ -399,6 +460,46 @@ const singletonMd = createMarkdown()
 export function renderMarkdown(source) {
   if (!source) return ''
   return singletonMd.render(source)
+}
+
+// Lightweight renderer for places (currently: comments) that only need
+// to render @user / @@group mentions and otherwise show plaintext. We
+// intentionally do NOT run the full markdown pipeline here so a stray
+// `**bold**` in a comment stays literal — comments have always been
+// plain text and this keeps that contract while making mentions clickable.
+//
+// The output is sanitization-safe by construction: every byte of input
+// is HTML-escaped, then mention regions are replaced with markup that
+// only ever embeds the matched name, which is itself constrained to
+// `[A-Za-z0-9_-]+`. Newlines are preserved as `<br>` so the existing
+// `whitespace-pre-wrap` styling can be dropped on the consumer side
+// without losing line breaks.
+// Capture groups: (1) leading boundary char (or empty at start), (2) `@`
+// or `@@` sigil, (3) name. Boundary class blocks alphanumeric, `_`, `@`,
+// and `/` (URL paths) to stay in lockstep with the inline rule above.
+const _MENTION_SCAN_RE = /(^|[^A-Za-z0-9_@/])(@@?)([A-Za-z0-9][A-Za-z0-9_-]*)/g
+
+function _escapeHtml(text) {
+  return text.replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[c]))
+}
+
+export function renderMentionsOnly(text) {
+  if (!text) return ''
+  const escaped = _escapeHtml(text)
+  // The escaped text has no `<` or `>` of its own, so the scan is unambiguous.
+  const withMentions = escaped.replace(_MENTION_SCAN_RE, (_full, lead, sigil, name) => {
+    const isGroup = sigil === '@@'
+    const cls = isGroup ? 'mention mention-group' : 'mention mention-user'
+    const dataAttr = isGroup ? 'data-group' : 'data-user'
+    return `${lead}<span class="${cls}" ${dataAttr}="${name}">${sigil}${name}</span>`
+  })
+  return withMentions.replace(/\n/g, '<br>')
 }
 
 // Milkdown preserves pasted `<br>` as raw HTML inline nodes, which then round-

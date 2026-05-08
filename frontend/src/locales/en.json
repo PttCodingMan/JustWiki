@@ -335,6 +335,9 @@
       "tabDiagrams": "Diagrams"
     }
   },
+  "mention": {
+    "empty": "No matches"
+  },
   "slash": {
     "wikilinkEmpty": "No pages found",
     "items": {

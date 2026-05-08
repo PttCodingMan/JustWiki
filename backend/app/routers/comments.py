@@ -5,6 +5,7 @@ from typing import Optional
 from app.auth import get_current_user, require_real_user
 from app.database import get_db
 from app.services.acl import require_page_read, require_page_write
+from app.services.mention import notify_mentions
 from app.routers.activity import log_activity
 
 router = APIRouter(prefix="/api/pages/{slug}/comments", tags=["comments"])
@@ -76,15 +77,25 @@ async def create_comment(slug: str, body: CommentCreate, user=Depends(require_re
     page_title = page_rows[0]["title"]
     await require_page_write(db, user, page_id)
 
+    comment_text = body.content.strip()
     cursor = await db.execute(
         "INSERT INTO comments (page_id, user_id, content) VALUES (?, ?, ?)",
-        (page_id, user["id"], body.content.strip()),
+        (page_id, user["id"], comment_text),
     )
+    comment_id = cursor.lastrowid
     await log_activity(
         db, user["id"], "commented", "page", page_id,
-        {"title": page_title, "comment_id": cursor.lastrowid},
+        {"title": page_title, "comment_id": comment_id},
     )
     await db.commit()
+
+    await notify_mentions(
+        db,
+        content_md=comment_text,
+        page_id=page_id,
+        actor=user,
+        comment_id=comment_id,
+    )
 
     row = await db.execute_fetchall(
         """SELECT c.id, c.page_id, c.user_id, c.content, c.created_at, c.updated_at,
@@ -111,7 +122,7 @@ async def update_comment(
     page_id = page_rows[0]["id"]
     await require_page_write(db, user, page_id)
     rows = await db.execute_fetchall(
-        "SELECT id, user_id, page_id FROM comments WHERE id = ?", (comment_id,)
+        "SELECT id, user_id, page_id, content FROM comments WHERE id = ?", (comment_id,)
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Comment not found")
@@ -120,11 +131,22 @@ async def update_comment(
     if rows[0]["user_id"] != user["id"] and user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Not allowed")
 
+    old_content = rows[0]["content"]
+    new_content = body.content.strip()
     await db.execute(
         "UPDATE comments SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        (body.content.strip(), comment_id),
+        (new_content, comment_id),
     )
     await db.commit()
+
+    await notify_mentions(
+        db,
+        content_md=new_content,
+        page_id=page_id,
+        actor=user,
+        comment_id=comment_id,
+        old_content_md=old_content,
+    )
 
     row = await db.execute_fetchall(
         """SELECT c.id, c.page_id, c.user_id, c.content, c.created_at, c.updated_at,

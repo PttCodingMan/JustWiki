@@ -12,6 +12,7 @@ import { TextSelection, Plugin, PluginKey } from '@milkdown/kit/prose/state'
 import { $prose } from '@milkdown/kit/utils'
 import api from '../../api/client'
 import { wikilink } from './wikilink'
+import { mention } from './mention'
 import { math, mathBlockSchema } from './math'
 import { tableTooltip } from './tableTooltip'
 import { tablePasteExpand } from './tablePasteExpand'
@@ -388,7 +389,182 @@ class WikilinkMenu {
 
 const wikilinkPluginKey = new PluginKey('wikilink-autocomplete')
 
-const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawioOpen, onMediaPickerOpen, onTabOut }, ref) {
+// ── Mention `@` / `@@` autocomplete ──
+
+class MentionMenu {
+  constructor({ pageSlug, emptyLabel }) {
+    this.pageSlug = pageSlug
+    this.emptyLabel = emptyLabel
+    this.el = document.createElement('div')
+    this.el.className = 'wikilink-menu mention-menu'
+    this.el.style.display = 'none'
+    document.body.appendChild(this.el)
+
+    this.users = []
+    this.groups = []
+    this.combined = []
+    this.selectedIndex = 0
+    this.active = false
+    this.triggerPos = null
+    this.isGroup = false
+    this.lastQuery = null
+    this._fetchSeq = 0
+  }
+
+  async fetchCandidates(query, isGroup) {
+    const seq = ++this._fetchSeq
+    try {
+      let users = []
+      let groups = []
+      // Without a page context we can't ACL-filter; fall back to the
+      // generic user-search endpoint (already restricted to authenticated
+      // users) so the editor still surfaces candidates while editing a
+      // brand-new page. The actual notification still re-checks ACL.
+      if (this.pageSlug) {
+        const res = await api.get('/users/mentionable', {
+          params: { page_slug: this.pageSlug, q: query },
+        })
+        users = res.data.users || []
+        groups = res.data.groups || []
+      } else {
+        const res = await api.get('/users/search', { params: { q: query, limit: 10 } })
+        users = (res.data || []).map((u) => ({
+          username: u.username,
+          display_name: u.display_name || '',
+        }))
+      }
+      // Drop out-of-order responses so a slow earlier request can't paint
+      // stale rows over a fresher one.
+      if (seq !== this._fetchSeq) return
+      this.users = users
+      this.groups = groups
+      this.combined = isGroup
+        ? groups.map((g) => ({ kind: 'group', name: g.name, sub: g.description }))
+        : [
+            ...users.map((u) => ({ kind: 'user', name: u.username, sub: u.display_name })),
+          ]
+      this.selectedIndex = 0
+      this.render()
+    } catch {
+      // ignore — autocomplete is best-effort
+    }
+  }
+
+  show(view, triggerPos, query, isGroup) {
+    this.active = true
+    this.triggerPos = triggerPos
+    this.isGroup = isGroup
+    this.lastQuery = query
+
+    const coords = view.coordsAtPos(view.state.selection.head)
+    this.el.style.position = 'fixed'
+    this.el.style.left = coords.left + 'px'
+    this.el.style.top = (coords.bottom + 4) + 'px'
+    this.el.style.display = ''
+    this.el.style.zIndex = '200'
+
+    this.fetchCandidates(query, isGroup)
+  }
+
+  hide() {
+    this.active = false
+    this.el.style.display = 'none'
+    this.triggerPos = null
+    this.lastQuery = null
+  }
+
+  render() {
+    this.el.innerHTML = ''
+    if (this.combined.length === 0) {
+      const empty = document.createElement('div')
+      empty.className = 'wikilink-menu-empty'
+      empty.textContent = this.emptyLabel
+      this.el.appendChild(empty)
+      return
+    }
+    this.combined.forEach((item, i) => {
+      const row = document.createElement('div')
+      row.className = 'wikilink-menu-item' + (i === this.selectedIndex ? ' active' : '')
+      const sigil = item.kind === 'group' ? '@@' : '@'
+      const escName = item.name.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))
+      const escSub = (item.sub || '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))
+      row.innerHTML = `
+        <span class="wikilink-menu-title">${sigil}${escName}</span>
+        <span class="wikilink-menu-slug">${escSub}</span>
+      `
+      row.addEventListener('mouseenter', () => {
+        this.selectedIndex = i
+        this.render()
+      })
+      row.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        this.select(item)
+      })
+      this.el.appendChild(row)
+    })
+  }
+
+  select(item) {
+    if (!this._view || this.triggerPos == null) return
+    const { state, dispatch } = this._view
+    const to = state.selection.head
+    const nodeType = state.schema.nodes.mention
+    if (!nodeType) {
+      const sigil = item.kind === 'group' ? '@@' : '@'
+      const text = `${sigil}${item.name} `
+      dispatch(state.tr.replaceWith(this.triggerPos, to, state.schema.text(text)))
+    } else {
+      const node = nodeType.create({
+        name: item.name,
+        group: item.kind === 'group',
+      })
+      // Insert the node + a trailing space so the user can keep typing
+      // without the next keystroke being absorbed into the atom node.
+      const tr = state.tr.replaceWith(this.triggerPos, to, node)
+      tr.insertText(' ', tr.mapping.map(to))
+      dispatch(tr)
+    }
+    this.hide()
+  }
+
+  handleKeyDown(view, event) {
+    if (!this.active) return false
+    if (event.isComposing || event.keyCode === 229) return false
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      this.selectedIndex = Math.min(this.selectedIndex + 1, this.combined.length - 1)
+      this.render()
+      return true
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      this.selectedIndex = Math.max(this.selectedIndex - 1, 0)
+      this.render()
+      return true
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      if (this.combined.length === 0) return false
+      event.preventDefault()
+      const item = this.combined[this.selectedIndex]
+      if (item) this.select(item)
+      return true
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      this.hide()
+      return true
+    }
+    return false
+  }
+
+  destroy() {
+    this.el.remove()
+  }
+}
+
+const mentionPluginKey = new PluginKey('mention-autocomplete')
+
+const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawioOpen, onMediaPickerOpen, onTabOut, pageSlug = null }, ref) {
   const { t } = useTranslation()
   const editorRef = useRef(null)
   const containerRef = useRef(null)
@@ -402,10 +578,14 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
   // refs before the editor's init effect runs.
   const slashItemsRef = useRef(null)
   const wikilinkEmptyRef = useRef('')
+  const mentionEmptyRef = useRef('')
   const tableTooltipLabelsRef = useRef(null)
+  const pageSlugRef = useRef(pageSlug)
+  useEffect(() => { pageSlugRef.current = pageSlug }, [pageSlug])
   useEffect(() => {
     slashItemsRef.current = buildSlashItems(t)
     wikilinkEmptyRef.current = t('slash.wikilinkEmpty')
+    mentionEmptyRef.current = t('mention.empty', 'No matches')
     tableTooltipLabelsRef.current = {
       addRowAbove: t('tableTooltip.addRowAbove'),
       addRowBelow: t('tableTooltip.addRowBelow'),
@@ -508,6 +688,83 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
       })
     })
 
+    const mentionMenu = new MentionMenu({
+      pageSlug: pageSlugRef.current,
+      emptyLabel: mentionEmptyRef.current,
+    })
+    const mentionPlugin = $prose(() => {
+      return new Plugin({
+        key: mentionPluginKey,
+        props: {
+          handleKeyDown(view, event) {
+            return mentionMenu.handleKeyDown(view, event)
+          },
+        },
+        view(editorView) {
+          mentionMenu._view = editorView
+          return {
+            update(view) {
+              mentionMenu._view = view
+              if (view.composing) return
+              const { state } = view
+              const { selection } = state
+              if (!(selection instanceof TextSelection)) {
+                mentionMenu.hide()
+                return
+              }
+              const { $head } = selection
+              const textBefore = $head.parent.textContent.slice(0, $head.parentOffset)
+
+              // Find the latest `@` (or `@@`) start that is followed only by
+              // mention-name chars up to the cursor. Stop on whitespace or
+              // anything outside `[A-Za-z0-9_-@]` so a previous mention on
+              // the same line doesn't keep the menu open forever.
+              let i = textBefore.length - 1
+              while (i >= 0 && /[A-Za-z0-9_-]/.test(textBefore[i])) i--
+              if (i < 0 || textBefore[i] !== '@') {
+                mentionMenu.hide()
+                return
+              }
+              // Name must start with alphanum (matches the renderer/server
+              // regex). `@-bob` typed mid-word is junk, hide rather than
+              // surface a mention that won't ever resolve.
+              const firstNameChar = textBefore[i + 1]
+              if (firstNameChar !== undefined && !/[A-Za-z0-9]/.test(firstNameChar)) {
+                mentionMenu.hide()
+                return
+              }
+              let triggerStart = i
+              let isGroup = false
+              if (i > 0 && textBefore[i - 1] === '@') {
+                triggerStart = i - 1
+                isGroup = true
+              }
+              // Boundary check: char before `@` (or `@@`) must not be word/@//.
+              if (triggerStart > 0) {
+                const prev = textBefore[triggerStart - 1]
+                if (/[A-Za-z0-9_@/]/.test(prev)) {
+                  mentionMenu.hide()
+                  return
+                }
+              }
+
+              const query = textBefore.slice(i + 1)
+              const blockStart = $head.pos - $head.parentOffset
+              const triggerPos = blockStart + triggerStart
+
+              if (mentionMenu.active && mentionMenu.triggerPos === triggerPos && mentionMenu.lastQuery === query) {
+                return  // already showing this exact state
+              }
+              mentionMenu.show(view, triggerPos, query, isGroup)
+            },
+            destroy() {
+              mentionMenu.destroy()
+            },
+          }
+        },
+      })
+    })
+
     const tabOutPlugin = $prose(() => {
       return new Plugin({
         props: {
@@ -567,6 +824,8 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
         .use(slash)
         .use(wikilink)
         .use(wikilinkPlugin)
+        .use(mention)
+        .use(mentionPlugin)
         .use(tabOutPlugin)
         .use(tableTooltip(tableTooltipLabelsRef.current))
         .create()

@@ -7,6 +7,7 @@ from typing import Optional
 
 from app.auth import get_current_user, require_admin, require_real_user, hash_password_async
 from app.database import get_db
+from app.services.acl import resolve_page_permission
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -54,6 +55,83 @@ class UserUpdate(BaseModel):
 
 class UserRestore(BaseModel):
     username: Optional[str] = None
+
+
+@router.get("/mentionable")
+async def mentionable_targets(
+    page_slug: str = Query(..., description="Slug of the page being edited or commented on"),
+    q: str = Query("", description="Substring match on username/display_name/group name"),
+    limit: int = Query(10, ge=1, le=20),
+    user=Depends(require_real_user),
+):
+    """Autocomplete candidates for @mention / @@group on a specific page.
+
+    Users are ACL-filtered against ``page_slug`` so we never offer to
+    mention someone who can't read the page. Groups are returned without
+    membership ACL filtering — the autocomplete is a hint and the
+    notification fan-out (`services/mention.py`) re-runs the same ACL
+    check per resolved user, so the worst case is a useless suggestion,
+    not a leak.
+    """
+    db = await get_db()
+    page_rows = await db.execute_fetchall(
+        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (page_slug,)
+    )
+    if not page_rows:
+        raise HTTPException(status_code=404, detail="Page not found")
+    page_id = page_rows[0]["id"]
+
+    # The caller must themselves be able to read the page they're editing.
+    # Otherwise this endpoint becomes a way to enumerate users-by-page.
+    caller_perm = await resolve_page_permission(db, user, page_id)
+    if caller_perm == "none":
+        raise HTTPException(status_code=404, detail="Page not found")
+
+    pattern = f"%{q}%"
+    # Pull a wider candidate set so the per-row ACL check has room to drop
+    # users without leaving the result short of `limit`.
+    candidate_rows = await db.execute_fetchall(
+        """SELECT id, username, display_name, role
+           FROM users
+           WHERE deleted_at IS NULL
+             AND (username LIKE ? OR display_name LIKE ?)
+           ORDER BY username
+           LIMIT ?""",
+        (pattern, pattern, limit * 5),
+    )
+
+    users_out: list[dict] = []
+    for row in candidate_rows:
+        if len(users_out) >= limit:
+            break
+        candidate = dict(row)
+        perm = await resolve_page_permission(db, candidate, page_id)
+        if perm == "none":
+            continue
+        users_out.append({
+            "username": candidate["username"],
+            "display_name": candidate["display_name"] or "",
+        })
+
+    group_rows = await db.execute_fetchall(
+        """SELECT g.name, g.description,
+                  (SELECT COUNT(*) FROM group_members WHERE group_id = g.id) AS member_count
+           FROM groups g
+           WHERE g.name LIKE ?
+           ORDER BY g.name
+           LIMIT ?""",
+        (pattern, limit),
+    )
+    groups_out = [
+        {
+            "name": r["name"],
+            "description": r["description"] or "",
+            "member_count": r["member_count"],
+        }
+        for r in group_rows
+    ]
+
+    return {"users": users_out, "groups": groups_out}
 
 
 @router.get("/search")

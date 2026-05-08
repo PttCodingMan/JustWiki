@@ -491,6 +491,27 @@ code, kbd, samp, pre,
   color: var(--color-text-secondary);
 }
 
+/* Mention chip — used in pages (Viewer + Editor) and comments. */
+.mention {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 0.95em;
+  line-height: 1.4;
+  background: var(--color-primary-soft, rgba(59, 130, 246, 0.12));
+  color: var(--color-primary, #3b82f6);
+  white-space: nowrap;
+}
+.mention.mention-group {
+  background: var(--color-accent-soft, rgba(168, 85, 247, 0.12));
+  color: var(--color-accent, #a855f7);
+}
+.milkdown .mention {
+  cursor: default;
+  user-select: all;
+}
+
 /* Table tooltip (in-editor row/column controls) */
 .table-tooltip {
   display: flex;

@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import DOMPurify from 'dompurify'
 import useAuth from '../store/useAuth'
 import api from '../api/client'
+import { renderMentionsOnly } from '../lib/markdown'
+import MentionAutocomplete from './MentionAutocomplete'
 
-function CommentItem({ comment, currentUser, onDelete, onUpdate }) {
+function CommentItem({ comment, currentUser, onDelete, onUpdate, pageSlug }) {
   const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [editContent, setEditContent] = useState(comment.content)
@@ -31,11 +34,13 @@ function CommentItem({ comment, currentUser, onDelete, onUpdate }) {
         </div>
         {editing ? (
           <div>
-            <textarea
+            <MentionAutocomplete
               value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              className="w-full p-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary resize-none bg-surface text-text"
+              onChange={setEditContent}
+              onSubmit={handleSave}
+              pageSlug={pageSlug}
               rows={3}
+              className="w-full p-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary resize-none bg-surface text-text"
             />
             <div className="flex gap-2 mt-1">
               <button onClick={handleSave} className="text-xs px-3 py-1 bg-primary text-primary-text rounded hover:bg-primary-hover">{t('comments.save')}</button>
@@ -43,7 +48,12 @@ function CommentItem({ comment, currentUser, onDelete, onUpdate }) {
             </div>
           </div>
         ) : (
-          <div className="text-sm text-text whitespace-pre-wrap">{comment.content}</div>
+          <div
+            className="text-sm text-text"
+            dangerouslySetInnerHTML={{
+              __html: DOMPurify.sanitize(renderMentionsOnly(comment.content)),
+            }}
+          />
         )}
         {!editing && (isOwner || isAdmin) && (
           <div className="flex gap-3 mt-1">
@@ -141,6 +151,7 @@ export default function Comments({ slug }) {
                   currentUser={user}
                   onDelete={handleDelete}
                   onUpdate={handleUpdate}
+                  pageSlug={slug}
                 />
               ))}
             </div>
@@ -152,12 +163,14 @@ export default function Comments({ slug }) {
             </div>
           ) : (
             <form onSubmit={handleSubmit}>
-              <textarea
+              <MentionAutocomplete
                 value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
+                onChange={setNewComment}
+                onSubmit={() => handleSubmit({ preventDefault: () => {} })}
+                pageSlug={slug}
                 placeholder={t('comments.placeholder')}
-                className="w-full p-3 border border-border bg-surface text-text rounded-lg text-sm focus:outline-none focus:border-primary resize-none"
                 rows={3}
+                className="w-full p-3 border border-border bg-surface text-text rounded-lg text-sm focus:outline-none focus:border-primary resize-none"
               />
               <div className="flex justify-end mt-2">
                 <button

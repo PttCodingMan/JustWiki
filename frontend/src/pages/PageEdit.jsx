@@ -347,6 +347,7 @@ export default function PageEdit() {
               onDrawioOpen={handleDrawioOpen}
               onMediaPickerOpen={handleMediaPickerOpen}
               onTabOut={handleEditorTabOut}
+              pageSlug={slug}
             />
           </div>
 

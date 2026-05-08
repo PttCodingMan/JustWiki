@@ -335,6 +335,9 @@
       "tabDiagrams": "圖表"
     }
   },
+  "mention": {
+    "empty": "沒有符合的對象"
+  },
   "slash": {
     "wikilinkEmpty": "找不到頁面",
     "items": {

@@ -21,6 +21,7 @@ from app.services.notifications import (
     notify_page_deleted,
     notify_page_updated,
 )
+from app.services.mention import notify_mentions
 
 router = APIRouter(prefix="/api/pages", tags=["pages"])
 
@@ -304,6 +305,7 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
 
     # Fire notification
     await notify_page_created(db, new_page, user)
+    await notify_mentions(db, content_md=content, page_id=page_id, actor=user)
 
     return new_page
 
@@ -459,6 +461,14 @@ async def update_page(slug: str, body: PageUpdate, user=Depends(get_current_user
     # Fire notifications if content/title actually changed
     if content_changed or title_changed:
         await notify_page_updated(db, updated, user, {"title_changed": title_changed, "content_changed": content_changed})
+    if content_changed:
+        await notify_mentions(
+            db,
+            content_md=content,
+            page_id=current["id"],
+            actor=user,
+            old_content_md=current["content_md"],
+        )
 
     return updated
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { renderMarkdown, stripBrTags } from './markdown'
+import { renderMarkdown, stripBrTags, renderMentionsOnly } from './markdown'
 
 describe('renderMarkdown', () => {
   it('returns empty string for null/undefined/empty', () => {
@@ -273,6 +273,120 @@ describe('renderMarkdown', () => {
     expect(html).not.toContain('<!--')
     expect(html).not.toContain('-->')
     expect(html).toContain('visible')
+  })
+})
+
+describe('mentions', () => {
+  it('renders @user as a user-mention span', () => {
+    const html = renderMarkdown('hi @alice')
+    expect(html).toContain('<span class="mention mention-user" data-user="alice">@alice</span>')
+  })
+
+  it('renders @@group as a group-mention span', () => {
+    const html = renderMarkdown('cc @@team-x')
+    expect(html).toContain('<span class="mention mention-group" data-group="team-x">@@team-x</span>')
+  })
+
+  it('does not parse @ inside an email address', () => {
+    const html = renderMarkdown('mail me at foo@bar.com')
+    expect(html).not.toContain('mention')
+  })
+
+  it('does not parse @user inside a code span', () => {
+    const html = renderMarkdown('see `print(@bob)` for example')
+    expect(html).not.toContain('mention')
+    expect(html).toContain('<code>')
+  })
+
+  it('does not parse @user inside a fenced code block', () => {
+    const html = renderMarkdown('```\n@alice\n```')
+    expect(html).not.toContain('class="mention')
+    expect(html).toContain('@alice')
+  })
+
+  it('handles back-to-back valid mentions separated by space', () => {
+    const html = renderMarkdown('@alice @@team')
+    expect(html).toContain('mention-user')
+    expect(html).toContain('mention-group')
+  })
+
+  it('skips triple-@ noise', () => {
+    const html = renderMarkdown('garbage @@@bob garbage')
+    expect(html).not.toContain('class="mention')
+  })
+
+  it('does not parse @ after a URL slash', () => {
+    const html = renderMarkdown('see https://github.com/@octocat for details')
+    expect(html).not.toContain('class="mention')
+  })
+
+  it('does not parse @ inside a double-backtick inline code', () => {
+    const html = renderMarkdown('use ``print(@bob)`` here')
+    expect(html).not.toContain('class="mention')
+  })
+
+  it('does not parse @ inside a tilde-fenced code block', () => {
+    const html = renderMarkdown('~~~\n@alice = 1\n~~~')
+    expect(html).not.toContain('class="mention')
+  })
+
+  it('does not parse @ in an indented code block', () => {
+    const html = renderMarkdown('paragraph\n\n    @alice = 1\n\nafter')
+    expect(html).not.toContain('class="mention')
+  })
+
+  it('rejects leading-hyphen names (must start with alphanum)', () => {
+    const html = renderMarkdown('foo @-bob bar')
+    expect(html).not.toContain('class="mention')
+  })
+
+  it('preserves leading bracket/paren around a mention', () => {
+    const html = renderMarkdown('cc (@alice) and [@bob]')
+    expect(html).toContain('mention-user" data-user="alice"')
+    expect(html).toContain('mention-user" data-user="bob"')
+  })
+
+  it('escapes a stray < before a mention rather than breaking the renderer', () => {
+    const html = renderMarkdown('hi <@alice>')
+    expect(html).toContain('&lt;')
+    expect(html).toContain('mention-user" data-user="alice"')
+  })
+})
+
+describe('renderMentionsOnly', () => {
+  it('returns empty for empty input', () => {
+    expect(renderMentionsOnly('')).toBe('')
+    expect(renderMentionsOnly(null)).toBe('')
+  })
+
+  it('escapes HTML in surrounding text', () => {
+    const out = renderMentionsOnly('<script>x</script> @alice')
+    expect(out).not.toContain('<script>')
+    expect(out).toContain('&lt;script&gt;')
+    expect(out).toContain('mention-user" data-user="alice"')
+  })
+
+  it('does NOT render markdown emphasis in plain comments', () => {
+    const out = renderMentionsOnly('this is **bold** and @bob')
+    // Asterisks stay literal — comments are plain text.
+    expect(out).toContain('**bold**')
+    expect(out).toContain('mention-user" data-user="bob"')
+  })
+
+  it('preserves newlines as <br>', () => {
+    const out = renderMentionsOnly('line one\nline two @c')
+    expect(out).toContain('line one<br>line two')
+    expect(out).toContain('mention-user" data-user="c"')
+  })
+
+  it('still rejects email addresses', () => {
+    const out = renderMentionsOnly('contact foo@bar.com please')
+    expect(out).not.toContain('mention')
+  })
+
+  it('handles @@group at start of string', () => {
+    const out = renderMentionsOnly('@@team please review')
+    expect(out).toContain('mention-group" data-group="team"')
   })
 })
 

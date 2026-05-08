@@ -335,6 +335,9 @@
       "tabDiagrams": "図"
     }
   },
+  "mention": {
+    "empty": "一致するものがありません"
+  },
   "slash": {
     "wikilinkEmpty": "ページが見つかりません",
     "items": {
