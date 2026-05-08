@@ -541,6 +541,9 @@
       "displayNamePlaceholder": "表示名を入力",
       "email": "メール",
       "emailPlaceholder": "your@email.com",
+      "bio": "自己紹介",
+      "bioPlaceholder": "ひとこと自己紹介——markdown、[[wikilink]]、@mention に対応。",
+      "bioHint": "公開プロフィールに表示されます。",
       "success": "プロフィールを更新しました。",
       "failed": "プロフィールの更新に失敗しました",
       "saving": "保存中…",
@@ -642,6 +645,37 @@
       "created": "作成しました",
       "updated": "更新しました",
       "deleted": "削除しました"
+    }
+  },
+  "userProfile": {
+    "joinedOn": "{{date}} に参加",
+    "about": "自己紹介",
+    "bio": {
+      "edit": "編集",
+      "save": "保存",
+      "saving": "保存中…",
+      "cancel": "キャンセル",
+      "addPrompt": "自己紹介を書いてみましょう…",
+      "placeholder": "ひとこと自己紹介——markdown、[[wikilink]]、@mention に対応。",
+      "saveFailed": "保存に失敗しました。"
+    },
+    "recentActivity": "最近のアクティビティ",
+    "noActivity": "最近のアクティビティはありません。",
+    "loadFailed": "このプロフィールを読み込めませんでした。",
+    "notFound": {
+      "title": "ユーザーが見つかりません",
+      "body": "@{{username}} というアクティブなユーザーはいません。"
+    },
+    "actions": {
+      "created": "作成",
+      "updated": "更新",
+      "commented": "コメント"
+    },
+    "time": {
+      "justNow": "たった今",
+      "minutesAgo": "{{count}} 分前",
+      "hoursAgo": "{{count}} 時間前",
+      "daysAgo": "{{count}} 日前"
     }
   },
   "trash": {

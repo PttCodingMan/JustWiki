@@ -541,6 +541,9 @@
       "displayNamePlaceholder": "Your display name",
       "email": "Email",
       "emailPlaceholder": "your@email.com",
+      "bio": "About",
+      "bioPlaceholder": "A short intro — supports markdown, [[wikilinks]], and @mentions.",
+      "bioHint": "Shown on your public profile.",
       "success": "Profile updated successfully.",
       "failed": "Failed to update profile",
       "saving": "Saving...",
@@ -642,6 +645,37 @@
       "created": "created",
       "updated": "updated",
       "deleted": "deleted"
+    }
+  },
+  "userProfile": {
+    "joinedOn": "Joined {{date}}",
+    "about": "About",
+    "bio": {
+      "edit": "Edit",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "addPrompt": "Add a short intro about yourself…",
+      "placeholder": "A short intro — supports markdown, [[wikilinks]], and @mentions.",
+      "saveFailed": "Failed to save."
+    },
+    "recentActivity": "Recent activity",
+    "noActivity": "No recent activity.",
+    "loadFailed": "Failed to load this profile.",
+    "notFound": {
+      "title": "User not found",
+      "body": "No active user named @{{username}}."
+    },
+    "actions": {
+      "created": "created",
+      "updated": "updated",
+      "commented": "commented"
+    },
+    "time": {
+      "justNow": "just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago"
     }
   },
   "trash": {

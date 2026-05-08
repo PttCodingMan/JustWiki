@@ -277,14 +277,18 @@ describe('renderMarkdown', () => {
 })
 
 describe('mentions', () => {
-  it('renders @user as a user-mention span', () => {
+  it('renders @user as a link to /u/<name>', () => {
     const html = renderMarkdown('hi @alice')
-    expect(html).toContain('<span class="mention mention-user" data-user="alice">@alice</span>')
+    expect(html).toContain(
+      '<a href="/u/alice" class="mention mention-user" data-user="alice">@alice</a>'
+    )
   })
 
-  it('renders @@group as a group-mention span', () => {
+  it('renders @@group as a non-link span (no group profile page)', () => {
     const html = renderMarkdown('cc @@team-x')
     expect(html).toContain('<span class="mention mention-group" data-group="team-x">@@team-x</span>')
+    // Group mentions must not render an /u/ href.
+    expect(html).not.toContain('href="/u/team-x"')
   })
 
   it('does not parse @ inside an email address', () => {
@@ -363,6 +367,7 @@ describe('renderMentionsOnly', () => {
     const out = renderMentionsOnly('<script>x</script> @alice')
     expect(out).not.toContain('<script>')
     expect(out).toContain('&lt;script&gt;')
+    expect(out).toContain('href="/u/alice"')
     expect(out).toContain('mention-user" data-user="alice"')
   })
 

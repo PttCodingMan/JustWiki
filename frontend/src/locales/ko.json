@@ -541,6 +541,9 @@
       "displayNamePlaceholder": "표시 이름을 입력하세요",
       "email": "이메일",
       "emailPlaceholder": "your@email.com",
+      "bio": "소개",
+      "bioPlaceholder": "짧은 소개를 적어 보세요 — markdown, [[wikilink]], @mention 모두 지원합니다.",
+      "bioHint": "공개 프로필에 표시됩니다.",
       "success": "프로필이 업데이트되었습니다.",
       "failed": "프로필 업데이트에 실패했습니다",
       "saving": "저장 중…",
@@ -642,6 +645,37 @@
       "created": "만들었습니다",
       "updated": "업데이트했습니다",
       "deleted": "삭제했습니다"
+    }
+  },
+  "userProfile": {
+    "joinedOn": "{{date}}에 가입",
+    "about": "소개",
+    "bio": {
+      "edit": "편집",
+      "save": "저장",
+      "saving": "저장 중…",
+      "cancel": "취소",
+      "addPrompt": "짧은 소개를 적어 보세요…",
+      "placeholder": "짧은 소개 — markdown, [[wikilink]], @mention 모두 지원합니다.",
+      "saveFailed": "저장에 실패했습니다."
+    },
+    "recentActivity": "최근 활동",
+    "noActivity": "최근 활동이 없습니다.",
+    "loadFailed": "프로필을 불러오지 못했습니다.",
+    "notFound": {
+      "title": "사용자를 찾을 수 없습니다",
+      "body": "@{{username}} 사용자가 없습니다."
+    },
+    "actions": {
+      "created": "생성",
+      "updated": "수정",
+      "commented": "댓글"
+    },
+    "time": {
+      "justNow": "방금",
+      "minutesAgo": "{{count}}분 전",
+      "hoursAgo": "{{count}}시간 전",
+      "daysAgo": "{{count}}일 전"
     }
   },
   "trash": {

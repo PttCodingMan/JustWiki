@@ -179,6 +179,16 @@ async def _m011_mindmap_layout(db: aiosqlite.Connection) -> None:
         await db.execute("ALTER TABLE pages ADD COLUMN mindmap_layout TEXT")
 
 
+async def _m012_user_bio(db: aiosqlite.Connection) -> None:
+    """Add `bio` to users so each profile can carry a short markdown self-intro.
+
+    NOT NULL DEFAULT '' so existing rows backfill cleanly and the API never
+    has to disambiguate "no bio set" from "bio cleared".
+    """
+    if not await _column_exists(db, "users", "bio"):
+        await db.execute("ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''")
+
+
 MIGRATIONS: list[Migration] = [
     (1, "user_profile_columns", _m001_user_profile_columns),
     (2, "user_soft_delete", _m002_user_soft_delete),
@@ -191,6 +201,7 @@ MIGRATIONS: list[Migration] = [
     (9, "page_type", _m009_page_type),
     (10, "site_settings", _m010_site_settings),
     (11, "mindmap_layout", _m011_mindmap_layout),
+    (12, "user_bio", _m012_user_bio),
 ]
 
 
@@ -289,6 +300,8 @@ async def _detect_preexisting(db: aiosqlite.Connection) -> set[int]:
         applied.add(10)
     if await _column_exists(db, "pages", "mindmap_layout"):
         applied.add(11)
+    if await _column_exists(db, "users", "bio"):
+        applied.add(12)
     return applied
 
 

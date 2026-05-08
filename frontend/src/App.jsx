@@ -21,6 +21,7 @@ const GraphView = lazy(() => import('./pages/GraphView'))
 const Admin = lazy(() => import('./pages/Admin'))
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
+import UserProfile from './pages/UserProfile'
 import Trash from './pages/Trash'
 import Chat from './pages/Chat'
 import PublicPageView from './pages/PublicPageView'
@@ -36,6 +37,7 @@ const GUEST_BLOCKED_ROUTES = [
   /^\/dashboard$/,
   /^\/trash$/,
   /^\/profile$/,
+  /^\/u\//,
   /^\/chat$/,
   /^\/page\/[^/]+\/(edit|versions)$/,
 ]
@@ -159,6 +161,7 @@ export default function App() {
           <Route path="/dashboard" element={<Dashboard />} />
         </Route>
         <Route path="/profile" element={<Profile />} />
+        <Route path="/u/:username" element={<UserProfile />} />
         <Route path="/trash" element={<Trash />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/page/:slug" element={<PageOrPublicView />} />

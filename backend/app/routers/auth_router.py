@@ -138,16 +138,24 @@ async def me(request: Request):
     return user
 
 
+# Bio is rendered on user profiles via the same markdown pipeline as pages,
+# so no length cap is required for safety — it's just a UX guardrail to keep
+# profiles from turning into walls of text. ~1000 chars fits a generous
+# multi-paragraph self-intro while still rendering quickly.
+BIO_MAX_LEN = 1000
+
+
 class ProfileUpdateRequest(BaseModel):
     display_name: Optional[str] = None
     email: Optional[str] = None
+    bio: Optional[str] = None
 
 
 @router.get("/profile")
 async def get_profile(user=Depends(require_real_user)):
     db = await get_db()
     rows = await db.execute_fetchall(
-        "SELECT id, username, role, display_name, email, created_at FROM users WHERE id = ?",
+        "SELECT id, username, role, display_name, email, bio, created_at FROM users WHERE id = ?",
         (user["id"],),
     )
     return dict(rows[0])
@@ -164,6 +172,14 @@ async def update_profile(body: ProfileUpdateRequest, user=Depends(require_real_u
     if body.email is not None:
         updates.append("email = ?")
         values.append(body.email)
+    if body.bio is not None:
+        if len(body.bio) > BIO_MAX_LEN:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Bio must be {BIO_MAX_LEN} characters or fewer",
+            )
+        updates.append("bio = ?")
+        values.append(body.bio)
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -175,7 +191,7 @@ async def update_profile(body: ProfileUpdateRequest, user=Depends(require_real_u
     await db.commit()
 
     rows = await db.execute_fetchall(
-        "SELECT id, username, role, display_name, email, created_at FROM users WHERE id = ?",
+        "SELECT id, username, role, display_name, email, bio, created_at FROM users WHERE id = ?",
         (user["id"],),
     )
     return dict(rows[0])

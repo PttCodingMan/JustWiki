@@ -1,6 +1,10 @@
 import pytest
+from httpx import AsyncClient, ASGITransport
 
-from app.auth import hash_password
+from app.auth import create_token, hash_password
+from app.config import settings
+from app.main import app
+from app.services.acl import invalidate_readable_cache
 
 
 @pytest.mark.asyncio
@@ -324,3 +328,238 @@ async def test_soft_delete_preserves_authorship(admin_client, db):
         "SELECT created_by FROM pages WHERE id = ?", (page_id,)
     )
     assert rows[0]["created_by"] == author_id
+
+
+# --- Public profile (GET /api/users/{username}/profile) -------------------
+
+
+async def _seed_profile_user(db, *, username="profileuser", display_name="Profile User"):
+    cursor = await db.execute(
+        """INSERT INTO users (username, password_hash, role, display_name)
+           VALUES (?, ?, 'editor', ?)""",
+        (username, hash_password("pw"), display_name),
+    )
+    await db.commit()
+    user_id = cursor.lastrowid
+    token = create_token(user_id, username, "editor")
+    return user_id, token
+
+
+@pytest.mark.asyncio
+async def test_profile_unknown_user_404(auth_client):
+    response = await auth_client.get("/api/users/no-such-user/profile")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_profile_soft_deleted_user_404(auth_client, admin_client, db):
+    cursor = await db.execute(
+        "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+        ("ghost", hash_password("pw"), "editor"),
+    )
+    user_id = cursor.lastrowid
+    await db.commit()
+    await admin_client.delete(f"/api/users/{user_id}")
+
+    response = await auth_client.get("/api/users/ghost/profile")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_profile_requires_real_user_blocks_anonymous(monkeypatch, db):
+    """Even with ANONYMOUS_READ on, profiles are gated — guests would
+    otherwise be enumerating the user roster."""
+    monkeypatch.setattr(settings, "ANONYMOUS_READ", True)
+    await _seed_profile_user(db, username="anonseen")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/api/users/anonseen/profile")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_profile_returns_identity_and_activity(admin_client, auth_client, db):
+    user_id, token = await _seed_profile_user(db, username="alice", display_name="Alice")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"Authorization": f"Bearer {token}"},
+    ) as alice_client:
+        # Alice creates, updates, comments on a page.
+        created = await alice_client.post("/api/pages", json={
+            "title": "Alice Page", "content_md": "v1", "slug": "alice-page",
+        })
+        assert created.status_code in (200, 201)
+        page = created.json()
+        await alice_client.put(f"/api/pages/alice-page", json={
+            "title": "Alice Page", "content_md": "v2", "base_version": page["version"],
+        })
+        await alice_client.post(f"/api/pages/alice-page/comments", json={"content": "hi"})
+
+    response = await auth_client.get("/api/users/alice/profile")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["username"] == "alice"
+    assert body["display_name"] == "Alice"
+    assert body["role"] == "editor"
+
+    actions = [a["action"] for a in body["recent_activity"]]
+    # Most-recent first; commented happened last.
+    assert actions[:3] == ["commented", "updated", "created"]
+    for entry in body["recent_activity"][:3]:
+        assert entry["page_slug"] == "alice-page"
+        assert entry["page_title"] == "Alice Page"
+    # Comment entry exposes comment_id for deep-linking.
+    assert "comment_id" in body["recent_activity"][0]
+
+
+@pytest.mark.asyncio
+async def test_profile_only_surfaces_whitelisted_actions(auth_client, db):
+    user_id, _ = await _seed_profile_user(db, username="noisy")
+    page_cursor = await db.execute(
+        "INSERT INTO pages (slug, title, content_md, created_by) VALUES (?, ?, ?, ?)",
+        ("noisy-page", "Noisy", "x", user_id),
+    )
+    page_id = page_cursor.lastrowid
+    # Plant one of every action type. Only created/updated/commented should
+    # surface; deleted/granted/token_created etc. must be filtered out.
+    for action in ("created", "updated", "commented", "deleted", "granted", "token_created"):
+        target_type = "page" if action != "token_created" else "token"
+        target_id = page_id if action != "token_created" else 1
+        await db.execute(
+            """INSERT INTO activity_log (user_id, action, target_type, target_id, metadata)
+               VALUES (?, ?, ?, ?, NULL)""",
+            (user_id, action, target_type, target_id),
+        )
+    await db.commit()
+    # Direct INSERTs bypass the page-create code path that normally invalidates
+    # the readable cache; flush so the new page shows up for the caller.
+    invalidate_readable_cache()
+
+    response = await auth_client.get("/api/users/noisy/profile")
+    assert response.status_code == 200
+    actions = {a["action"] for a in response.json()["recent_activity"]}
+    assert actions == {"created", "updated", "commented"}
+
+
+@pytest.mark.asyncio
+async def test_profile_activity_filtered_by_caller_acl(admin_client, db):
+    """Activity on pages the *caller* can't read must not leak into the timeline."""
+    actor_id, _ = await _seed_profile_user(db, username="actor")
+
+    # `actor` creates a page that only admin will be able to read after we
+    # pin a per-page ACL row to the admin user.
+    page_cursor = await db.execute(
+        "INSERT INTO pages (slug, title, content_md, created_by) VALUES (?, ?, ?, ?)",
+        ("secret-page", "Secret", "x", actor_id),
+    )
+    page_id = page_cursor.lastrowid
+    await db.execute(
+        """INSERT INTO activity_log (user_id, action, target_type, target_id, metadata)
+           VALUES (?, 'created', 'page', ?, NULL)""",
+        (actor_id, page_id),
+    )
+
+    # Set up a viewer-role caller; ACL anchor on the page restricts read to
+    # admin only (we grant 'read' to a sentinel principal that isn't this caller).
+    viewer_cursor = await db.execute(
+        "INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'editor')",
+        ("outsider", hash_password("pw")),
+    )
+    outsider_id = viewer_cursor.lastrowid
+    # Pin an ACL anchor that lists nobody the outsider matches → outsider gets 'none'.
+    await db.execute(
+        """INSERT INTO page_acl (page_id, principal_type, principal_id, permission)
+           VALUES (?, 'user', ?, 'write')""",
+        (page_id, actor_id),
+    )
+    await db.commit()
+    invalidate_readable_cache()
+
+    outsider_token = create_token(outsider_id, "outsider", "editor")
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"Authorization": f"Bearer {outsider_token}"},
+    ) as outsider_client:
+        response = await outsider_client.get("/api/users/actor/profile")
+    assert response.status_code == 200
+    slugs = [a["page_slug"] for a in response.json()["recent_activity"]]
+    assert "secret-page" not in slugs
+
+    # Sanity: admin (bypasses ACL) does see it.
+    admin_response = await admin_client.get("/api/users/actor/profile")
+    assert admin_response.status_code == 200
+    admin_slugs = [a["page_slug"] for a in admin_response.json()["recent_activity"]]
+    assert "secret-page" in admin_slugs
+
+
+@pytest.mark.asyncio
+async def test_profile_returns_bio(auth_client, db):
+    user_id, _ = await _seed_profile_user(db, username="biouser")
+    await db.execute(
+        "UPDATE users SET bio = ? WHERE id = ?",
+        ("Hi I'm bio. See [[home]]", user_id),
+    )
+    await db.commit()
+
+    response = await auth_client.get("/api/users/biouser/profile")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["bio"] == "Hi I'm bio. See [[home]]"
+
+
+@pytest.mark.asyncio
+async def test_auth_profile_round_trips_bio(auth_client):
+    # display_name + bio go in
+    response = await auth_client.put(
+        "/api/auth/profile", json={"bio": "My short intro **md**"}
+    )
+    assert response.status_code == 200
+    assert response.json()["bio"] == "My short intro **md**"
+
+    # GET reflects the saved value
+    fetched = await auth_client.get("/api/auth/profile")
+    assert fetched.status_code == 200
+    assert fetched.json()["bio"] == "My short intro **md**"
+
+
+@pytest.mark.asyncio
+async def test_auth_profile_bio_length_capped(auth_client):
+    too_long = "x" * 1001
+    response = await auth_client.put("/api/auth/profile", json={"bio": too_long})
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_auth_profile_can_clear_bio(auth_client):
+    await auth_client.put("/api/auth/profile", json={"bio": "something"})
+    cleared = await auth_client.put("/api/auth/profile", json={"bio": ""})
+    assert cleared.status_code == 200
+    assert cleared.json()["bio"] == ""
+
+
+@pytest.mark.asyncio
+async def test_profile_drops_activity_on_deleted_pages(auth_client, db):
+    user_id, _ = await _seed_profile_user(db, username="haunted")
+    # Page exists, soft-deleted; activity row points at it. The join on
+    # `pages.deleted_at IS NULL` should drop the row.
+    page_cursor = await db.execute(
+        """INSERT INTO pages (slug, title, content_md, created_by, deleted_at)
+           VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+        ("profile-haunted-page", "Haunted", "x", user_id),
+    )
+    page_id = page_cursor.lastrowid
+    await db.execute(
+        """INSERT INTO activity_log (user_id, action, target_type, target_id, metadata)
+           VALUES (?, 'updated', 'page', ?, NULL)""",
+        (user_id, page_id),
+    )
+    await db.commit()
+    invalidate_readable_cache()
+
+    response = await auth_client.get("/api/users/haunted/profile")
+    assert response.status_code == 200
+    slugs = [a["page_slug"] for a in response.json()["recent_activity"]]
+    assert "profile-haunted-page" not in slugs

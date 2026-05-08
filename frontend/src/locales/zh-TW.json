@@ -541,6 +541,9 @@
       "displayNamePlaceholder": "你的顯示名稱",
       "email": "電子郵件",
       "emailPlaceholder": "your@email.com",
+      "bio": "自我介紹",
+      "bioPlaceholder": "簡短介紹一下自己——支援 markdown、[[wikilink]] 與 @mention。",
+      "bioHint": "會顯示在你的公開個人頁面上。",
       "success": "個人檔案已更新。",
       "failed": "更新個人檔案失敗",
       "saving": "儲存中…",
@@ -642,6 +645,37 @@
       "created": "建立",
       "updated": "更新",
       "deleted": "刪除"
+    }
+  },
+  "userProfile": {
+    "joinedOn": "加入於 {{date}}",
+    "about": "自我介紹",
+    "bio": {
+      "edit": "編輯",
+      "save": "儲存",
+      "saving": "儲存中…",
+      "cancel": "取消",
+      "addPrompt": "寫一段自我介紹吧…",
+      "placeholder": "簡短介紹一下自己——支援 markdown、[[wikilink]] 與 @mention。",
+      "saveFailed": "儲存失敗。"
+    },
+    "recentActivity": "近期活動",
+    "noActivity": "尚無近期活動。",
+    "loadFailed": "無法載入此使用者頁面。",
+    "notFound": {
+      "title": "找不到使用者",
+      "body": "沒有名為 @{{username}} 的使用者。"
+    },
+    "actions": {
+      "created": "建立",
+      "updated": "編輯",
+      "commented": "留言"
+    },
+    "time": {
+      "justNow": "剛剛",
+      "minutesAgo": "{{count}} 分鐘前",
+      "hoursAgo": "{{count}} 小時前",
+      "daysAgo": "{{count}} 天前"
     }
   },
   "trash": {

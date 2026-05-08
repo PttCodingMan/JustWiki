@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS users (
     role              TEXT NOT NULL DEFAULT 'editor',
     display_name      TEXT DEFAULT '',
     email             TEXT DEFAULT '',
+    bio               TEXT NOT NULL DEFAULT '',
     original_username TEXT,
     deleted_at        TIMESTAMP,
     created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP

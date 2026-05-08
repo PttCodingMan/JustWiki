@@ -1,3 +1,4 @@
+import json
 import re
 import sqlite3
 
@@ -7,7 +8,7 @@ from typing import Optional
 
 from app.auth import get_current_user, require_admin, require_real_user, hash_password_async
 from app.database import get_db
-from app.services.acl import resolve_page_permission
+from app.services.acl import build_id_clause, list_readable_page_ids, resolve_page_permission
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -132,6 +133,90 @@ async def mentionable_targets(
     ]
 
     return {"users": users_out, "groups": groups_out}
+
+
+# Activity actions surfaced on a user's public profile. Other actions
+# (deleted, granted, revoked, token_*, group_*) are admin/audit-flavored
+# and would either leak history or just be noise on a "what has this
+# person been working on" timeline.
+_PROFILE_ACTIONS = ("created", "updated", "commented")
+_PROFILE_ACTIVITY_LIMIT = 30
+
+
+@router.get("/{username}/profile")
+async def user_profile(username: str, user=Depends(require_real_user)):
+    """Public-ish profile of a single user — identity card + recent activity.
+
+    `require_real_user` keeps anonymous visitors out even when
+    ``ANONYMOUS_READ`` is on (a guest enumerating profiles would also be
+    enumerating the user roster). Soft-deleted users 404 — matches how
+    `/api/users` and the mention autocomplete already pretend they don't
+    exist.
+
+    Activity is filtered by the **caller's** readable-page set, not the
+    profiled user's; otherwise the timeline would leak titles/slugs of
+    pages the viewer can't access. Activity rows whose page has since
+    been soft-deleted are dropped via the ``pages`` join.
+    """
+    db = await get_db()
+    rows = await db.execute_fetchall(
+        """SELECT id, username, display_name, role, bio, created_at
+           FROM users
+           WHERE username = ? AND deleted_at IS NULL""",
+        (username,),
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="User not found")
+    profiled = dict(rows[0])
+
+    readable = await list_readable_page_ids(db, user)
+    if not readable:
+        recent_activity: list[dict] = []
+    else:
+        action_placeholders = ",".join("?" for _ in _PROFILE_ACTIONS)
+        id_clause, id_params = build_id_clause(readable, column="a.target_id")
+        activity_rows = await db.execute_fetchall(
+            f"""SELECT a.id, a.action, a.target_id, a.metadata, a.created_at,
+                       p.slug AS page_slug, p.title AS page_title
+                  FROM activity_log a
+                  JOIN pages p ON p.id = a.target_id
+                 WHERE a.user_id = ?
+                   AND a.target_type = 'page'
+                   AND a.action IN ({action_placeholders})
+                   AND p.deleted_at IS NULL
+                   AND {id_clause}
+                 ORDER BY a.created_at DESC, a.id DESC
+                 LIMIT ?""",
+            [profiled["id"], *_PROFILE_ACTIONS, *id_params, _PROFILE_ACTIVITY_LIMIT],
+        )
+        recent_activity = []
+        for r in activity_rows:
+            entry = {
+                "id": r["id"],
+                "action": r["action"],
+                "page_slug": r["page_slug"],
+                "page_title": r["page_title"],
+                "created_at": r["created_at"],
+            }
+            # Surface comment_id so the frontend can deep-link from a
+            # 'commented' row to the specific comment thread.
+            if r["action"] == "commented" and r["metadata"]:
+                try:
+                    meta = json.loads(r["metadata"])
+                    if "comment_id" in meta:
+                        entry["comment_id"] = meta["comment_id"]
+                except (ValueError, TypeError):
+                    pass
+            recent_activity.append(entry)
+
+    return {
+        "username": profiled["username"],
+        "display_name": profiled["display_name"] or "",
+        "role": profiled["role"],
+        "bio": profiled["bio"] or "",
+        "created_at": profiled["created_at"],
+        "recent_activity": recent_activity,
+    }
 
 
 @router.get("/search")

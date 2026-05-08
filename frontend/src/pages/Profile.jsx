@@ -8,7 +8,9 @@ export default function Profile() {
   const { t } = useTranslation()
   const { checkAuth } = useAuth()
   const [profile, setProfile] = useState(null)
-  const [form, setForm] = useState({ display_name: '', email: '' })
+  const [form, setForm] = useState({ display_name: '', email: '', bio: '' })
+  // Mirrors BIO_MAX_LEN in backend/app/routers/auth_router.py.
+  const BIO_MAX_LEN = 1000
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
 
@@ -28,6 +30,7 @@ export default function Profile() {
       setForm({
         display_name: res.data.display_name || '',
         email: res.data.email || '',
+        bio: res.data.bio || '',
       })
     } catch {
       /* ignore */
@@ -130,6 +133,26 @@ export default function Profile() {
               placeholder={t('profile.edit.emailPlaceholder')}
               className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-text focus:outline-none focus:border-primary"
             />
+          </div>
+          <div>
+            <div className="flex items-baseline justify-between mb-1">
+              <label className="block text-sm font-medium text-text">{t('profile.edit.bio')}</label>
+              <span
+                className={`text-xs ${
+                  form.bio.length > BIO_MAX_LEN ? 'text-red-600' : 'text-text-secondary'
+                }`}
+              >
+                {form.bio.length}/{BIO_MAX_LEN}
+              </span>
+            </div>
+            <textarea
+              value={form.bio}
+              onChange={(e) => setForm({ ...form, bio: e.target.value })}
+              placeholder={t('profile.edit.bioPlaceholder')}
+              rows={4}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-text focus:outline-none focus:border-primary resize-y"
+            />
+            <p className="mt-1 text-xs text-text-secondary">{t('profile.edit.bioHint')}</p>
           </div>
           {message && (
             <div className={`p-3 rounded-lg text-sm ${message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>

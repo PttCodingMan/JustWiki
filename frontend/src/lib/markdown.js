@@ -385,10 +385,14 @@ export function createMarkdown() {
   md.renderer.rules.mention = (tokens, idx) => {
     const { name, group } = tokens[idx].meta
     const safe = md.utils.escapeHtml(name)
-    const cls = group ? 'mention mention-group' : 'mention mention-user'
-    const sigil = group ? '@@' : '@'
-    const dataAttr = group ? 'data-group' : 'data-user'
-    return `<span class="${cls}" ${dataAttr}="${safe}">${sigil}${safe}</span>`
+    if (group) {
+      // No group profile page exists — render as a plain span so the
+      // sigil is still visible and styled, but nothing navigates.
+      return `<span class="mention mention-group" data-group="${safe}">@@${safe}</span>`
+    }
+    // User mentions deep-link to the user's profile page. The name regex
+    // restricts characters to [A-Za-z0-9_-]+, so it's URL-safe as-is.
+    return `<a href="/u/${safe}" class="mention mention-user" data-user="${safe}">@${safe}</a>`
   }
 
   // Wikilinks (must run before `link` so `[[` isn't consumed as `[`)
@@ -494,10 +498,10 @@ export function renderMentionsOnly(text) {
   const escaped = _escapeHtml(text)
   // The escaped text has no `<` or `>` of its own, so the scan is unambiguous.
   const withMentions = escaped.replace(_MENTION_SCAN_RE, (_full, lead, sigil, name) => {
-    const isGroup = sigil === '@@'
-    const cls = isGroup ? 'mention mention-group' : 'mention mention-user'
-    const dataAttr = isGroup ? 'data-group' : 'data-user'
-    return `${lead}<span class="${cls}" ${dataAttr}="${name}">${sigil}${name}</span>`
+    if (sigil === '@@') {
+      return `${lead}<span class="mention mention-group" data-group="${name}">@@${name}</span>`
+    }
+    return `${lead}<a href="/u/${name}" class="mention mention-user" data-user="${name}">@${name}</a>`
   })
   return withMentions.replace(/\n/g, '<br>')
 }
