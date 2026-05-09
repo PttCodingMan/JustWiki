@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.auth import get_current_user, require_admin, require_real_user, hash_password_async
-from app.database import get_db
+from app.database import get_db, write_transaction
 from app.services.acl import build_id_clause, list_readable_page_ids, resolve_page_permission
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -305,11 +305,11 @@ async def create_user(body: UserCreate, user=Depends(require_admin)):
     if existing:
         raise HTTPException(status_code=409, detail="Username already exists")
     pw_hash = await hash_password_async(body.password)
-    cursor = await db.execute(
-        "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
-        (body.username, pw_hash, body.role),
-    )
-    await db.commit()
+    async with write_transaction(db):
+        cursor = await db.execute(
+            "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+            (body.username, pw_hash, body.role),
+        )
     row = await db.execute_fetchall(
         "SELECT id, username, role, created_at FROM users WHERE id = ?",
         (cursor.lastrowid,),
@@ -368,12 +368,12 @@ async def invite_user(body: UserInvite, user=Depends(require_admin)):
             raise HTTPException(status_code=500, detail="Could not find an available username")
 
     display_name = (body.display_name or "").strip()
-    cursor = await db.execute(
-        """INSERT INTO users (username, password_hash, role, display_name, email)
-           VALUES (?, ?, ?, ?, ?)""",
-        (username, DISABLED_PASSWORD_HASH, body.role, display_name, email),
-    )
-    await db.commit()
+    async with write_transaction(db):
+        cursor = await db.execute(
+            """INSERT INTO users (username, password_hash, role, display_name, email)
+               VALUES (?, ?, ?, ?, ?)""",
+            (username, DISABLED_PASSWORD_HASH, body.role, display_name, email),
+        )
     row = await db.execute_fetchall(
         """SELECT id, username, role, display_name, email, created_at
            FROM users WHERE id = ?""",
@@ -415,10 +415,10 @@ async def update_user(user_id: int, body: UserUpdate, user=Depends(require_admin
 
     if updates:
         values.append(user_id)
-        await db.execute(
-            f"UPDATE users SET {', '.join(updates)} WHERE id = ?", values
-        )
-        await db.commit()
+        async with write_transaction(db):
+            await db.execute(
+                f"UPDATE users SET {', '.join(updates)} WHERE id = ?", values
+            )
 
     row = await db.execute_fetchall(
         "SELECT id, username, role, created_at FROM users WHERE id = ?", (user_id,)
@@ -444,21 +444,21 @@ async def delete_user(user_id: int, user=Depends(require_admin)):
     # Soft-delete: keep the row (FKs still resolve) but rename `username` to a
     # tombstone that is guaranteed unique. The epoch suffix covers the
     # delete → restore → delete loop for the same user id.
-    await db.execute(
-        """UPDATE users
-           SET deleted_at = CURRENT_TIMESTAMP,
-               original_username = username,
-               username = '__deleted_' || id || '_' || strftime('%s','now')
-           WHERE id = ?""",
-        (user_id,),
-    )
-    # Drop SSO/LDAP bindings so re-inviting the same email cleanly relinks
-    # to the new user row. Leaving them behind causes the old (provider,sub)
-    # to resolve to the tombstoned user forever, returning `user_disabled`.
-    await db.execute(
-        "DELETE FROM auth_identities WHERE user_id = ?", (user_id,),
-    )
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute(
+            """UPDATE users
+               SET deleted_at = CURRENT_TIMESTAMP,
+                   original_username = username,
+                   username = '__deleted_' || id || '_' || strftime('%s','now')
+               WHERE id = ?""",
+            (user_id,),
+        )
+        # Drop SSO/LDAP bindings so re-inviting the same email cleanly relinks
+        # to the new user row. Leaving them behind causes the old (provider,sub)
+        # to resolve to the tombstoned user forever, returning `user_disabled`.
+        await db.execute(
+            "DELETE FROM auth_identities WHERE user_id = ?", (user_id,),
+        )
 
 
 @router.post("/{user_id}/restore")
@@ -480,18 +480,18 @@ async def restore_user(user_id: int, body: UserRestore, user=Depends(require_adm
     # UPDATE relies on the UNIQUE(username) constraint to reject collisions —
     # catching IntegrityError closes the TOCTOU window that a SELECT-then-UPDATE
     # check would open if two admins restored into the same slot concurrently.
+    # write_transaction handles rollback on the IntegrityError before we re-raise.
     try:
-        await db.execute(
-            """UPDATE users
-               SET deleted_at = NULL,
-                   original_username = NULL,
-                   username = ?
-               WHERE id = ?""",
-            (target, user_id),
-        )
-        await db.commit()
+        async with write_transaction(db):
+            await db.execute(
+                """UPDATE users
+                   SET deleted_at = NULL,
+                       original_username = NULL,
+                       username = ?
+                   WHERE id = ?""",
+                (target, user_id),
+            )
     except sqlite3.IntegrityError:
-        await db.rollback()
         raise HTTPException(
             status_code=409,
             detail=f"Username '{target}' is taken; choose a different one",

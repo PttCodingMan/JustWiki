@@ -2,7 +2,7 @@ import aiosqlite
 from fastapi import APIRouter, HTTPException, Depends
 from app.schemas import TemplateCreate, TemplateUpdate, TemplateResponse
 from app.auth import get_current_user, require_admin
-from app.database import get_db
+from app.database import get_db, write_transaction
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
 
@@ -18,11 +18,11 @@ async def list_templates(user=Depends(get_current_user)):
 async def create_template(body: TemplateCreate, user=Depends(require_admin)):
     db = await get_db()
     try:
-        cursor = await db.execute(
-            "INSERT INTO templates (name, description, content_md, created_by) VALUES (?, ?, ?, ?)",
-            (body.name, body.description, body.content_md, user["id"]),
-        )
-        await db.commit()
+        async with write_transaction(db):
+            cursor = await db.execute(
+                "INSERT INTO templates (name, description, content_md, created_by) VALUES (?, ?, ?, ?)",
+                (body.name, body.description, body.content_md, user["id"]),
+            )
     except aiosqlite.IntegrityError:
         raise HTTPException(status_code=409, detail="A template with this name already exists")
     rows = await db.execute_fetchall(
@@ -48,11 +48,11 @@ async def update_template(
     content = body.content_md if body.content_md is not None else current["content_md"]
 
     try:
-        await db.execute(
-            "UPDATE templates SET name = ?, description = ?, content_md = ? WHERE id = ?",
-            (name, desc, content, template_id),
-        )
-        await db.commit()
+        async with write_transaction(db):
+            await db.execute(
+                "UPDATE templates SET name = ?, description = ?, content_md = ? WHERE id = ?",
+                (name, desc, content, template_id),
+            )
     except aiosqlite.IntegrityError:
         raise HTTPException(status_code=409, detail="A template with this name already exists")
     rows = await db.execute_fetchall(
@@ -70,6 +70,6 @@ async def delete_template(template_id: int, user=Depends(require_admin)):
     if not rows:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    await db.execute("DELETE FROM templates WHERE id = ?", (template_id,))
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute("DELETE FROM templates WHERE id = ?", (template_id,))
     return {"ok": True}

@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from app.schemas import MediaResponse, MediaListItem
 from app.auth import get_current_user, require_admin, get_optional_user
 from app.config import settings
-from app.database import get_db
+from app.database import get_db, write_transaction
 from app.services.acl import can_read_media, list_readable_page_ids
 
 router = APIRouter(prefix="/api/media", tags=["media"])
@@ -111,12 +111,12 @@ async def upload_media(
     filepath.write_bytes(content)
 
     db = await get_db()
-    cursor = await db.execute(
-        """INSERT INTO media (filename, original_name, filepath, mime_type, size_bytes, uploaded_by)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (filename, file.filename, str(filepath), file.content_type, size, user["id"]),
-    )
-    await db.commit()
+    async with write_transaction(db):
+        cursor = await db.execute(
+            """INSERT INTO media (filename, original_name, filepath, mime_type, size_bytes, uploaded_by)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (filename, file.filename, str(filepath), file.content_type, size, user["id"]),
+        )
 
     return {
         "id": cursor.lastrowid,
@@ -228,8 +228,8 @@ async def delete_media(media_id: int, user=Depends(require_admin)):
         except OSError:
             pass  # Row deletion still proceeds; orphan file can be cleaned later.
 
-    await db.execute("DELETE FROM media WHERE id = ?", (media_id,))
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute("DELETE FROM media WHERE id = ?", (media_id,))
 
 
 # logo.png ships with the install and is referenced from the login page and

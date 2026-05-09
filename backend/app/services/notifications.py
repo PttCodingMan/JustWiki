@@ -13,6 +13,8 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from app.database import write_transaction
+
 logger = logging.getLogger("justwiki.notifications")
 
 
@@ -117,13 +119,13 @@ async def _dispatch(db, event: str, page: dict, actor: dict, changes: dict) -> N
     watcher_ids = [w["user_id"] for w in watchers]
     if watcher_ids:
         metadata = json.dumps({"event": event, "title": page.get("title"), "slug": page.get("slug")})
-        for wid in watcher_ids:
-            await db.execute(
-                """INSERT INTO notifications (user_id, event, page_id, actor_id, metadata)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (wid, event, page.get("id"), actor.get("id"), metadata),
-            )
-        await db.commit()
+        async with write_transaction(db):
+            for wid in watcher_ids:
+                await db.execute(
+                    """INSERT INTO notifications (user_id, event, page_id, actor_id, metadata)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (wid, event, page.get("id"), actor.get("id"), metadata),
+                )
 
     # 3. Fire outbound webhooks (fire-and-forget)
     hooks = await db.execute_fetchall(

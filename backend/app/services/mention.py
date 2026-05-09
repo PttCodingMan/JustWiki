@@ -22,6 +22,7 @@ import logging
 import re
 from typing import Optional
 
+from app.database import write_transaction
 from app.services.acl import resolve_page_permission
 
 logger = logging.getLogger("justwiki.mentions")
@@ -246,13 +247,13 @@ async def notify_mentions(
             metadata["comment_id"] = comment_id
         metadata_json = json.dumps(metadata)
 
-        for uid in target_ids:
-            await db.execute(
-                """INSERT INTO notifications (user_id, event, page_id, actor_id, metadata)
-                   VALUES (?, 'mention', ?, ?, ?)""",
-                (uid, page_id, actor.get("id"), metadata_json),
-            )
-        await db.commit()
+        async with write_transaction(db):
+            for uid in target_ids:
+                await db.execute(
+                    """INSERT INTO notifications (user_id, event, page_id, actor_id, metadata)
+                       VALUES (?, 'mention', ?, ?, ?)""",
+                    (uid, page_id, actor.get("id"), metadata_json),
+                )
     except Exception as exc:  # pragma: no cover — guardrail
         logger.warning("notify_mentions failed: %s", exc)
 

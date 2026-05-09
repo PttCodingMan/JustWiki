@@ -26,6 +26,7 @@ from typing import Optional
 import aiosqlite
 
 from app.config import settings
+from app.database import write_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -308,60 +309,60 @@ async def provision_ldap_user(db, lu: LdapUser) -> dict:
     # On a fresh-user creation we still have no authoritative group answer if
     # the search failed — default-role is the safest assumption for a brand
     # new account, so it's still okay to use _derive_role here.
-    if existing_linked_uid is not None:
-        user_id = existing_linked_uid
-    elif username_row is None:
-        cursor = await db.execute(
-            """INSERT INTO users (username, password_hash, role, display_name, email)
-               VALUES (?, '!', ?, ?, ?)""",
-            (lu.username, _derive_role([cn_of(dn) for dn in lu.groups]), lu.display_name, lu.email),
-        )
-        user_id = cursor.lastrowid
-        await db.execute(
-            """INSERT INTO auth_identities (user_id, provider, subject, email, last_login_at)
-               VALUES (?, 'ldap', ?, ?, CURRENT_TIMESTAMP)""",
-            (user_id, lu.dn, lu.email),
-        )
-    elif username_row["password_hash"] != "!":
-        # Username taken by a real local account — refuse to avoid takeover.
-        raise LdapError(
-            f"User '{lu.username}' exists as a local account; an admin must link it manually."
-        )
-    else:
-        # Username belongs to a shell account (invited for SSO). Link it.
-        user_id = username_row["id"]
-        await db.execute(
-            """INSERT INTO auth_identities (user_id, provider, subject, email, last_login_at)
-               VALUES (?, 'ldap', ?, ?, CURRENT_TIMESTAMP)""",
-            (user_id, lu.dn, lu.email),
-        )
+    async with write_transaction(db):
+        if existing_linked_uid is not None:
+            user_id = existing_linked_uid
+        elif username_row is None:
+            cursor = await db.execute(
+                """INSERT INTO users (username, password_hash, role, display_name, email)
+                   VALUES (?, '!', ?, ?, ?)""",
+                (lu.username, _derive_role([cn_of(dn) for dn in lu.groups]), lu.display_name, lu.email),
+            )
+            user_id = cursor.lastrowid
+            await db.execute(
+                """INSERT INTO auth_identities (user_id, provider, subject, email, last_login_at)
+                   VALUES (?, 'ldap', ?, ?, CURRENT_TIMESTAMP)""",
+                (user_id, lu.dn, lu.email),
+            )
+        elif username_row["password_hash"] != "!":
+            # Username taken by a real local account — refuse to avoid takeover.
+            raise LdapError(
+                f"User '{lu.username}' exists as a local account; an admin must link it manually."
+            )
+        else:
+            # Username belongs to a shell account (invited for SSO). Link it.
+            user_id = username_row["id"]
+            await db.execute(
+                """INSERT INTO auth_identities (user_id, provider, subject, email, last_login_at)
+                   VALUES (?, 'ldap', ?, ?, CURRENT_TIMESTAMP)""",
+                (user_id, lu.dn, lu.email),
+            )
 
-    # Refresh email + display_name every login (cheap and harmless).
-    # Role + group sync only when we have a trustworthy group answer —
-    # otherwise a flaky LDAP would demote admins / drop memberships.
-    if lu.groups_known:
-        role = _derive_role([cn_of(dn) for dn in lu.groups])
-        await db.execute(
-            "UPDATE users SET role = ?, email = ?, display_name = ? WHERE id = ?",
-            (role, lu.email, lu.display_name, user_id),
-        )
-        if settings.LDAP_SYNC_GROUPS:
-            await _sync_groups(db, user_id, lu.groups)
-    else:
-        logger.warning(
-            "LDAP group info unavailable for user_id=%s; role and group membership preserved from previous login.",
-            user_id,
-        )
-        await db.execute(
-            "UPDATE users SET email = ?, display_name = ? WHERE id = ?",
-            (lu.email, lu.display_name, user_id),
-        )
+        # Refresh email + display_name every login (cheap and harmless).
+        # Role + group sync only when we have a trustworthy group answer —
+        # otherwise a flaky LDAP would demote admins / drop memberships.
+        if lu.groups_known:
+            role = _derive_role([cn_of(dn) for dn in lu.groups])
+            await db.execute(
+                "UPDATE users SET role = ?, email = ?, display_name = ? WHERE id = ?",
+                (role, lu.email, lu.display_name, user_id),
+            )
+            if settings.LDAP_SYNC_GROUPS:
+                await _sync_groups(db, user_id, lu.groups)
+        else:
+            logger.warning(
+                "LDAP group info unavailable for user_id=%s; role and group membership preserved from previous login.",
+                user_id,
+            )
+            await db.execute(
+                "UPDATE users SET email = ?, display_name = ? WHERE id = ?",
+                (lu.email, lu.display_name, user_id),
+            )
 
-    # Touch last_login_at.
-    await db.execute(
-        "UPDATE auth_identities SET last_login_at = CURRENT_TIMESTAMP "
-        "WHERE provider = 'ldap' AND subject = ?",
-        (lu.dn,),
-    )
-    await db.commit()
+        # Touch last_login_at.
+        await db.execute(
+            "UPDATE auth_identities SET last_login_at = CURRENT_TIMESTAMP "
+            "WHERE provider = 'ldap' AND subject = ?",
+            (lu.dn,),
+        )
     return await _load_user_by_id(db, user_id)

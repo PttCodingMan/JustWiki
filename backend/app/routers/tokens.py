@@ -24,7 +24,7 @@ from app.auth import (
     hash_api_token,
     require_real_user,
 )
-from app.database import get_db
+from app.database import get_db, write_transaction
 from app.routers.activity import log_activity
 
 # Personal API tokens are tied to a real account — no token issuance for
@@ -123,17 +123,17 @@ async def create_token(
         expires_at = exp.strftime("%Y-%m-%d %H:%M:%S")
 
     db = await get_db()
-    cursor = await db.execute(
-        """INSERT INTO api_tokens (user_id, name, token_hash, prefix, expires_at)
-           VALUES (?, ?, ?, ?, ?)""",
-        (user["id"], body.name, hash_api_token(plaintext), prefix, expires_at),
-    )
-    token_id = cursor.lastrowid
-    await log_activity(
-        db, user["id"], "created", "api_token", token_id,
-        {"name": body.name, "expires_at": expires_at},
-    )
-    await db.commit()
+    async with write_transaction(db):
+        cursor = await db.execute(
+            """INSERT INTO api_tokens (user_id, name, token_hash, prefix, expires_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (user["id"], body.name, hash_api_token(plaintext), prefix, expires_at),
+        )
+        token_id = cursor.lastrowid
+        await log_activity(
+            db, user["id"], "created", "api_token", token_id,
+            {"name": body.name, "expires_at": expires_at},
+        )
 
     rows = await db.execute_fetchall(
         """SELECT id, name, prefix, created_at, last_used, expires_at, revoked_at
@@ -163,12 +163,12 @@ async def revoke_token(token_id: int, user=Depends(get_current_user)):
     if rows[0]["revoked_at"] is not None:
         return
 
-    await db.execute(
-        "UPDATE api_tokens SET revoked_at = CURRENT_TIMESTAMP WHERE id = ?",
-        (token_id,),
-    )
-    await log_activity(
-        db, user["id"], "revoked", "api_token", token_id,
-        {"name": rows[0]["name"]},
-    )
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute(
+            "UPDATE api_tokens SET revoked_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (token_id,),
+        )
+        await log_activity(
+            db, user["id"], "revoked", "api_token", token_id,
+            {"name": rows[0]["name"]},
+        )

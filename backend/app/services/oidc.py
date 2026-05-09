@@ -26,7 +26,7 @@ from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import Request
 
 from app.config import settings
-from app.database import get_db
+from app.database import get_db, write_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -298,8 +298,8 @@ async def authenticate_and_provision(info: UserInfo) -> dict:
         identity_id = rows[0]["id"]
         user_id = rows[0]["user_id"]
         user = await _load_user_by_id(db, user_id)
-        await _record_login(db, identity_id)
-        await db.commit()
+        async with write_transaction(db):
+            await _record_login(db, identity_id)
         return user
 
     # 2. Email link: an existing local user with the same email (requires
@@ -311,12 +311,12 @@ async def authenticate_and_provision(info: UserInfo) -> dict:
         )
         if rows:
             user_id = rows[0]["id"]
-            cursor = await db.execute(
-                """INSERT INTO auth_identities (user_id, provider, subject, email, last_login_at)
-                   VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)""",
-                (user_id, info.provider, info.subject, info.email),
-            )
-            await db.commit()
+            async with write_transaction(db):
+                await db.execute(
+                    """INSERT INTO auth_identities (user_id, provider, subject, email, last_login_at)
+                       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+                    (user_id, info.provider, info.subject, info.email),
+                )
             user = await _load_user_by_id(db, user_id)
             logger.info("Linked SSO identity %s:%s to user_id=%d", info.provider, info.subject, user_id)
             return user
@@ -330,18 +330,18 @@ async def authenticate_and_provision(info: UserInfo) -> dict:
 
     username = await _pick_unique_username(db, info.email)
     role = settings.OIDC_DEFAULT_ROLE
-    cursor = await db.execute(
-        """INSERT INTO users (username, password_hash, role, display_name, email)
-           VALUES (?, '!', ?, ?, ?)""",
-        (username, role, info.display_name, info.email),
-    )
-    user_id = cursor.lastrowid
-    await db.execute(
-        """INSERT INTO auth_identities (user_id, provider, subject, email, last_login_at)
-           VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)""",
-        (user_id, info.provider, info.subject, info.email),
-    )
-    await db.commit()
+    async with write_transaction(db):
+        cursor = await db.execute(
+            """INSERT INTO users (username, password_hash, role, display_name, email)
+               VALUES (?, '!', ?, ?, ?)""",
+            (username, role, info.display_name, info.email),
+        )
+        user_id = cursor.lastrowid
+        await db.execute(
+            """INSERT INTO auth_identities (user_id, provider, subject, email, last_login_at)
+               VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+            (user_id, info.provider, info.subject, info.email),
+        )
     logger.info("Provisioned new SSO user %s (id=%d) via %s", username, user_id, info.provider)
     return await _load_user_by_id(db, user_id)
 

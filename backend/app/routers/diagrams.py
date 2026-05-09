@@ -6,7 +6,7 @@ from app.schemas import (
     DiagramResponse,
 )
 from app.auth import get_current_user, require_admin
-from app.database import get_db
+from app.database import get_db, write_transaction
 from app.services.acl import list_readable_page_ids, resolve_page_permission
 from app.services.diagram_ref import extract_diagram_ids
 
@@ -141,12 +141,12 @@ async def create_diagram(
                 status_code=403,
                 detail="You do not have write permission on the owning page",
             )
-    cursor = await db.execute(
-        """INSERT INTO diagrams (name, xml_data, page_id, created_by, updated_at)
-           VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)""",
-        (body.name, body.xml_data, body.page_id, user["id"]),
-    )
-    await db.commit()
+    async with write_transaction(db):
+        cursor = await db.execute(
+            """INSERT INTO diagrams (name, xml_data, page_id, created_by, updated_at)
+               VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+            (body.name, body.xml_data, body.page_id, user["id"]),
+        )
     row = await db.execute_fetchall(
         "SELECT * FROM diagrams WHERE id = ?", (cursor.lastrowid,)
     )
@@ -195,10 +195,10 @@ async def update_diagram(
     if updates:
         updates.append("updated_at = CURRENT_TIMESTAMP")
         values.append(diagram_id)
-        await db.execute(
-            f"UPDATE diagrams SET {', '.join(updates)} WHERE id = ?", values
-        )
-        await db.commit()
+        async with write_transaction(db):
+            await db.execute(
+                f"UPDATE diagrams SET {', '.join(updates)} WHERE id = ?", values
+            )
 
     rows = await db.execute_fetchall(
         "SELECT * FROM diagrams WHERE id = ?", (diagram_id,)
@@ -226,8 +226,8 @@ async def delete_diagram(diagram_id: int, user=Depends(require_admin)):
                 detail="Diagram is referenced by one or more pages and cannot be deleted",
             )
 
-    await db.execute("DELETE FROM diagrams WHERE id = ?", (diagram_id,))
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute("DELETE FROM diagrams WHERE id = ?", (diagram_id,))
 
 
 @router.get("/{diagram_id}/svg")

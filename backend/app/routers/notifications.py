@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import get_current_user, require_real_user
-from app.database import get_db
+from app.database import get_db, write_transaction
 
 # Notifications are personal — guests don't receive any, so the whole
 # router is real-user-only.
@@ -52,11 +52,11 @@ async def list_notifications(
 @router.post("/read-all")
 async def mark_all_read(user=Depends(get_current_user)):
     db = await get_db()
-    await db.execute(
-        "UPDATE notifications SET read_at = CURRENT_TIMESTAMP WHERE user_id = ? AND read_at IS NULL",
-        (user["id"],),
-    )
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute(
+            "UPDATE notifications SET read_at = CURRENT_TIMESTAMP WHERE user_id = ? AND read_at IS NULL",
+            (user["id"],),
+        )
     return {"ok": True}
 
 
@@ -69,9 +69,9 @@ async def mark_read(notification_id: int, user=Depends(get_current_user)):
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Notification not found")
-    await db.execute(
-        "UPDATE notifications SET read_at = CURRENT_TIMESTAMP WHERE id = ?",
-        (notification_id,),
-    )
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute(
+            "UPDATE notifications SET read_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (notification_id,),
+        )
     return {"ok": True}

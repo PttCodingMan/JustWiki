@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.auth import get_current_user
-from app.database import get_db
+from app.database import get_db, write_transaction
 from app.routers.activity import log_activity
 from app.services.acl import invalidate_readable_cache, resolve_page_permission
 
@@ -215,21 +215,21 @@ async def put_page_acl(slug: str, body: AclPutBody, user=Depends(get_current_use
         await _validate_principal(db, r.principal_type, r.principal_id)
 
     # Atomically replace.
-    await db.execute("DELETE FROM page_acl WHERE page_id = ?", (page["id"],))
-    for r in body.rows:
-        await db.execute(
-            """INSERT INTO page_acl (page_id, principal_type, principal_id, permission)
-               VALUES (?, ?, ?, ?)""",
-            (page["id"], r.principal_type, r.principal_id, r.permission),
+    async with write_transaction(db):
+        await db.execute("DELETE FROM page_acl WHERE page_id = ?", (page["id"],))
+        for r in body.rows:
+            await db.execute(
+                """INSERT INTO page_acl (page_id, principal_type, principal_id, permission)
+                   VALUES (?, ?, ?, ?)""",
+                (page["id"], r.principal_type, r.principal_id, r.permission),
+            )
+        # Metadata intentionally omits principal details: activity_log is readable
+        # by any authenticated user (see pending finding #5), and leaking the
+        # principal/permission list would reveal organizational ACL structure.
+        await log_activity(
+            db, user["id"], "acl_updated", "page", page["id"],
+            {"slug": slug, "row_count": len(body.rows)},
         )
-    # Metadata intentionally omits principal details: activity_log is readable
-    # by any authenticated user (see pending finding #5), and leaking the
-    # principal/permission list would reveal organizational ACL structure.
-    await log_activity(
-        db, user["id"], "acl_updated", "page", page["id"],
-        {"slug": slug, "row_count": len(body.rows)},
-    )
-    await db.commit()
     invalidate_readable_cache()
 
     return await get_page_acl(slug=slug, user=user)
@@ -244,12 +244,12 @@ async def delete_page_acl(slug: str, user=Depends(get_current_user)):
     page = await _get_page_row(db, slug)
     await _require_manage_permission(db, user, page["id"])
 
-    await db.execute("DELETE FROM page_acl WHERE page_id = ?", (page["id"],))
-    await log_activity(
-        db, user["id"], "acl_cleared", "page", page["id"],
-        {"slug": slug},
-    )
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute("DELETE FROM page_acl WHERE page_id = ?", (page["id"],))
+        await log_activity(
+            db, user["id"], "acl_cleared", "page", page["id"],
+            {"slug": slug},
+        )
     invalidate_readable_cache()
 
     return await get_page_acl(slug=slug, user=user)

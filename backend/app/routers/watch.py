@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.auth import require_admin, require_real_user
-from app.database import get_db
+from app.database import get_db, write_transaction
 from app.services.acl import resolve_page_permission
 from app.services.notifications import validate_webhook_url
 
@@ -52,11 +52,11 @@ async def watch_page(slug: str, user=Depends(require_real_user)):
     db = await get_db()
     page_id = await _require_readable_page(db, user, slug)
 
-    await db.execute(
-        "INSERT OR IGNORE INTO page_watchers (user_id, page_id) VALUES (?, ?)",
-        (user["id"], page_id),
-    )
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute(
+            "INSERT OR IGNORE INTO page_watchers (user_id, page_id) VALUES (?, ?)",
+            (user["id"], page_id),
+        )
     return {"watching": True}
 
 
@@ -72,11 +72,11 @@ async def unwatch_page(slug: str, user=Depends(require_real_user)):
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = rows[0]["id"]
 
-    await db.execute(
-        "DELETE FROM page_watchers WHERE user_id = ? AND page_id = ?",
-        (user["id"], page_id),
-    )
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute(
+            "DELETE FROM page_watchers WHERE user_id = ? AND page_id = ?",
+            (user["id"], page_id),
+        )
     return {"watching": False}
 
 
@@ -112,11 +112,11 @@ async def create_webhook(body: WebhookCreate, user=Depends(require_admin)):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db = await get_db()
-    cursor = await db.execute(
-        "INSERT INTO webhooks (name, url, events, is_active) VALUES (?, ?, ?, ?)",
-        (body.name, body.url, body.events, 1 if body.is_active else 0),
-    )
-    await db.commit()
+    async with write_transaction(db):
+        cursor = await db.execute(
+            "INSERT INTO webhooks (name, url, events, is_active) VALUES (?, ?, ?, ?)",
+            (body.name, body.url, body.events, 1 if body.is_active else 0),
+        )
     row = await db.execute_fetchall(
         "SELECT id, name, url, events, is_active, created_at FROM webhooks WHERE id = ?",
         (cursor.lastrowid,),
@@ -152,8 +152,8 @@ async def update_webhook(webhook_id: int, body: WebhookUpdate, user=Depends(requ
 
     if updates:
         params.append(webhook_id)
-        await db.execute(f"UPDATE webhooks SET {', '.join(updates)} WHERE id = ?", params)
-        await db.commit()
+        async with write_transaction(db):
+            await db.execute(f"UPDATE webhooks SET {', '.join(updates)} WHERE id = ?", params)
 
     row = await db.execute_fetchall(
         "SELECT id, name, url, events, is_active, created_at FROM webhooks WHERE id = ?",
@@ -165,5 +165,5 @@ async def update_webhook(webhook_id: int, body: WebhookUpdate, user=Depends(requ
 @router.delete("/api/webhooks/{webhook_id}", status_code=204)
 async def delete_webhook(webhook_id: int, user=Depends(require_admin)):
     db = await get_db()
-    await db.execute("DELETE FROM webhooks WHERE id = ?", (webhook_id,))
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute("DELETE FROM webhooks WHERE id = ?", (webhook_id,))

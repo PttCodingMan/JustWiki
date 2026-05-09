@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import require_admin
 from app.config import settings as app_settings
-from app.database import get_db
+from app.database import get_db, write_transaction
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -65,21 +65,21 @@ async def get_settings():
 async def update_settings(body: SettingsUpdate, _=Depends(require_admin)):
     db = await get_db()
     payload = body.model_dump(exclude_none=True)
-    for key, raw in payload.items():
-        value = str(raw).strip()
-        # Empty string clears the override so the next read returns the
-        # built-in default. Without this, an admin couldn't blank the
-        # branding fields back to "JustWiki" without redeploying.
-        if value == "":
-            await db.execute("DELETE FROM site_settings WHERE key = ?", (key,))
-            continue
-        await db.execute(
-            """INSERT INTO site_settings (key, value, updated_at)
-               VALUES (?, ?, CURRENT_TIMESTAMP)
-               ON CONFLICT(key) DO UPDATE SET
-                   value = excluded.value,
-                   updated_at = CURRENT_TIMESTAMP""",
-            (key, value),
-        )
-    await db.commit()
+    async with write_transaction(db):
+        for key, raw in payload.items():
+            value = str(raw).strip()
+            # Empty string clears the override so the next read returns the
+            # built-in default. Without this, an admin couldn't blank the
+            # branding fields back to "JustWiki" without redeploying.
+            if value == "":
+                await db.execute("DELETE FROM site_settings WHERE key = ?", (key,))
+                continue
+            await db.execute(
+                """INSERT INTO site_settings (key, value, updated_at)
+                   VALUES (?, ?, CURRENT_TIMESTAMP)
+                   ON CONFLICT(key) DO UPDATE SET
+                       value = excluded.value,
+                       updated_at = CURRENT_TIMESTAMP""",
+                (key, value),
+            )
     return {**(await _read_all()), "anonymous_read": app_settings.ANONYMOUS_READ}

@@ -15,7 +15,7 @@ from app.auth import (
     resolve_request_credentials,
 )
 from app.config import settings
-from app.database import get_db
+from app.database import get_db, write_transaction
 from app.services.client_ip import client_ip
 
 logger = logging.getLogger(__name__)
@@ -185,10 +185,10 @@ async def update_profile(body: ProfileUpdateRequest, user=Depends(require_real_u
         raise HTTPException(status_code=400, detail="No fields to update")
 
     values.append(user["id"])
-    await db.execute(
-        f"UPDATE users SET {', '.join(updates)} WHERE id = ?", values
-    )
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute(
+            f"UPDATE users SET {', '.join(updates)} WHERE id = ?", values
+        )
 
     rows = await db.execute_fetchall(
         "SELECT id, username, role, display_name, email, bio, created_at FROM users WHERE id = ?",
@@ -223,9 +223,10 @@ async def change_password(body: ChangePasswordRequest, user=Depends(require_real
     if not await verify_password_async(body.old_password, rows[0]["password_hash"]):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
-    await db.execute(
-        "UPDATE users SET password_hash = ? WHERE id = ?",
-        (await hash_password_async(body.new_password), user["id"]),
-    )
-    await db.commit()
+    new_hash = await hash_password_async(body.new_password)
+    async with write_transaction(db):
+        await db.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (new_hash, user["id"]),
+        )
     return {"ok": True}

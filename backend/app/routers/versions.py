@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 from app.auth import get_current_user
 from app.database import get_db, write_transaction
-from app.services.acl import require_page_read
+from app.services.acl import PageAccess, page_dep
 from app.services.search import rebuild_search_index
 from app.services.wikilink import parse_and_update_backlinks
 from app.services.media_ref import parse_and_update_media_refs
@@ -36,16 +36,10 @@ async def list_versions(
     slug: str,
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
-    user=Depends(get_current_user),
+    ctx: PageAccess = Depends(page_dep("read")),
 ):
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = rows[0]["id"]
-    await require_page_read(db, user, page_id)
+    page_id = ctx.page["id"]
 
     offset = (page - 1) * per_page
     count_row = await db.execute_fetchall(
@@ -77,15 +71,9 @@ async def list_versions(
 
 
 @router.get("/{slug}/versions/{num}")
-async def get_version(slug: str, num: int, user=Depends(get_current_user)):
+async def get_version(slug: str, num: int, ctx: PageAccess = Depends(page_dep("read"))):
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = rows[0]["id"]
-    await require_page_read(db, user, page_id)
+    page_id = ctx.page["id"]
 
     version = await db.execute_fetchall(
         """SELECT v.*, u.username, u.display_name FROM page_versions v
@@ -103,16 +91,10 @@ async def diff_versions(
     slug: str,
     v1: int = Query(..., description="Older version number"),
     v2: int = Query(..., description="Newer version number"),
-    user=Depends(get_current_user),
+    ctx: PageAccess = Depends(page_dep("read")),
 ):
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = rows[0]["id"]
-    await require_page_read(db, user, page_id)
+    page_id = ctx.page["id"]
 
     ver1 = await db.execute_fetchall(
         "SELECT title, content_md FROM page_versions WHERE page_id = ? AND version_num = ?",
@@ -141,25 +123,11 @@ async def revert_to_version(
     slug: str,
     num: int,
     body: RevertRequest = RevertRequest(),
-    user=Depends(get_current_user),
+    ctx: PageAccess = Depends(page_dep("write")),
 ):
-    if user.get("role") == "viewer":
-        raise HTTPException(status_code=403, detail="Viewers cannot revert pages")
-
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT * FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-    current = dict(rows[0])
-
-    perm = await require_page_read(db, user, current["id"])
-    if perm == "read":
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have write permission on this page",
-        )
+    user = ctx.user
+    current = ctx.page
 
     # Optimistic lock — same contract as PUT /pages/{slug}. Reverting always
     # changes content, so the client must pin to a known base_version. If

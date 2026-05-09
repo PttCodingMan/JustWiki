@@ -1,7 +1,11 @@
 """Page + media ACL resolution.
 
 Single source of truth for "can user X do Y to page/media Z". Routers must
-call these helpers instead of doing their own role/creator checks.
+call these helpers instead of doing their own role/creator checks. Where
+practical, prefer the FastAPI dependency factories `page_dep("read")` /
+`page_dep("write")` / `page_dep("manage")` exported below — they fold
+slug-resolution and the permission check into the route signature so a
+new endpoint cannot accidentally skip the check.
 
 Resolution model (see /docs or the original plan for the full rationale):
 
@@ -22,8 +26,10 @@ Resolution model (see /docs or the original plan for the full rationale):
 
 import json
 import time
+from dataclasses import dataclass
+from typing import Literal
 
-from fastapi import HTTPException
+from fastapi import Depends, HTTPException
 
 # SQLite recursive-CTE safety cap: the parent chain should never be this
 # deep in real wikis, but the cap prevents a corrupted cyclic chain from
@@ -231,6 +237,94 @@ async def require_page_write(db, user: dict, page_id: int) -> str:
             status_code=403, detail="You do not have write permission on this page"
         )
     return perm
+
+
+PermLevel = Literal["read", "write", "manage"]
+
+
+@dataclass
+class PageAccess:
+    """What a slug-resolving ACL dependency hands a route.
+
+    Keeping the page row, the resolved permission, and the user together so
+    handlers don't need a second `SELECT * FROM pages WHERE slug = ?` after
+    the dependency has already done one.
+    """
+    page: dict
+    permission: str
+    user: dict
+
+
+def page_dep(level: PermLevel):
+    """FastAPI dependency factory that resolves `slug` and enforces ACL.
+
+    Usage in a route::
+
+        @router.get("/{slug}")
+        async def view(ctx: PageAccess = Depends(page_dep("read"))):
+            ...
+
+    The factory:
+
+      1. Looks up the live page row by the path's ``slug`` parameter.
+         404s if missing/soft-deleted, matching the app's policy of not
+         leaking page existence to unauthorised viewers.
+      2. Resolves the caller's effective permission via
+         `resolve_page_permission` and 404s if the answer is `none`
+         (so a denied user is indistinguishable from "doesn't exist").
+      3. For ``write`` and ``manage`` levels, additionally bounces the
+         synthetic anonymous guest (401) and the ``viewer`` role (403),
+         so a route never has to repeat those checks. This collapses
+         what used to be three separate guards into one Depends.
+
+    ``manage`` is currently the same gate as ``write`` but reserved as
+    a distinct level so future ACL evolution (e.g. an explicit "owner"
+    permission separate from write) only has to change `page_dep`.
+    """
+    if level not in ("read", "write", "manage"):
+        raise ValueError(f"page_dep: invalid level {level!r}")
+
+    # Local imports to avoid an at-import-time cycle through app.routers.*
+    # importing this module while it imports them. None of the symbols below
+    # are needed until a request actually fires the dependency, so the cost
+    # of this lookup happens once per process.
+    from app.auth import get_current_user
+    from app.database import get_db
+
+    async def _dep(slug: str, user=Depends(get_current_user)) -> PageAccess:
+        db = await get_db()
+        rows = await db.execute_fetchall(
+            "SELECT * FROM pages WHERE slug = ? AND deleted_at IS NULL",
+            (slug,),
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="Page not found")
+        page = dict(rows[0])
+
+        perm = await resolve_page_permission(db, user, page["id"])
+        if perm == "none":
+            raise HTTPException(status_code=404, detail="Page not found")
+
+        if level in ("write", "manage"):
+            # Viewer cap fires first so that anonymous (role='viewer') keeps
+            # the existing 403 response. The 401 branch only matters if a
+            # future flow surfaces an anonymous user with a non-viewer role.
+            if (user.get("role") or "editor") == "viewer":
+                raise HTTPException(
+                    status_code=403,
+                    detail="Viewers cannot perform this action",
+                )
+            if user.get("anonymous"):
+                raise HTTPException(status_code=401, detail="Login required")
+            if perm == "read":
+                raise HTTPException(
+                    status_code=403,
+                    detail="You do not have write permission on this page",
+                )
+
+        return PageAccess(page=page, permission=perm, user=user)
+
+    return _dep
 
 
 async def can_read_media(db, user: dict, media_id: int) -> bool:

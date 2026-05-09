@@ -7,7 +7,7 @@ can purge them forever.
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import get_current_user, require_admin
-from app.database import get_db
+from app.database import get_db, write_transaction
 from app.routers.activity import log_activity
 from app.services.acl import invalidate_readable_cache, resolve_page_permission
 from app.services.search import rebuild_search_index
@@ -88,19 +88,19 @@ async def restore_page(slug: str, user=Depends(get_current_user)):
             detail="Another page now uses this slug. Rename it first.",
         )
 
-    await db.execute(
-        "UPDATE pages SET deleted_at = NULL WHERE id = ?", (page["id"],)
-    )
-    # Re-add to search index and regenerate outgoing backlinks — they were not
-    # deleted from the backlinks table on soft-delete, but any links to pages
-    # that moved/were renamed while this one was in the trash would be stale.
-    await rebuild_search_index(db, page["id"], page["title"], page["content_md"])
-    await parse_and_update_backlinks(db, page["id"], page["content_md"])
-    await log_activity(
-        db, user["id"], "restored", "page", page["id"],
-        {"title": page["title"], "slug": slug},
-    )
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute(
+            "UPDATE pages SET deleted_at = NULL WHERE id = ?", (page["id"],)
+        )
+        # Re-add to search index and regenerate outgoing backlinks — they were not
+        # deleted from the backlinks table on soft-delete, but any links to pages
+        # that moved/were renamed while this one was in the trash would be stale.
+        await rebuild_search_index(db, page["id"], page["title"], page["content_md"])
+        await parse_and_update_backlinks(db, page["id"], page["content_md"])
+        await log_activity(
+            db, user["id"], "restored", "page", page["id"],
+            {"title": page["title"], "slug": slug},
+        )
     invalidate_readable_cache()
 
     # Return the fully re-hydrated page. Explicit column list so any future
@@ -131,12 +131,12 @@ async def purge_page(slug: str, user=Depends(require_admin)):
 
     # Explicitly remove from search index (in case it was re-added)
     from app.services.search import remove_from_search_index
-    await remove_from_search_index(db, page_id)
+    async with write_transaction(db):
+        await remove_from_search_index(db, page_id)
 
-    await db.execute("DELETE FROM pages WHERE id = ?", (page_id,))
-    await log_activity(
-        db, user["id"], "purged", "page", page_id,
-        {"title": page_title, "slug": slug},
-    )
-    await db.commit()
+        await db.execute("DELETE FROM pages WHERE id = ?", (page_id,))
+        await log_activity(
+            db, user["id"], "purged", "page", page_id,
+            {"title": page_title, "slug": slug},
+        )
     invalidate_readable_cache()

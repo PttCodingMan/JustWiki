@@ -6,7 +6,7 @@ from jose import JWTError, jwt
 import bcrypt
 
 from app.config import settings
-from app.database import get_db
+from app.database import get_db, write_transaction
 
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
@@ -116,11 +116,11 @@ async def _resolve_api_token(token: str) -> dict | None:
             if exp <= datetime.now(timezone.utc):
                 return None
 
-    await db.execute(
-        "UPDATE api_tokens SET last_used = CURRENT_TIMESTAMP WHERE id = ?",
-        (row["id"],),
-    )
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute(
+            "UPDATE api_tokens SET last_used = CURRENT_TIMESTAMP WHERE id = ?",
+            (row["id"],),
+        )
 
     return {
         "id": row["user_id"],

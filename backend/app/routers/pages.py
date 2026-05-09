@@ -10,7 +10,14 @@ from app.config import settings
 from app.schemas import PageCreate, PageUpdate, PageResponse, PageListResponse, PageMoveRequest
 from app.auth import get_current_user
 from app.database import get_db, write_transaction
-from app.services.acl import build_id_clause, invalidate_readable_cache, list_readable_page_ids, resolve_page_permission
+from app.services.acl import (
+    PageAccess,
+    build_id_clause,
+    invalidate_readable_cache,
+    list_readable_page_ids,
+    page_dep,
+    resolve_page_permission,
+)
 from app.services.search import rebuild_search_index, remove_from_search_index
 from app.services.wikilink import parse_and_update_backlinks
 from app.services.media_ref import parse_and_update_media_refs
@@ -311,24 +318,21 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
 
 
 @router.get("/{slug}", response_model=PageResponse)
-async def get_page(slug: str, user=Depends(get_current_user)):
+async def get_page(slug: str, ctx: PageAccess = Depends(page_dep("read"))):
+    # `page_dep("read")` already 404'd missing/unreadable pages and resolved
+    # the user's effective permission. We re-fetch with the author join
+    # because the dependency intentionally returns just the `pages` row.
     db = await get_db()
+    user = ctx.user
+    permission = ctx.permission
     rows = await db.execute_fetchall(
         """SELECT p.*, CASE WHEN u.display_name IS NOT NULL AND u.display_name != '' THEN u.display_name ELSE u.username END AS author_name
            FROM pages p
            LEFT JOIN users u ON u.id = p.created_by
-           WHERE p.slug = ? AND p.deleted_at IS NULL""",
-        (slug,),
+           WHERE p.id = ?""",
+        (ctx.page["id"],),
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-
     page = dict(rows[0])
-    permission = await resolve_page_permission(db, user, page["id"])
-    if permission == "none":
-        # Return 404 rather than 403 so unauthorized users can't probe for
-        # the existence of restricted pages.
-        raise HTTPException(status_code=404, detail="Page not found")
 
     # Increment view count (does not bump the content version), deduplicated
     # so refreshes / tab-switches by the same user don't inflate the count.
@@ -336,38 +340,27 @@ async def get_page(slug: str, user=Depends(get_current_user)):
     # same id=0 dedup key, which both makes the count meaningless and lets
     # one IP block all anonymous views from ever counting.
     if not user.get("anonymous"):
-        if await _should_count_view(db, user["id"], page["id"]):
-            await db.execute(
-                "UPDATE pages SET view_count = view_count + 1 WHERE id = ?", (page["id"],)
-            )
-            page["view_count"] += 1
-    await db.commit()
+        async with write_transaction(db):
+            if await _should_count_view(db, user["id"], page["id"]):
+                await db.execute(
+                    "UPDATE pages SET view_count = view_count + 1 WHERE id = ?", (page["id"],)
+                )
+                page["view_count"] += 1
 
     page["effective_permission"] = permission
     return page
 
 
 @router.put("/{slug}", response_model=PageResponse)
-async def update_page(slug: str, body: PageUpdate, user=Depends(get_current_user)):
-    if user.get("role") == "viewer":
-        raise HTTPException(status_code=403, detail="Viewers cannot edit pages")
-
+async def update_page(
+    slug: str, body: PageUpdate, ctx: PageAccess = Depends(page_dep("write")),
+):
+    # `page_dep("write")` already 404'd missing pages, 401'd guests, 403'd
+    # viewers and read-only ACL grants. The route only needs to enforce
+    # behaviours specific to update (optimistic lock, cycle check, etc.).
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT * FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-
-    current = dict(rows[0])
-    permission = await resolve_page_permission(db, user, current["id"])
-    if permission == "none":
-        raise HTTPException(status_code=404, detail="Page not found")
-    if permission == "read":
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have write permission on this page",
-        )
+    user = ctx.user
+    current = ctx.page
 
     # Optimistic lock. Required whenever the payload includes a content_md or
     # title change — those are the only edits that bump the version counter
@@ -474,16 +467,10 @@ async def update_page(slug: str, body: PageUpdate, user=Depends(get_current_user
 
 
 @router.get("/{slug}/children")
-async def get_children(slug: str, user=Depends(get_current_user)):
+async def get_children(slug: str, ctx: PageAccess = Depends(page_dep("read"))):
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = rows[0]["id"]
-    if await resolve_page_permission(db, user, page_id) == "none":
-        raise HTTPException(status_code=404, detail="Page not found")
+    user = ctx.user
+    page_id = ctx.page["id"]
 
     readable = await list_readable_page_ids(db, user)
     id_clause, id_params = build_id_clause(readable)
@@ -496,16 +483,10 @@ async def get_children(slug: str, user=Depends(get_current_user)):
 
 
 @router.get("/{slug}/backlinks")
-async def get_backlinks(slug: str, user=Depends(get_current_user)):
+async def get_backlinks(slug: str, ctx: PageAccess = Depends(page_dep("read"))):
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = rows[0]["id"]
-    if await resolve_page_permission(db, user, page_id) == "none":
-        raise HTTPException(status_code=404, detail="Page not found")
+    user = ctx.user
+    page_id = ctx.page["id"]
 
     readable = await list_readable_page_ids(db, user)
     id_clause, id_params = build_id_clause(readable, column="p.id")
@@ -521,26 +502,14 @@ async def get_backlinks(slug: str, user=Depends(get_current_user)):
 
 
 @router.patch("/{slug}/move")
-async def move_page(slug: str, body: PageMoveRequest, user=Depends(get_current_user)):
-    if user.get("role") == "viewer":
-        raise HTTPException(status_code=403, detail="Viewers cannot move pages")
-
+async def move_page(
+    slug: str,
+    body: PageMoveRequest,
+    ctx: PageAccess = Depends(page_dep("write")),
+):
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = rows[0]["id"]
-
-    src_perm = await resolve_page_permission(db, user, page_id)
-    if src_perm == "none":
-        raise HTTPException(status_code=404, detail="Page not found")
-    if src_perm == "read":
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have write permission on this page",
-        )
+    user = ctx.user
+    page_id = ctx.page["id"]
 
     updates = []
     params = []
@@ -567,46 +536,29 @@ async def move_page(slug: str, body: PageMoveRequest, user=Depends(get_current_u
         raise HTTPException(status_code=400, detail="No fields to update")
 
     params.append(slug)
-    await db.execute(f"UPDATE pages SET {', '.join(updates)} WHERE slug = ?", params)
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute(f"UPDATE pages SET {', '.join(updates)} WHERE slug = ?", params)
     if "parent_id" in body.model_fields_set:
         invalidate_readable_cache()  # parent change alters inherited ACL
     return {"ok": True}
 
 
 @router.delete("/{slug}")
-async def delete_page(slug: str, user=Depends(get_current_user)):
+async def delete_page(slug: str, ctx: PageAccess = Depends(page_dep("write"))):
     """Soft-delete a page. Moves it to the trash; it can be restored from there.
 
     Hard-deleting (purging) happens via DELETE /api/trash/{slug}, admin only.
     """
-    if user.get("role") == "viewer":
-        raise HTTPException(status_code=403, detail="Viewers cannot delete pages")
-
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id, title, created_by FROM pages WHERE slug = ? AND deleted_at IS NULL",
-        (slug,),
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found")
+    user = ctx.user
+    page_id = ctx.page["id"]
+    page_title = ctx.page["title"]
 
-    permission = await resolve_page_permission(db, user, rows[0]["id"])
-    if permission == "none":
-        raise HTTPException(status_code=404, detail="Page not found")
-    if permission == "read":
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have write permission on this page",
-        )
-
-    # Only admin or page creator can delete (preserves existing rule in
-    # addition to the ACL write check above).
-    if user["role"] != "admin" and rows[0]["created_by"] != user["id"]:
+    # Only admin or page creator can delete (the ACL write check above is
+    # necessary but not sufficient — content-collab editors with write don't
+    # automatically inherit deletion rights).
+    if user["role"] != "admin" and ctx.page["created_by"] != user["id"]:
         raise HTTPException(status_code=403, detail="Only the page creator or an admin can delete this page")
-
-    page_id = rows[0]["id"]
-    page_title = rows[0]["title"]
 
     async with write_transaction(db):
         # Soft delete: mark as deleted but keep the row, versions, and backlinks intact.

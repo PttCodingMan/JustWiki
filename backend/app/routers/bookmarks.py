@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.auth import get_current_user, require_real_user
-from app.database import get_db
-from app.services.acl import require_page_read
+from app.database import get_db, write_transaction
+from app.services.acl import PageAccess, page_dep
 
 # Bookmarks are inherently per-user; the synthetic guest has no place here,
 # so reject it at the router boundary instead of repeating the check on
@@ -28,23 +28,16 @@ async def list_bookmarks(user=Depends(get_current_user)):
 
 
 @router.post("/{slug}")
-async def add_bookmark(slug: str, user=Depends(get_current_user)):
+async def add_bookmark(slug: str, ctx: PageAccess = Depends(page_dep("read"))):
     db = await get_db()
-    page = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not page:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = page[0]["id"]
-    # Don't let unreadable pages enter the user's bookmark list — would also
-    # leak page existence to anyone who can guess slugs.
-    await require_page_read(db, user, page_id)
+    user = ctx.user
+    page_id = ctx.page["id"]
 
-    await db.execute(
-        "INSERT OR IGNORE INTO bookmarks (user_id, page_id) VALUES (?, ?)",
-        (user["id"], page_id),
-    )
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute(
+            "INSERT OR IGNORE INTO bookmarks (user_id, page_id) VALUES (?, ?)",
+            (user["id"], page_id),
+        )
     return {"ok": True}
 
 
@@ -59,24 +52,19 @@ async def remove_bookmark(slug: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Page not found")
     page_id = page[0]["id"]
 
-    await db.execute(
-        "DELETE FROM bookmarks WHERE user_id = ? AND page_id = ?",
-        (user["id"], page_id),
-    )
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute(
+            "DELETE FROM bookmarks WHERE user_id = ? AND page_id = ?",
+            (user["id"], page_id),
+        )
     return {"ok": True}
 
 
 @router.get("/check/{slug}")
-async def check_bookmark(slug: str, user=Depends(get_current_user)):
+async def check_bookmark(slug: str, ctx: PageAccess = Depends(page_dep("read"))):
     db = await get_db()
-    page = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not page:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = page[0]["id"]
-    await require_page_read(db, user, page_id)
+    user = ctx.user
+    page_id = ctx.page["id"]
 
     rows = await db.execute_fetchall(
         "SELECT 1 FROM bookmarks WHERE user_id = ? AND page_id = ?",

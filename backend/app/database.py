@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import logging
 import re
 import sqlite3
@@ -1361,18 +1362,44 @@ async def get_db() -> aiosqlite.Connection:
 # next commit() flushes both. This lock serialises multi-step write critical
 # sections and rolls back partial writes on exception so a failed handler
 # can't be committed by an unrelated request that runs next.
+#
+# Every mutation path on a per-request connection MUST go through
+# `write_transaction`. A bare `await db.commit()` outside the lock can flush
+# another concurrent task's half-written state.
 _write_lock = asyncio.Lock()
+
+# Per-task flag set while inside an outer write_transaction so nested calls
+# from helper services become no-op pass-throughs (the outer context owns the
+# commit/rollback). ContextVar is task-local in asyncio, so each request gets
+# its own copy.
+_in_write_tx: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "_in_write_tx", default=False
+)
 
 
 @asynccontextmanager
 async def write_transaction(db):
+    """Serialised write critical section with commit-or-rollback semantics.
+
+    Re-entrant: if the current task is already inside a write_transaction
+    (e.g. a router calls into a service that also wraps its writes), the
+    inner block runs without re-acquiring the lock or committing. The
+    outermost context owns the commit; on any exception anywhere inside,
+    it rolls back the whole batch.
+    """
+    if _in_write_tx.get():
+        yield
+        return
     async with _write_lock:
+        token = _in_write_tx.set(True)
         try:
             yield
             await db.commit()
         except BaseException:
             await db.rollback()
             raise
+        finally:
+            _in_write_tx.reset(token)
 
 
 async def rebuild_all_search_indexes(db):

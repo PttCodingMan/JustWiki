@@ -1,10 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.auth import get_current_user, require_real_user
-from app.database import get_db
+from app.database import get_db, write_transaction
 from app.services.acl import (
+    PageAccess,
     list_readable_page_ids,
-    require_page_read,
-    require_page_write,
+    page_dep,
 )
 
 router = APIRouter(prefix="/api", tags=["tags"])
@@ -41,16 +41,9 @@ async def list_tags(user=Depends(get_current_user)):
 
 
 @router.get("/pages/{slug}/tags")
-async def get_page_tags(slug: str, user=Depends(get_current_user)):
+async def get_page_tags(slug: str, ctx: PageAccess = Depends(page_dep("read"))):
     db = await get_db()
-    page = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not page:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = page[0]["id"]
-    # 404 (not 403) on deny so the existence of a restricted page isn't probed.
-    await require_page_read(db, user, page_id)
+    page_id = ctx.page["id"]
 
     rows = await db.execute_fetchall(
         """SELECT t.id, t.name FROM tags t
@@ -63,68 +56,65 @@ async def get_page_tags(slug: str, user=Depends(get_current_user)):
 
 
 @router.post("/pages/{slug}/tags")
-async def add_tag_to_page(slug: str, body: dict, user=Depends(require_real_user)):
+async def add_tag_to_page(
+    slug: str,
+    body: dict,
+    # `require_real_user` first so anonymous gets a clean 401 instead of the
+    # 403/404 page_dep would emit. Tagging is treated as a personal-write
+    # action: even if a guest could read the page, they can't graffiti it.
+    _real=Depends(require_real_user),
+    ctx: PageAccess = Depends(page_dep("write")),
+):
     db = await get_db()
-    page = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not page:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = page[0]["id"]
-    # Tagging counts as a content edit; require write on the target page so
-    # viewers (and the synthetic guest, double-belted by require_real_user)
-    # can't graffiti private pages they happen to know the slug of.
-    await require_page_write(db, user, page_id)
+    page_id = ctx.page["id"]
 
     tag_name = body.get("name", "").strip()
     if not tag_name:
         raise HTTPException(status_code=400, detail="Tag name required")
 
-    # Get or create tag
-    existing = await db.execute_fetchall("SELECT id FROM tags WHERE name = ?", (tag_name,))
-    if existing:
-        tag_id = existing[0]["id"]
-    else:
-        cursor = await db.execute("INSERT INTO tags (name) VALUES (?)", (tag_name,))
-        tag_id = cursor.lastrowid
+    async with write_transaction(db):
+        # Get or create tag
+        existing = await db.execute_fetchall("SELECT id FROM tags WHERE name = ?", (tag_name,))
+        if existing:
+            tag_id = existing[0]["id"]
+        else:
+            cursor = await db.execute("INSERT INTO tags (name) VALUES (?)", (tag_name,))
+            tag_id = cursor.lastrowid
 
-    # Link tag to page (ignore if already exists)
-    await db.execute(
-        "INSERT OR IGNORE INTO page_tags (page_id, tag_id) VALUES (?, ?)",
-        (page_id, tag_id),
-    )
-    await db.commit()
+        # Link tag to page (ignore if already exists)
+        await db.execute(
+            "INSERT OR IGNORE INTO page_tags (page_id, tag_id) VALUES (?, ?)",
+            (page_id, tag_id),
+        )
 
     return {"id": tag_id, "name": tag_name}
 
 
 @router.delete("/pages/{slug}/tags/{tag_name}")
-async def remove_tag_from_page(slug: str, tag_name: str, user=Depends(require_real_user)):
+async def remove_tag_from_page(
+    slug: str,
+    tag_name: str,
+    _real=Depends(require_real_user),
+    ctx: PageAccess = Depends(page_dep("write")),
+):
     db = await get_db()
-    page = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not page:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = page[0]["id"]
-    await require_page_write(db, user, page_id)
+    page_id = ctx.page["id"]
 
     tag = await db.execute_fetchall("SELECT id FROM tags WHERE name = ?", (tag_name,))
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
     tag_id = tag[0]["id"]
 
-    await db.execute(
-        "DELETE FROM page_tags WHERE page_id = ? AND tag_id = ?",
-        (page_id, tag_id),
-    )
-    await db.commit()
-
-    # Clean up orphan tags (tags with no pages)
-    await db.execute(
-        "DELETE FROM tags WHERE id = ? AND NOT EXISTS (SELECT 1 FROM page_tags WHERE tag_id = ?)",
-        (tag_id, tag_id),
-    )
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute(
+            "DELETE FROM page_tags WHERE page_id = ? AND tag_id = ?",
+            (page_id, tag_id),
+        )
+        # Clean up orphan tags (tags with no pages) in the same transaction so
+        # a crash between unlink and orphan-cleanup can't leave dangling rows.
+        await db.execute(
+            "DELETE FROM tags WHERE id = ? AND NOT EXISTS (SELECT 1 FROM page_tags WHERE tag_id = ?)",
+            (tag_id, tag_id),
+        )
 
     return {"ok": True}

@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 
-from app.auth import get_current_user, require_real_user
-from app.database import get_db
-from app.services.acl import require_page_read, require_page_write
+from app.auth import require_real_user
+from app.database import get_db, write_transaction
+from app.services.acl import PageAccess, page_dep
 from app.services.mention import notify_mentions
 from app.routers.activity import log_activity
 
@@ -24,20 +24,13 @@ async def list_comments(
     slug: str,
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
-    user=Depends(get_current_user),
+    ctx: PageAccess = Depends(page_dep("read")),
 ):
-    # Intentionally `get_current_user`, not `require_real_user`: with
-    # ANONYMOUS_READ on, guests can read comments on pages they can
-    # otherwise read (require_page_read below still enforces ACL).
-    # Posting is gated separately via `require_real_user` on the writes.
+    # `page_dep("read")` enforces ACL — guests with ANONYMOUS_READ on can
+    # still see comments on otherwise-readable pages. Posting is handled
+    # by the `write` dep on the mutating routes.
     db = await get_db()
-    page_rows = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not page_rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = page_rows[0]["id"]
-    await require_page_read(db, user, page_id)
+    page_id = ctx.page["id"]
 
     offset = (page - 1) * per_page
     count_rows = await db.execute_fetchall(
@@ -64,30 +57,32 @@ async def list_comments(
 
 
 @router.post("", status_code=201)
-async def create_comment(slug: str, body: CommentCreate, user=Depends(require_real_user)):
+async def create_comment(
+    slug: str,
+    body: CommentCreate,
+    # Personal-write action — guest gets 401 before page_dep runs so an
+    # ACL-restricted page returns 401, not 404.
+    _real=Depends(require_real_user),
+    ctx: PageAccess = Depends(page_dep("write")),
+):
     if not body.content.strip():
         raise HTTPException(status_code=400, detail="Comment content cannot be empty")
     db = await get_db()
-    page_rows = await db.execute_fetchall(
-        "SELECT id, title FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not page_rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = page_rows[0]["id"]
-    page_title = page_rows[0]["title"]
-    await require_page_write(db, user, page_id)
+    user = ctx.user
+    page_id = ctx.page["id"]
+    page_title = ctx.page["title"]
 
     comment_text = body.content.strip()
-    cursor = await db.execute(
-        "INSERT INTO comments (page_id, user_id, content) VALUES (?, ?, ?)",
-        (page_id, user["id"], comment_text),
-    )
-    comment_id = cursor.lastrowid
-    await log_activity(
-        db, user["id"], "commented", "page", page_id,
-        {"title": page_title, "comment_id": comment_id},
-    )
-    await db.commit()
+    async with write_transaction(db):
+        cursor = await db.execute(
+            "INSERT INTO comments (page_id, user_id, content) VALUES (?, ?, ?)",
+            (page_id, user["id"], comment_text),
+        )
+        comment_id = cursor.lastrowid
+        await log_activity(
+            db, user["id"], "commented", "page", page_id,
+            {"title": page_title, "comment_id": comment_id},
+        )
 
     await notify_mentions(
         db,
@@ -110,17 +105,16 @@ async def create_comment(slug: str, body: CommentCreate, user=Depends(require_re
 
 @router.put("/{comment_id}")
 async def update_comment(
-    slug: str, comment_id: int, body: CommentUpdate, user=Depends(require_real_user)
+    slug: str,
+    comment_id: int,
+    body: CommentUpdate,
+    _real=Depends(require_real_user),
+    ctx: PageAccess = Depends(page_dep("write")),
 ):
     db = await get_db()
-    # Verify the comment exists AND belongs to the page in the URL
-    page_rows = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not page_rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = page_rows[0]["id"]
-    await require_page_write(db, user, page_id)
+    user = ctx.user
+    page_id = ctx.page["id"]
+    # Verify the comment exists AND belongs to the page in the URL.
     rows = await db.execute_fetchall(
         "SELECT id, user_id, page_id, content FROM comments WHERE id = ?", (comment_id,)
     )
@@ -133,11 +127,11 @@ async def update_comment(
 
     old_content = rows[0]["content"]
     new_content = body.content.strip()
-    await db.execute(
-        "UPDATE comments SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        (new_content, comment_id),
-    )
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute(
+            "UPDATE comments SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (new_content, comment_id),
+        )
 
     await notify_mentions(
         db,
@@ -160,16 +154,16 @@ async def update_comment(
 
 
 @router.delete("/{comment_id}", status_code=204)
-async def delete_comment(slug: str, comment_id: int, user=Depends(require_real_user)):
+async def delete_comment(
+    slug: str,
+    comment_id: int,
+    _real=Depends(require_real_user),
+    ctx: PageAccess = Depends(page_dep("write")),
+):
     db = await get_db()
-    # Verify the comment exists AND belongs to the page in the URL
-    page_rows = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
-    )
-    if not page_rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = page_rows[0]["id"]
-    await require_page_write(db, user, page_id)
+    user = ctx.user
+    page_id = ctx.page["id"]
+    # Verify the comment exists AND belongs to the page in the URL.
     rows = await db.execute_fetchall(
         "SELECT id, user_id, page_id FROM comments WHERE id = ?", (comment_id,)
     )
@@ -180,5 +174,5 @@ async def delete_comment(slug: str, comment_id: int, user=Depends(require_real_u
     if rows[0]["user_id"] != user["id"] and user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Not allowed")
 
-    await db.execute("DELETE FROM comments WHERE id = ?", (comment_id,))
-    await db.commit()
+    async with write_transaction(db):
+        await db.execute("DELETE FROM comments WHERE id = ?", (comment_id,))
