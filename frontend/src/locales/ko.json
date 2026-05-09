@@ -533,7 +533,8 @@
       "title": "계정 정보",
       "username": "사용자명",
       "role": "역할",
-      "created": "생성일"
+      "created": "생성일",
+      "viewPublic": "공개 프로필 보기"
     },
     "edit": {
       "title": "프로필 편집",

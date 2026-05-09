@@ -533,7 +533,8 @@
       "title": "帳號資訊",
       "username": "使用者名稱",
       "role": "角色",
-      "created": "建立時間"
+      "created": "建立時間",
+      "viewPublic": "檢視公開頁面"
     },
     "edit": {
       "title": "編輯個人檔案",

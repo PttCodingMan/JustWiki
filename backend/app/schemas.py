@@ -70,6 +70,7 @@ class PageResponse(BaseModel):
     mindmap_layout: MindmapLayout | None = None
     created_by: int | None = None
     author_name: str | None = None
+    author_username: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
     effective_permission: str | None = None

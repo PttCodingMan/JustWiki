@@ -326,7 +326,8 @@ async def get_page(slug: str, ctx: PageAccess = Depends(page_dep("read"))):
     user = ctx.user
     permission = ctx.permission
     rows = await db.execute_fetchall(
-        """SELECT p.*, CASE WHEN u.display_name IS NOT NULL AND u.display_name != '' THEN u.display_name ELSE u.username END AS author_name
+        """SELECT p.*, u.username AS author_username,
+                  CASE WHEN u.display_name IS NOT NULL AND u.display_name != '' THEN u.display_name ELSE u.username END AS author_name
            FROM pages p
            LEFT JOIN users u ON u.id = p.created_by
            WHERE p.id = ?""",

@@ -89,7 +89,16 @@ export default function Activity() {
                   {text}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium text-text">{a.display_name || a.username || t('activity.system')}</span>
+                  {a.username ? (
+                    <Link
+                      to={`/u/${encodeURIComponent(a.username)}`}
+                      className="text-sm font-medium text-text hover:underline"
+                    >
+                      {a.display_name || a.username}
+                    </Link>
+                  ) : (
+                    <span className="text-sm font-medium text-text">{t('activity.system')}</span>
+                  )}
                   <span className="text-sm text-text-secondary">
                     {' '}{text}{' '}
                     {meta.slug && a.action !== 'deleted' ? (

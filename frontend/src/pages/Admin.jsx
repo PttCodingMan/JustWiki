@@ -462,7 +462,14 @@ function UsersSection() {
             <tbody>
               {users.map((u) => (
                 <tr key={u.id} className="border-b border-border">
-                  <td className="py-2 px-3 text-text">{u.username}</td>
+                  <td className="py-2 px-3 text-text">
+                    <Link
+                      to={`/u/${encodeURIComponent(u.username)}`}
+                      className="hover:underline"
+                    >
+                      {u.username}
+                    </Link>
+                  </td>
                   <td className="py-2 px-3">
                     <select
                       value={u.role}

@@ -533,7 +533,8 @@
       "title": "Account Info",
       "username": "Username",
       "role": "Role",
-      "created": "Created"
+      "created": "Created",
+      "viewPublic": "View public profile"
     },
     "edit": {
       "title": "Edit Profile",
