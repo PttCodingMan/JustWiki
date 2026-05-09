@@ -38,7 +38,11 @@
     "react-force-graph-3d": "^1.29.1",
     "react-i18next": "^17.0.4",
     "react-router-dom": "^7.14.0",
+    "rehype-katex": "^7.0.1",
+    "rehype-stringify": "^10.0.1",
+    "remark-directive": "^4.0.0",
     "remark-math": "^6.0.0",
+    "remark-rehype": "^11.1.2",
     "three": "^0.184.0",
     "zustand": "^5.0.12"
   },

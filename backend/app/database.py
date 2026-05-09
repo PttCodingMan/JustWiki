@@ -3,6 +3,7 @@ import contextvars
 import logging
 import re
 import sqlite3
+from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -15,11 +16,10 @@ logger = logging.getLogger(__name__)
 _TRIGRAM_MIN_VERSION = (3, 43, 0)
 _TOKENIZE_RE = re.compile(r"""tokenize\s*=\s*['"](\w+)['"]""", re.IGNORECASE)
 
-_db: aiosqlite.Connection | None = None
-# Serialise the first-touch connection setup so two concurrent `get_db()`
-# calls (e.g. racing lifespan/boot-time tasks) can't both open a connection
-# and leak the loser.
-_db_lock = asyncio.Lock()
+# Reader pool size. SQLite WAL allows N readers + 1 writer concurrently; the
+# limit on N is just how many simultaneous in-flight requests we want to
+# parallelise. 8 is comfortable for a small wiki and cheap to hold open.
+_READER_POOL_SIZE = 8
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS users (
@@ -1341,32 +1341,241 @@ async def _ensure_fts5_index(db) -> bool:
     return True
 
 
-async def get_db() -> aiosqlite.Connection:
-    global _db
-    if _db is not None:
-        return _db
-    async with _db_lock:
-        # Re-check after acquiring: another coroutine may have finished
-        # opening the connection while we were blocked on the lock.
-        if _db is None:
-            conn = await aiosqlite.connect(settings.DB_PATH)
-            conn.row_factory = aiosqlite.Row
-            await conn.execute("PRAGMA journal_mode=WAL")
-            await conn.execute("PRAGMA foreign_keys=ON")
-            _db = conn
-    return _db
-
-
-# All requests share one aiosqlite connection (see `_db` above), so concurrent
-# writers' statements interleave inside a single implicit transaction; the
-# next commit() flushes both. This lock serialises multi-step write critical
-# sections and rolls back partial writes on exception so a failed handler
-# can't be committed by an unrelated request that runs next.
+# ── Connection pool ────────────────────────────────────────────────────────
 #
-# Every mutation path on a per-request connection MUST go through
-# `write_transaction`. A bare `await db.commit()` outside the lock can flush
-# another concurrent task's half-written state.
-_write_lock = asyncio.Lock()
+# WAL mode allows many readers to run in parallel against the same SQLite
+# file alongside a single writer. The previous design serialised everything
+# through one shared aiosqlite connection, which negated that property.
+#
+# Now: a small pool of reader connections + one dedicated writer connection.
+# Each HTTP request borrows a reader for the duration of the handler (set by
+# `request_db_middleware` in main.py); inside `write_transaction(...)` the
+# bound connection is swapped to the writer for the duration of the block,
+# then restored. Boot/admin code (lifespan, conftest) uses `boot_db_context()`
+# to bind the writer for sequential setup work.
+#
+# The router-facing API is a `ConnectionProxy` returned from `get_db()`. It
+# delegates every attribute lookup to whatever connection is currently bound
+# to this asyncio task via `_request_conn`, so existing call sites of the
+# form `db = await get_db(); await db.execute(...)` keep working without
+# changes when the bound connection is later swapped to the writer inside a
+# `write_transaction`.
+
+
+class ConnectionPool:
+    """Reader pool + single writer connection over one SQLite file.
+
+    Connections are created lazily on first use (deferred until inside an
+    asyncio loop, which keeps construction at module-import time loop-free
+    and lets pytest-asyncio drive initialisation in its own loop).
+    """
+
+    def __init__(self, db_path: str, reader_size: int = _READER_POOL_SIZE):
+        self._db_path = db_path
+        self._reader_size = reader_size
+        # Ready readers, popped on acquire and pushed back on release.
+        self._readers: deque[aiosqlite.Connection] = deque()
+        self._writer: aiosqlite.Connection | None = None
+        # Counts how many readers exist (in-pool + checked-out).
+        self._reader_count = 0
+        # Lazily created on first use so the lock binds to whichever loop
+        # actually drives the pool. asyncio.Lock created at import time is
+        # fine on Python 3.10+, but recreating per-loop sidesteps any
+        # surprises if tests reuse the pool across multiple loops.
+        self._init_lock: asyncio.Lock | None = None
+        self._reader_sem: asyncio.Semaphore | None = None
+
+    def _ensure_primitives(self) -> None:
+        if self._init_lock is None:
+            self._init_lock = asyncio.Lock()
+        if self._reader_sem is None:
+            self._reader_sem = asyncio.Semaphore(self._reader_size)
+
+    async def _make_connection(self) -> aiosqlite.Connection:
+        conn = await aiosqlite.connect(self._db_path)
+        try:
+            conn.row_factory = aiosqlite.Row
+            # busy_timeout lets a writer wait briefly for the WAL writer slot
+            # rather than failing immediately. 5 s is generous for a small wiki.
+            await conn.execute("PRAGMA busy_timeout=5000")
+            await conn.execute("PRAGMA foreign_keys=ON")
+        except BaseException:
+            await conn.close()
+            raise
+        return conn
+
+    async def get_writer(self) -> aiosqlite.Connection:
+        self._ensure_primitives()
+        if self._writer is not None:
+            return self._writer
+        async with self._init_lock:
+            if self._writer is None:
+                conn = await self._make_connection()
+                try:
+                    # journal_mode persists in the DB file itself, so a
+                    # re-open of an already-WAL database doesn't need to
+                    # set it again. Re-issuing `PRAGMA journal_mode=WAL`
+                    # on an already-WAL connection takes a brief lock
+                    # that conflicts with FTS5 shadow tables (repro:
+                    # PRAGMA → DROP TABLE on an FTS5 index → "database
+                    # table is locked"). Query first; only switch if not
+                    # already WAL.
+                    rows = await conn.execute_fetchall("PRAGMA journal_mode")
+                    current_mode = str(rows[0][0]).lower() if rows else ""
+                    if current_mode != "wal":
+                        await conn.execute("PRAGMA journal_mode=WAL")
+                except BaseException:
+                    # If post-connect setup fails, close the half-built
+                    # connection so we don't leak its worker thread when a
+                    # retry opens a fresh one.
+                    await conn.close()
+                    raise
+                self._writer = conn
+        return self._writer
+
+    @asynccontextmanager
+    async def acquire_reader(self):
+        """Borrow a reader connection. Release on exit."""
+        self._ensure_primitives()
+        # Make sure WAL is enabled before any reader opens, otherwise the
+        # first reader could race the writer's PRAGMA and end up in rollback
+        # journal mode for its lifetime.
+        await self.get_writer()
+        async with self._reader_sem:
+            conn = await self._take_reader()
+            try:
+                yield conn
+            finally:
+                self._readers.append(conn)
+
+    async def _take_reader(self) -> aiosqlite.Connection:
+        if self._readers:
+            return self._readers.popleft()
+        # Pool not yet full — open another connection on demand. Bounded
+        # by the semaphore above so we never exceed `_reader_size`.
+        async with self._init_lock:
+            if self._readers:
+                return self._readers.popleft()
+            if self._reader_count < self._reader_size:
+                conn = await self._make_connection()
+                self._reader_count += 1
+                return conn
+        # Semaphore granted a slot, pool is empty AND already at size: this
+        # is an invariant violation (a release lost track of a connection
+        # or someone changed _reader_size at runtime). Fail loudly rather
+        # than silently growing the pool past its bound.
+        raise RuntimeError(
+            "ConnectionPool invariant violated: reader semaphore granted a "
+            "slot but pool is empty and at capacity. This usually means a "
+            "reader was acquired without going through acquire_reader()."
+        )
+
+    async def close(self) -> None:
+        if self._writer is not None:
+            await self._writer.close()
+            self._writer = None
+        while self._readers:
+            await self._readers.popleft().close()
+        self._reader_count = 0
+
+
+_pool: ConnectionPool | None = None
+
+
+def _get_pool() -> ConnectionPool:
+    global _pool
+    if _pool is None:
+        _pool = ConnectionPool(settings.DB_PATH)
+    return _pool
+
+
+class _BoundScope:
+    """Per-request / per-boot-context binding object.
+
+    Carries the currently-bound connection plus a `released` flag set by
+    the owning context manager when its scope ends. The proxy checks the
+    flag on every access so background tasks that captured the request's
+    ContextVar via ``asyncio.create_task(...)`` and then try to use the
+    DB after the handler returned get a loud, immediate error instead of
+    silently sharing a reader connection with another request.
+
+    `conn` is mutated in-place by ``write_transaction`` to swap the bound
+    connection between reader and writer; the same scope object is shared
+    by parent and any tasks spawned with the parent's context, so the
+    swap is visible everywhere consistently.
+    """
+
+    __slots__ = ("conn", "released")
+
+    def __init__(self, conn: aiosqlite.Connection):
+        self.conn = conn
+        self.released = False
+
+
+# Scope bound to the current asyncio task. Set by request middleware (with
+# a reader scope) for the duration of an HTTP handler, by `boot_db_context`
+# (with a writer scope) for lifespan / test fixture setup. Inside a
+# `write_transaction` the scope's `conn` is temporarily swapped to the
+# writer; the scope itself is the same object, so spawned tasks observe a
+# consistent view.
+_request_scope: contextvars.ContextVar[_BoundScope | None] = (
+    contextvars.ContextVar("_request_scope", default=None)
+)
+
+
+class ConnectionProxy:
+    """Forwards every aiosqlite Connection method to whatever connection
+    is bound to the current asyncio task via `_request_scope`.
+
+    This indirection is what lets ``db = await get_db()`` outside a
+    ``write_transaction`` later route writes to the writer connection
+    when the same ``db`` is used inside the block: the proxy looks up
+    the current bound connection on every attribute access, so the swap
+    performed by ``write_transaction`` is transparent to call sites.
+    """
+
+    __slots__ = ()
+
+    def _conn(self) -> aiosqlite.Connection:
+        scope = _request_scope.get()
+        if scope is None:
+            raise RuntimeError(
+                "get_db() called outside a request or boot_db_context. "
+                "If this is startup/test code, wrap it in `async with "
+                "boot_db_context(): ...`."
+            )
+        if scope.released:
+            raise RuntimeError(
+                "get_db() called after the bound connection scope ended. "
+                "This typically means an asyncio.create_task() spawned "
+                "inside a request handler kept running after the handler "
+                "returned and tried to use the DB. Either await the work "
+                "before returning, or open a fresh boot_db_context inside "
+                "the spawned task."
+            )
+        return scope.conn
+
+    def __getattr__(self, name):
+        # __getattr__ only fires for names not found via normal lookup,
+        # so forwarding the entire aiosqlite Connection surface (execute,
+        # execute_fetchall, executemany, commit, rollback, cursor, ...)
+        # works without an explicit allow-list.
+        return getattr(self._conn(), name)
+
+
+_proxy = ConnectionProxy()
+
+
+async def get_db():
+    """Return a connection proxy bound to the current request/boot scope.
+
+    Public signature unchanged from the previous implementation: callers
+    keep doing ``db = await get_db(); await db.execute(...)``. The proxy
+    routes each call to whichever real connection is bound right now —
+    a reader for plain handlers, the writer inside ``write_transaction``.
+    """
+    return _proxy
+
 
 # Per-task flag set while inside an outer write_transaction so nested calls
 # from helper services become no-op pass-throughs (the outer context owns the
@@ -1376,30 +1585,114 @@ _in_write_tx: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "_in_write_tx", default=False
 )
 
+# Serialises writer-connection statements at the Python level. SQLite itself
+# would interleave concurrent writers via BEGIN IMMEDIATE / busy_timeout, but
+# we share one writer connection across requests, so two tasks issuing
+# statements on it would mix into one transaction. The lock keeps each
+# write_transaction's statements contiguous on the writer.
+_writer_lock = asyncio.Lock()
+
 
 @asynccontextmanager
-async def write_transaction(db):
+async def write_transaction(db=None):
     """Serialised write critical section with commit-or-rollback semantics.
+
+    Behaviour from the caller's point of view is unchanged: wrap a block of
+    writes in ``async with write_transaction(db):`` and on success the
+    transaction commits, on exception it rolls back. The ``db`` argument is
+    accepted for back-compat with the previous signature but ignored — the
+    block always runs against the pool's writer connection regardless of
+    which connection the caller picked up earlier from ``get_db()``.
 
     Re-entrant: if the current task is already inside a write_transaction
     (e.g. a router calls into a service that also wraps its writes), the
     inner block runs without re-acquiring the lock or committing. The
     outermost context owns the commit; on any exception anywhere inside,
     it rolls back the whole batch.
+
+    Thread/task safety: do not span an ``asyncio.create_task(...)`` from
+    inside a write_transaction. The spawned task copies the parent's
+    ``_in_write_tx=True`` and would skip lock acquisition while issuing
+    statements concurrently with the parent on the same writer connection.
+    Either ``await`` the work inline or open a fresh write_transaction
+    inside the spawned task.
     """
+    del db  # accepted for back-compat; the pool decides the writer connection.
+    scope = _request_scope.get()
+    if scope is None:
+        raise RuntimeError(
+            "write_transaction used outside a request or boot_db_context. "
+            "If this is startup/test code, wrap it in `async with "
+            "boot_db_context(): ...`."
+        )
+
     if _in_write_tx.get():
-        yield
+        # Nested: we're already on the writer with the lock held.
+        yield scope.conn
         return
-    async with _write_lock:
-        token = _in_write_tx.set(True)
+
+    pool = _get_pool()
+    writer = await pool.get_writer()
+
+    async with _writer_lock:
+        prev_conn = scope.conn
+        scope.conn = writer
+        in_tx_token = _in_write_tx.set(True)
         try:
-            yield
-            await db.commit()
+            yield writer
+            await writer.commit()
         except BaseException:
-            await db.rollback()
+            await writer.rollback()
             raise
         finally:
-            _in_write_tx.reset(token)
+            _in_write_tx.reset(in_tx_token)
+            scope.conn = prev_conn
+
+
+@asynccontextmanager
+async def boot_db_context():
+    """Bind the writer connection for code that runs outside a request.
+
+    Used by app lifespan (init_db, ensure_admin_exists, seed_welcome_page)
+    and pytest fixtures. Inside this context, ``get_db()`` returns a proxy
+    pointing at the writer connection so existing helpers keep working
+    without per-call wiring. Does NOT open a transaction — boot code
+    continues to use explicit ``await db.commit()`` calls as it always has.
+    """
+    pool = _get_pool()
+    writer = await pool.get_writer()
+    scope = _BoundScope(writer)
+    token = _request_scope.set(scope)
+    try:
+        yield writer
+    finally:
+        scope.released = True
+        _request_scope.reset(token)
+
+
+@asynccontextmanager
+async def request_db_context():
+    """Bind a reader connection for the lifetime of one HTTP request.
+
+    Mounted as ASGI middleware in main.py. Inside the context, ``get_db()``
+    returns the borrowed reader; ``write_transaction`` temporarily swaps it
+    out for the writer.
+
+    The reader is released back to the pool on exit and the scope object
+    is marked released, so any code that captured this request's context
+    (via ``asyncio.create_task(...)``, etc.) and then tries to use the DB
+    after the handler returns gets a loud RuntimeError from the proxy
+    instead of silently sharing a reader with the next request.
+    """
+    pool = _get_pool()
+    async with pool.acquire_reader() as reader:
+        scope = _BoundScope(reader)
+        token = _request_scope.set(scope)
+        try:
+            yield reader
+        finally:
+            scope.released = True
+            _request_scope.reset(token)
 
 
 async def rebuild_all_search_indexes(db):
@@ -1609,7 +1902,7 @@ async def init_db():
 
 
 async def close_db():
-    global _db
-    if _db:
-        await _db.close()
-        _db = None
+    global _pool
+    if _pool is not None:
+        await _pool.close()
+        _pool = None

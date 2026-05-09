@@ -4,7 +4,7 @@ import os
 import tempfile
 from httpx import AsyncClient, ASGITransport
 from app.main import app
-from app.database import init_db, close_db, get_db
+from app.database import boot_db_context, close_db, init_db
 from app.config import settings
 
 from app.auth import create_token, hash_password
@@ -15,29 +15,65 @@ def setup_test_env():
     # Use a temporary file for the test database
     fd, temp_path = tempfile.mkstemp()
     os.close(fd)
-    
+
     settings.DB_PATH = temp_path
-    
-    # Run migrations
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(init_db())
-    
+
+    # Initialise the schema in a throwaway loop, then close the pool. Each
+    # test function runs in its own pytest-asyncio loop and rebuilds the
+    # pool on first use; sharing a pool across loops doesn't work because
+    # the asyncio primitives inside it are loop-bound.
+    async def _init() -> None:
+        async with boot_db_context():
+            await init_db()
+        await close_db()
+
+    asyncio.run(_init())
+
     yield
-    
-    # Cleanup
-    loop.run_until_complete(close_db())
+
     if os.path.exists(temp_path):
         os.remove(temp_path)
+
+
+@pytest.fixture(autouse=True)
+async def _bound_db_per_test():
+    """Bind the writer connection for the test's duration and tear the pool
+    down on the way out.
+
+    Many tests call ``await get_db()`` directly outside of an HTTP request
+    (helpers that insert rows, assertions that read state). The ConnectionProxy
+    needs ``_request_conn`` to be set in the asyncio task for those calls to
+    work, so we wrap the entire test in a ``boot_db_context``. Tests still
+    issuing HTTP requests via ``client`` go through the request middleware,
+    which temporarily swaps the bound connection to a reader for the request
+    and restores the writer binding on the way out.
+
+    pytest-asyncio creates a fresh event loop per test function, and the
+    pool's asyncio primitives are loop-bound. ``close_db()`` on teardown
+    drops the pool so the next test rebuilds it in its own loop.
+    """
+    async with boot_db_context() as conn:
+        try:
+            yield conn
+        finally:
+            await close_db()
+
 
 @pytest.fixture
 async def client():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
+
 @pytest.fixture
-async def db():
-    return await get_db()
+async def db(_bound_db_per_test):
+    # Re-export the writer connection bound by the autouse fixture. Tests
+    # that issue `await db.execute(...); await db.commit()` write through
+    # the writer; subsequent HTTP requests in the same test go through the
+    # middleware and read via a fresh reader connection. Reader sees only
+    # *committed* state, so tests that insert via `db` must commit before
+    # making an HTTP request that expects to see the row.
+    return _bound_db_per_test
 
 @pytest.fixture
 async def auth_user(db):

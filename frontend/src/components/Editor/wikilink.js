@@ -1,41 +1,6 @@
 import { $nodeSchema, $inputRule, $remark } from '@milkdown/kit/utils'
 import { InputRule } from '@milkdown/prose/inputrules'
-import { findAndReplace } from 'mdast-util-find-and-replace'
-
-const WIKILINK_RE = /(!?)\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]/g
-
-function remarkWikilinkPlugin() {
-  const data = this.data()
-  const toMarkdownExtensions =
-    data.toMarkdownExtensions || (data.toMarkdownExtensions = [])
-
-  toMarkdownExtensions.push({
-    handlers: {
-      wikilink(node) {
-        const slug = node.slug || ''
-        const display = node.display ? `|${node.display}` : ''
-        const prefix = node.transclusion ? '!' : ''
-        return `${prefix}[[${slug}${display}]]`
-      },
-    },
-    unsafe: [{ character: '[', inConstruct: ['phrasing'] }],
-  })
-
-  return (tree) => {
-    findAndReplace(tree, [
-      [
-        WIKILINK_RE,
-        (_match, bang, slug, display) => ({
-          type: 'wikilink',
-          slug: slug.trim(),
-          display: (display || '').trim(),
-          transclusion: bang === '!',
-          data: { hName: 'span' },
-        }),
-      ],
-    ])
-  }
-}
+import { remarkWikilinkPlugin } from '../../lib/markdown/plugins/wikilink'
 
 export const remarkWikilink = $remark('wikilink', () => remarkWikilinkPlugin)
 

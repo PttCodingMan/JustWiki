@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import DOMPurify from 'dompurify'
 import 'katex/dist/katex.min.css'
 import { renderMarkdown } from '../../lib/markdown'
+import { renderMarkdownV2, isV2Enabled } from '../../lib/markdown/render-v2'
 import { ensureMermaid } from '../../lib/mermaidBootstrap'
 import api from '../../api/client'
 
@@ -72,10 +73,16 @@ export default function MarkdownViewer({
   diagrams = EMPTY_DIAGRAMS,
   onHeadings,
 }) {
-  const html = useMemo(
-    () => sanitizeMarkdownHtml(renderMarkdown(content || '')),
-    [content],
-  )
+  const html = useMemo(() => {
+    // V2 pipeline (remark-based, shared parser with the editor) is opt-in
+    // for now via `localStorage.markdown.v2 === 'true'`. The flag flip
+    // happens at module load time per render call, not per mount, so a
+    // user toggling it in DevTools sees the change on the next navigation
+    // without a full reload. Once v2 reaches feature-parity with v1 (see
+    // markdown.test.js golden cases) it will replace this branch.
+    const render = isV2Enabled() ? renderMarkdownV2 : renderMarkdown
+    return sanitizeMarkdownHtml(render(content || ''))
+  }, [content])
   const containerRef = useRef(null)
   const navigate = useNavigate()
   const [lightboxSvg, setLightboxSvg] = useState(null)

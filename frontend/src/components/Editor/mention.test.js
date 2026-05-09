@@ -2,46 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkStringify from 'remark-stringify'
-import { findAndReplace } from 'mdast-util-find-and-replace'
-
-// Same regexes the production plugin uses. Duplicated here so this test
-// stays parser-only (no Milkdown runtime).
-const _NAME = '[A-Za-z0-9][A-Za-z0-9_-]*'
-const GROUP_MENTION_RE = new RegExp(`(^|[^A-Za-z0-9_@/])@@(${_NAME})`, 'g')
-const USER_MENTION_RE = new RegExp(`(^|[^A-Za-z0-9_@/])@(?!@)(${_NAME})`, 'g')
-
-function remarkMentionPlugin() {
-  const data = this.data()
-  const toMarkdownExtensions =
-    data.toMarkdownExtensions || (data.toMarkdownExtensions = [])
-  toMarkdownExtensions.push({
-    handlers: {
-      mention(node) {
-        const sigil = node.group ? '@@' : '@'
-        return `${sigil}${node.name || ''}`
-      },
-    },
-    unsafe: [{ character: '@', inConstruct: ['phrasing'] }],
-  })
-  return (tree) => {
-    findAndReplace(tree, [
-      [
-        GROUP_MENTION_RE,
-        (_m, lead, name) => [
-          { type: 'text', value: lead },
-          { type: 'mention', name: name.trim(), group: true, data: { hName: 'span' } },
-        ],
-      ],
-      [
-        USER_MENTION_RE,
-        (_m, lead, name) => [
-          { type: 'text', value: lead },
-          { type: 'mention', name: name.trim(), group: false, data: { hName: 'span' } },
-        ],
-      ],
-    ])
-  }
-}
+import { remarkMentionPlugin } from '../../lib/markdown/plugins/mention'
 
 function parseTree(md) {
   const processor = unified().use(remarkParse).use(remarkMentionPlugin)

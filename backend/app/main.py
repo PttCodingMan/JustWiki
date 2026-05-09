@@ -8,7 +8,14 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app import __version__
 from app.config import settings
-from app.database import init_db, close_db, seed_welcome_page, get_db
+from app.database import (
+    boot_db_context,
+    close_db,
+    get_db,
+    init_db,
+    request_db_context,
+    seed_welcome_page,
+)
 from app.auth import ensure_admin_exists
 from app.routers import auth_router, oauth_router, pages, media, templates, search, tags, activity, bookmarks, versions, diagrams, users, comments, backup, export, trash, notifications, watch, public, dashboard, acl, groups, ai, tokens, settings as settings_router
 
@@ -92,15 +99,42 @@ def _check_security():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _check_security()
-    await init_db()
-    await ensure_admin_exists()
-    db = await get_db()
-    await seed_welcome_page(db)
+    # Boot work runs against the writer connection. boot_db_context binds it
+    # to the asyncio task so existing helpers (init_db, ensure_admin_exists,
+    # seed_welcome_page) keep finding the right connection through get_db().
+    async with boot_db_context() as db:
+        await init_db()
+        await ensure_admin_exists()
+        await seed_welcome_page(db)
     yield
     await close_db()
 
 
 app = FastAPI(title="JustWiki", version=__version__, lifespan=lifespan)
+
+
+@app.middleware("http")
+async def request_db_scope(request: Request, call_next):
+    """Borrow a reader connection from the pool for this request.
+
+    This binds an aiosqlite reader to the asyncio task so any subsequent
+    ``await get_db()`` returns a proxy that routes to it. Inside a
+    ``write_transaction(...)`` block the bound connection is temporarily
+    swapped to the writer; on the way out of the block it's restored to
+    this reader, which is then released back to the pool when the request
+    finishes.
+
+    Starlette wraps middleware in registration order, so the FIRST
+    `add_middleware` / `@app.middleware("http")` call ends up innermost.
+    This decorator is the first one in the file, which makes it the
+    innermost layer — the route handler and its dependencies run inside
+    the bound scope, and that's all we need. CSRF / Session / CORS run
+    outside it (none of them touch the DB). If a future middleware needs
+    DB access, register it AFTER this one (or move this registration
+    later) so it ends up inside the bound scope.
+    """
+    async with request_db_context():
+        return await call_next(request)
 
 
 @app.middleware("http")
