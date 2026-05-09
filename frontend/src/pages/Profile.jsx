@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import useAuth from '../store/useAuth'
 import api from '../api/client'
@@ -91,7 +92,15 @@ export default function Profile() {
 
       {/* Account Info */}
       <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
-        <h2 className="text-lg font-semibold text-text mb-4">{t('profile.account.title')}</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-text">{t('profile.account.title')}</h2>
+          <Link
+            to={`/u/${encodeURIComponent(profile.username)}`}
+            className="text-sm text-primary hover:underline"
+          >
+            {t('profile.account.viewPublic')}
+          </Link>
+        </div>
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <span className="text-text-secondary">{t('profile.account.username')}</span>

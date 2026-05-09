@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import DOMPurify from 'dompurify'
 import useAuth from '../store/useAuth'
@@ -26,7 +27,16 @@ function CommentItem({ comment, currentUser, onDelete, onUpdate, pageSlug }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-medium text-text">{comment.display_name || comment.username}</span>
+          {comment.username ? (
+            <Link
+              to={`/u/${encodeURIComponent(comment.username)}`}
+              className="text-sm font-medium text-text hover:underline"
+            >
+              {comment.display_name || comment.username}
+            </Link>
+          ) : (
+            <span className="text-sm font-medium text-text">{comment.display_name || '?'}</span>
+          )}
           <span className="text-xs text-text-secondary">{new Date(comment.created_at).toLocaleString()}</span>
           {comment.updated_at !== comment.created_at && (
             <span className="text-xs text-text-secondary">{t('comments.edited')}</span>

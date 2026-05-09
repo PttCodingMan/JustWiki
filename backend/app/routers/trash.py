@@ -25,6 +25,7 @@ async def list_trash(user=Depends(get_current_user)):
     base_sql = """
         SELECT p.id, p.slug, p.title, p.content_md, p.parent_id, p.version,
                p.view_count, p.created_by, p.deleted_at, p.updated_at,
+               u.username AS author_username,
                CASE WHEN u.display_name IS NOT NULL AND u.display_name != ''
                     THEN u.display_name ELSE u.username END AS author_name
         FROM pages p

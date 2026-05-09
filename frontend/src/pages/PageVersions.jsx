@@ -223,7 +223,19 @@ export default function PageVersions() {
                   </button>
                 </div>
                 <div className="text-xs text-text-secondary mt-1">
-                  {v.display_name || v.username || t('versions.unknownAuthor')} &middot; {new Date(v.edited_at).toLocaleString()}
+                  {v.username ? (
+                    <Link
+                      to={`/u/${encodeURIComponent(v.username)}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="hover:text-text hover:underline"
+                    >
+                      {v.display_name || v.username}
+                    </Link>
+                  ) : (
+                    t('versions.unknownAuthor')
+                  )}
+                  {' '}&middot;{' '}
+                  {new Date(v.edited_at).toLocaleString()}
                 </div>
                 <div className="text-xs text-text-secondary mt-0.5 truncate">{v.title}</div>
               </div>

@@ -533,7 +533,8 @@
       "title": "アカウント情報",
       "username": "ユーザー名",
       "role": "ロール",
-      "created": "作成日"
+      "created": "作成日",
+      "viewPublic": "公開プロフィールを見る"
     },
     "edit": {
       "title": "プロフィールを編集",

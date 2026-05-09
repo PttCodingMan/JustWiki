@@ -452,7 +452,18 @@ export default function PageView() {
         </div>
 
         <div className="text-sm text-text-secondary mb-6">
-          {page.author_name && <>{page.author_name} &middot; </>}
+          {page.author_name && (
+            <>
+              {page.author_username ? (
+                <Link to={`/u/${encodeURIComponent(page.author_username)}`} className="hover:text-text hover:underline">
+                  {page.author_name}
+                </Link>
+              ) : (
+                page.author_name
+              )}
+              {' '}&middot;{' '}
+            </>
+          )}
           /{page.slug} &middot; {t('common.views', { count: page.view_count })} &middot; {t('pageView.updated', { date: new Date(page.updated_at).toLocaleString() })}
           {page.is_public && <> &middot; <span title={t('pageView.publicTitle')}>{t('pageView.publicLabel')}</span></>}
           {watcherCount > 0 && <> &middot; {t('pageView.watchingCount', { count: watcherCount })}</>}

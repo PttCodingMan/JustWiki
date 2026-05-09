@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import useAuth from '../store/useAuth'
@@ -105,7 +105,18 @@ export default function Trash() {
                     <div className="text-xs text-text-secondary">/{item.slug}</div>
                   </td>
                   <td className="px-4 py-3 text-text-secondary">
-                    {item.author_name || '—'}
+                    {item.author_name ? (
+                      item.author_username ? (
+                        <Link
+                          to={`/u/${encodeURIComponent(item.author_username)}`}
+                          className="hover:text-text hover:underline"
+                        >
+                          {item.author_name}
+                        </Link>
+                      ) : (
+                        item.author_name
+                      )
+                    ) : '—'}
                   </td>
                   <td className="px-4 py-3 text-text-secondary">
                     {item.deleted_at ? new Date(item.deleted_at).toLocaleString() : '—'}
