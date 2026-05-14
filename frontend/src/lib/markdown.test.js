@@ -425,4 +425,27 @@ describe('stripBrTags', () => {
     const md = '# Heading\n\nHello world\n\n- item'
     expect(stripBrTags(md)).toBe(md)
   })
+
+  it('removes <br /> inside an empty GFM table cell (no other content)', () => {
+    // Milkdown's remarkPreserveEmptyLinePlugin serializes empty table cells as
+    // <br />. Stripping it keeps the cell empty without breaking the row.
+    const tableWithEmptyCell = '| a | b |\n| :--- | :--- |\n| x | <br /> |'
+    expect(stripBrTags(tableWithEmptyCell)).toBe('| a | b |\n| :--- | :--- |\n| x | |')
+  })
+
+  it('preserves <br /> inside a non-empty table cell as raw HTML', () => {
+    // A user-inserted hard break (Shift+Enter) inside a cell should stay as
+    // <br> so the viewer can render it inline without splitting the table row.
+    const nonEmpty = '| a | b |\n| --- | --- |\n| line1<br />line2 | val |'
+    expect(stripBrTags(nonEmpty)).toBe('| a | b |\n| --- | --- |\n| line1<br />line2 | val |')
+  })
+
+  it('still converts <br /> to hard break outside table rows', () => {
+    const mixed = 'Para one<br />\npara two\n\n| h |\n| --- |\n| <br /> |'
+    expect(stripBrTags(mixed)).toBe('Para one  \npara two\n\n| h |\n| --- |\n| |')
+  })
+
+  it('handles <br /> at offset 0 (start of source)', () => {
+    expect(stripBrTags('<br />\nx')).toBe('  \nx')
+  })
 })

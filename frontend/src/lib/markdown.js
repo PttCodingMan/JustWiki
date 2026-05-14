@@ -511,7 +511,45 @@ export function renderMentionsOnly(text) {
 // markdown when copying/exporting, so we normalize those to CommonMark hard
 // breaks (two trailing spaces + newline). Any following newline is absorbed
 // to avoid turning `<br />\n` into an accidental paragraph break.
+//
+// Exception: inside GFM table rows (lines that start with `|`), converting
+// `<br>` to `  \n` would split the table row across two lines and cause
+// markdown-it to render spurious extra rows. We handle two sub-cases:
+//
+//   • Empty cell (Milkdown's remarkPreserveEmptyLinePlugin serializes empty
+//     table cells as `<br />`): the `<br>` is the *only* non-whitespace
+//     content in the cell — strip it entirely so the cell stays empty.
+//
+//   • Non-empty cell (user inserted a hard break via Shift+Enter): the `<br>`
+//     has real text on either side — keep it as raw `<br>` so the viewer can
+//     render it as an inline line break without breaking the table structure.
 export function stripBrTags(source) {
   if (!source) return source
-  return source.replace(/<br\s*\/?>[ \t]*\n?/gi, '  \n')
+  return source.replace(/<br\s*\/?>[ \t]*\n?/gi, (match, offset) => {
+    // Determine the start of the current line.
+    const lineStart = source.lastIndexOf('\n', offset - 1) + 1
+    const line = source.slice(lineStart, offset)
+    // Not a table row — convert to a CommonMark hard break.
+    if (!/^\s*\|/.test(line)) return '  \n'
+
+    // Inside a table row.  Check whether the <br> is the sole non-whitespace
+    // content of its cell by inspecting the text between the nearest `|`
+    // delimiters on each side of the match.
+    const matchEnd = offset + match.length
+    // Content before the match on the same line, back to the preceding `|`.
+    const beforePipe = line.lastIndexOf('|')
+    const before = beforePipe === -1 ? line : line.slice(beforePipe + 1)
+    // Content after the match on the same line, up to the next `|` or EOL.
+    const afterLine = source.slice(matchEnd)
+    const nextPipe = afterLine.search(/[|\n]/)
+    const after = nextPipe === -1 ? afterLine : afterLine.slice(0, nextPipe)
+
+    if (/\S/.test(before) || /\S/.test(after)) {
+      // Cell has real content — preserve the raw <br> tag so the viewer
+      // can render it as an inline line break without corrupting the row.
+      return match.replace(/[ \t]*\n?$/, '')
+    }
+    // Cell is empty — strip the <br> entirely.
+    return ''
+  })
 }
