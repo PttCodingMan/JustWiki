@@ -130,13 +130,11 @@ export default function PublicPageView({ notFound }) {
             </div>
           </article>
 
-          {page.page_type !== 'mindmap' && (
-            <aside className="hidden lg:block no-print">
-              <div className="page-right-rail">
-                <TableOfContents headings={headings} />
-              </div>
-            </aside>
-          )}
+          <aside className="hidden lg:block no-print">
+            <div className="page-right-rail">
+              <TableOfContents headings={headings} />
+            </div>
+          </aside>
         </div>
       </main>
       {footerText && (
