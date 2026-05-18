@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import publicApi from '../api/publicClient'
 import MarkdownViewer from '../components/Viewer/MarkdownViewer'
 import MindmapView from '../components/MindmapView'
+import TableOfContents from '../components/Viewer/TableOfContents'
 import ThemeSwitcher from '../components/ThemeSwitcher'
 import useSettings from '../store/useSettings'
 
@@ -26,6 +27,8 @@ export default function PublicPageView({ notFound }) {
   const siteName = useSettings((s) => s.site_name)
   const footerText = useSettings((s) => s.footer_text)
   const [state, setState] = useState({ status: 'loading', slug: null, page: null })
+  const [headings, setHeadings] = useState([])
+  const handleHeadings = useCallback((items) => setHeadings(items), [])
   const reqIdRef = useRef(0)
 
   // Inject meta tags: noindex (Q11) + same-origin referrer (Q9).
@@ -101,27 +104,38 @@ export default function PublicPageView({ notFound }) {
           </Link>
         </div>
       </header>
-      <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-8 py-8">
-        <h1 className="text-3xl font-bold text-text mb-2">{page.title}</h1>
-        <div className="text-sm text-text-secondary mb-6">
-          {page.author_name && <>{page.author_name} &middot; </>}
-          {t('publicView.updated', { date: new Date(page.updated_at).toLocaleString() })}
+      <main className="flex-1 w-full px-4 sm:px-8 py-8">
+        <div className="max-w-6xl xl:max-w-7xl 2xl:max-w-[100rem] mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_220px] 2xl:grid-cols-[minmax(0,1fr)_260px] lg:gap-8 2xl:gap-12">
+          <article>
+            <h1 className="text-3xl font-bold text-text mb-2">{page.title}</h1>
+            <div className="text-sm text-text-secondary mb-6">
+              {page.author_name && <>{page.author_name} &middot; </>}
+              {t('publicView.updated', { date: new Date(page.updated_at).toLocaleString() })}
+            </div>
+            <div className="bg-surface rounded-xl shadow-sm border border-border p-6 sm:p-8">
+              {page.page_type === 'mindmap' ? (
+                <MindmapView
+                  content={page.content_md}
+                  title={page.title}
+                  layout={page.mindmap_layout || 'lr'}
+                />
+              ) : (
+                <MarkdownViewer
+                  content={page.content_md}
+                  publicMode
+                  diagrams={page.diagrams || {}}
+                  onHeadings={handleHeadings}
+                />
+              )}
+            </div>
+          </article>
+
+          <aside className="hidden lg:block no-print">
+            <div className="page-right-rail">
+              <TableOfContents headings={headings} />
+            </div>
+          </aside>
         </div>
-        <article className="bg-surface rounded-xl shadow-sm border border-border p-6 sm:p-8">
-          {page.page_type === 'mindmap' ? (
-            <MindmapView
-              content={page.content_md}
-              title={page.title}
-              layout={page.mindmap_layout || 'lr'}
-            />
-          ) : (
-            <MarkdownViewer
-              content={page.content_md}
-              publicMode
-              diagrams={page.diagrams || {}}
-            />
-          )}
-        </article>
       </main>
       {footerText && (
         <footer className="text-center text-xs text-text-secondary py-4">
