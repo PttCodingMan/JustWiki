@@ -261,6 +261,8 @@ class WikilinkMenu {
     this.selectedIndex = 0
     this.active = false
     this.triggerPos = null  // doc position where [[ starts
+    this._lastQuery = null
+    this._lastPagesCount = -1  // -1 forces a render on first show()
 
     // Cache pages list
     this.loadPages()
@@ -277,6 +279,16 @@ class WikilinkMenu {
   }
 
   show(view, from, query) {
+    if (this.active && this.triggerPos === from && this._lastQuery === query
+        && this._lastPagesCount === this.pages.length) {
+      // Re-position only — query and page list unchanged, no need to re-render
+      const coords = view.coordsAtPos(view.state.selection.head)
+      this.el.style.left = coords.left + 'px'
+      this.el.style.top = (coords.bottom + 4) + 'px'
+      return
+    }
+    this._lastQuery = query
+    this._lastPagesCount = this.pages.length
     this.active = true
     this.triggerPos = from
     this.filter(query)
@@ -294,6 +306,8 @@ class WikilinkMenu {
     this.active = false
     this.el.style.display = 'none'
     this.triggerPos = null
+    this._lastQuery = null
+    this._lastPagesCount = -1
   }
 
   filter(query) {
@@ -787,6 +801,41 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
       })
     })
 
+    // On Windows, compositionend fires before the keydown for the Enter that
+    // confirmed the IME selection. By the time handleKeyDown runs, both
+    // event.isComposing and view.composing are false, so ProseMirror's default
+    // Enter handler creates a spurious newline (causing the "line shifts down"
+    // symptom). Track composition state via DOM events and clear the flag one
+    // microtask later so that post-composition Enter keydown is suppressed.
+    const compositionGuardPlugin = $prose(() => {
+      let _imeComposing = false
+      return new Plugin({
+        props: {
+          handleDOMEvents: {
+            compositionstart(_view, _event) {
+              _imeComposing = true
+              return false
+            },
+            compositionend(_view, _event) {
+              // setTimeout(0) rather than Promise microtask — on Windows the
+              // post-composition Enter keydown may arrive in the same task after
+              // compositionend, and microtasks run within that same task before
+              // the next macrotask, making the delay insufficient.
+              setTimeout(() => { _imeComposing = false }, 0)
+              return false
+            },
+          },
+          handleKeyDown(_view, event) {
+            if (_imeComposing && event.key === 'Enter') {
+              event.preventDefault()
+              return true
+            }
+            return false
+          },
+        },
+      })
+    })
+
     const init = async () => {
       const editor = await MilkdownEditor.make()
         .config((ctx) => {
@@ -827,6 +876,7 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
         .use(mention)
         .use(mentionPlugin)
         .use(tabOutPlugin)
+        .use(compositionGuardPlugin)
         .use(tableTooltip(tableTooltipLabelsRef.current))
         .create()
 
