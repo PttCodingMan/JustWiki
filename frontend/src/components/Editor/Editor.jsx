@@ -16,6 +16,7 @@ import { mention } from './mention'
 import { math, mathBlockSchema } from './math'
 import { tableTooltip } from './tableTooltip'
 import { tablePasteExpand } from './tablePasteExpand'
+import { isStrayPostCompositionEnter } from './imeGuard'
 
 const SLASH_ITEM_DEFS = [
   { id: 'h1', icon: 'H1' },
@@ -801,32 +802,24 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
       })
     })
 
-    // On Windows, compositionend fires before the keydown for the Enter that
-    // confirmed the IME selection. By the time handleKeyDown runs, both
-    // event.isComposing and view.composing are false, so ProseMirror's default
-    // Enter handler creates a spurious newline (causing the "line shifts down"
-    // symptom). Track composition state via DOM events and clear the flag one
-    // microtask later so that post-composition Enter keydown is suppressed.
+    // On Windows, the Enter that confirms an IME selection can surface as a
+    // stray keydown fired right after compositionend (isComposing already
+    // false), which ProseMirror's default Enter handler would turn into a
+    // spurious block split. Suppress only that stray Enter — scoped to a
+    // short window after compositionend — and never an Enter that is still
+    // part of an active composition (see imeGuard.js for the rationale).
     const compositionGuardPlugin = $prose(() => {
-      let _imeComposing = false
+      let lastCompositionEndAt = 0
       return new Plugin({
         props: {
           handleDOMEvents: {
-            compositionstart(_view, _event) {
-              _imeComposing = true
-              return false
-            },
             compositionend(_view, _event) {
-              // setTimeout(0) rather than Promise microtask — on Windows the
-              // post-composition Enter keydown may arrive in the same task after
-              // compositionend, and microtasks run within that same task before
-              // the next macrotask, making the delay insufficient.
-              setTimeout(() => { _imeComposing = false }, 0)
+              lastCompositionEndAt = performance.now()
               return false
             },
           },
           handleKeyDown(_view, event) {
-            if (_imeComposing && event.key === 'Enter') {
+            if (isStrayPostCompositionEnter(event, lastCompositionEndAt, performance.now())) {
               event.preventDefault()
               return true
             }
