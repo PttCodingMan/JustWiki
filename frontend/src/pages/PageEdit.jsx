@@ -177,7 +177,10 @@ export default function PageEdit() {
     try {
       // Milkdown round-trips pasted <br> tags as raw HTML; normalize to
       // markdown hard breaks before persisting so new content stays clean.
-      const cleanContent = stripBrTags(content)
+      // Read live markdown from the editor to bypass the 200ms debounce and
+      // the addToHistory:false filter that makes ordered-list edits drop silently.
+      const liveMarkdown = editorRef.current?.getMarkdown?.()
+      const cleanContent = stripBrTags(liveMarkdown != null ? liveMarkdown : content)
       const payload = {
         title,
         content_md: cleanContent,

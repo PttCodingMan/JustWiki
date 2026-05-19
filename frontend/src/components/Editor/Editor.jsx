@@ -1,6 +1,6 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Editor as MilkdownEditor, rootCtx, defaultValueCtx, commandsCtx } from '@milkdown/kit/core'
+import { Editor as MilkdownEditor, rootCtx, defaultValueCtx, commandsCtx, serializerCtx, editorViewCtx } from '@milkdown/kit/core'
 import { commonmark, headingSchema, blockquoteSchema, hrSchema, bulletListSchema, orderedListSchema, codeBlockSchema, insertImageCommand } from '@milkdown/kit/preset/commonmark'
 import { clearTextInCurrentBlockCommand, setBlockTypeCommand, wrapInBlockTypeCommand, addBlockTypeCommand } from '@milkdown/kit/preset/commonmark'
 import { gfm } from '@milkdown/kit/preset/gfm'
@@ -640,7 +640,17 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
       const view = editorViewRef.current
       if (!view) return
       view.focus()
-    }
+    },
+    getMarkdown() {
+      const editor = editorRef.current
+      if (!editor) return null
+      let md = null
+      editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx)
+        md = ctx.get(serializerCtx)(view.state.doc)
+      })
+      return md
+    },
   }), [])
 
   useEffect(() => {

@@ -138,9 +138,10 @@ export default function NewPage() {
     setSaving(true)
     setError('')
     try {
+      const liveMarkdown = editorRef.current?.getMarkdown?.()
       const page = await createPage({
         title,
-        content_md: stripBrTags(content),
+        content_md: stripBrTags(liveMarkdown != null ? liveMarkdown : content),
         template_id: selectedTemplate?.id,
         parent_id: parentMissing ? null : parentId,
         page_type: pageType,

@@ -21,7 +21,7 @@ from app.routers import auth_router, oauth_router, pages, media, templates, sear
 
 logger = logging.getLogger("justwiki")
 
-_ALLOWED_ORIGINS = {"http://localhost:5173", "http://localhost:3000"} | {
+_ALLOWED_ORIGINS = {"http://localhost:5173", "http://localhost:3000", "http://localhost"} | {
     o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()
 }
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
@@ -191,7 +191,8 @@ async def csrf_guard(request: Request, call_next):
             return None
 
     candidate = origin or _origin_of(referer)
-    if candidate not in _ALLOWED_ORIGINS:
+    is_localhost = candidate is not None and candidate.startswith("http://localhost")
+    if not is_localhost and candidate not in _ALLOWED_ORIGINS:
         return JSONResponse(
             status_code=403,
             content={"detail": "CSRF check failed: origin not allowed"},
