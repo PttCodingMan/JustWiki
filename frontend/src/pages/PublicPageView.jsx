@@ -6,6 +6,7 @@ import MarkdownViewer from '../components/Viewer/MarkdownViewer'
 import MindmapView from '../components/MindmapView'
 import TableOfContents from '../components/Viewer/TableOfContents'
 import ThemeSwitcher from '../components/ThemeSwitcher'
+import TocDrawer from '../components/Viewer/TocDrawer'
 import useSettings from '../store/useSettings'
 
 /**
@@ -28,6 +29,7 @@ export default function PublicPageView({ notFound }) {
   const footerText = useSettings((s) => s.footer_text)
   const [state, setState] = useState({ status: 'loading', slug: null, page: null })
   const [headings, setHeadings] = useState([])
+  const [tocDrawerOpen, setTocDrawerOpen] = useState(false)
   const handleHeadings = useCallback((items) => setHeadings(items), [])
   const reqIdRef = useRef(0)
 
@@ -142,6 +144,14 @@ export default function PublicPageView({ notFound }) {
           {footerText}
         </footer>
       )}
+
+      {/* Mobile TOC drawer */}
+      <TocDrawer
+        headings={headings}
+        open={tocDrawerOpen}
+        onOpen={() => setTocDrawerOpen(true)}
+        onClose={() => setTocDrawerOpen(false)}
+      />
     </div>
   )
 }

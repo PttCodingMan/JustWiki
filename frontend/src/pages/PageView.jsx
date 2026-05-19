@@ -10,6 +10,7 @@ import useSettings from '../store/useSettings'
 import MarkdownViewer from '../components/Viewer/MarkdownViewer'
 import MindmapView from '../components/MindmapView'
 import TableOfContents from '../components/Viewer/TableOfContents'
+import TocDrawer from '../components/Viewer/TocDrawer'
 import Comments from '../components/Comments'
 import ConfirmDialog from '../components/ConfirmDialog'
 import AclManager from '../components/AclManager'
@@ -41,6 +42,7 @@ export default function PageView() {
   const [aclManagerOpen, setAclManagerOpen] = useState(false)
   const [toast, setToast] = useState('')
   const [headings, setHeadings] = useState([])
+  const [tocDrawerOpen, setTocDrawerOpen] = useState(false)
 
   const handleHeadings = useCallback((items) => setHeadings(items), [])
 
@@ -515,6 +517,14 @@ export default function PageView() {
           <TableOfContents headings={headings} />
         </div>
       </aside>
+
+      {/* Mobile TOC drawer */}
+      <TocDrawer
+        headings={headings}
+        open={tocDrawerOpen}
+        onOpen={() => setTocDrawerOpen(true)}
+        onClose={() => setTocDrawerOpen(false)}
+      />
 
       <ConfirmDialog
         open={publicConfirmOpen}
