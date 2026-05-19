@@ -8,9 +8,16 @@
 // later keypress, so a short window cleanly separates the two.
 export const POST_COMPOSITION_ENTER_MS = 50
 
+// Sentinel for "no compositionend has happened yet". Must be -Infinity, not
+// 0: timestamps are `performance.now()` (ms since page load), so a 0
+// sentinel would falsely fall inside the window during the first
+// POST_COMPOSITION_ENTER_MS after load and swallow a plain Enter.
+export const NO_COMPOSITION = Number.NEGATIVE_INFINITY
+
 // Pure decision: should this keydown be swallowed as a post-composition
 // stray Enter? `lastCompositionEndAt` is the timestamp of the most recent
-// `compositionend` (0 if none yet); `now` is the current timestamp.
+// `compositionend` (NO_COMPOSITION if none yet); `now` is the current
+// timestamp (same clock as `lastCompositionEndAt`).
 export function isStrayPostCompositionEnter(event, lastCompositionEndAt, now) {
   // An Enter that is still part of an active composition (e.g. Zhuyin
   // pressing Enter to commit bopomofo into Han characters) MUST reach the

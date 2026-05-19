@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isStrayPostCompositionEnter, POST_COMPOSITION_ENTER_MS } from './imeGuard'
+import { isStrayPostCompositionEnter, POST_COMPOSITION_ENTER_MS, NO_COMPOSITION } from './imeGuard'
 
 const enter = (overrides = {}) => ({ key: 'Enter', keyCode: 13, isComposing: false, ...overrides })
 
@@ -31,7 +31,13 @@ describe('isStrayPostCompositionEnter', () => {
   })
 
   it('does NOT suppress Enter when no composition has happened yet', () => {
-    expect(isStrayPostCompositionEnter(enter(), 0, 999999)).toBe(false)
+    expect(isStrayPostCompositionEnter(enter(), NO_COMPOSITION, 999999)).toBe(false)
+  })
+
+  it('does NOT suppress a plain Enter pressed within 50ms of page load', () => {
+    // Regression: a 0 sentinel + performance.now()-based `now` would make
+    // `now - 0 <= 50` true during the first 50ms after the time origin.
+    expect(isStrayPostCompositionEnter(enter(), NO_COMPOSITION, 12)).toBe(false)
   })
 
   it('ignores non-Enter keys even right after compositionend', () => {

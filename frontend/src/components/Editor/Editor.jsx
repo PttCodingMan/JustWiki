@@ -16,7 +16,7 @@ import { mention } from './mention'
 import { math, mathBlockSchema } from './math'
 import { tableTooltip } from './tableTooltip'
 import { tablePasteExpand } from './tablePasteExpand'
-import { isStrayPostCompositionEnter } from './imeGuard'
+import { isStrayPostCompositionEnter, NO_COMPOSITION } from './imeGuard'
 
 const SLASH_ITEM_DEFS = [
   { id: 'h1', icon: 'H1' },
@@ -809,7 +809,7 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
     // short window after compositionend — and never an Enter that is still
     // part of an active composition (see imeGuard.js for the rationale).
     const compositionGuardPlugin = $prose(() => {
-      let lastCompositionEndAt = 0
+      let lastCompositionEndAt = NO_COMPOSITION
       return new Plugin({
         props: {
           handleDOMEvents: {
