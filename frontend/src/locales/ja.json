@@ -359,6 +359,11 @@
       "media": { "label": "メディアライブラリ", "desc": "アップロード済みのファイルから選択" }
     }
   },
+  "editor": {
+    "switchToSource": "ソースを編集 (Markdown)",
+    "switchToRichText": "リッチテキストエディタ",
+    "sourcePlaceholder": "Markdown を入力..."
+  },
   "tableTooltip": {
     "addRowAbove": "上に行を挿入",
     "addRowBelow": "下に行を挿入",

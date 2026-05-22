@@ -359,6 +359,11 @@
       "media": { "label": "媒體庫", "desc": "從已上傳檔案中選擇" }
     }
   },
+  "editor": {
+    "switchToSource": "編輯原始碼 (Markdown)",
+    "switchToRichText": "所見即所得編輯器",
+    "sourcePlaceholder": "在此輸入 Markdown..."
+  },
   "tableTooltip": {
     "addRowAbove": "上方插入列",
     "addRowBelow": "下方插入列",
