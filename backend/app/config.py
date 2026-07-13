@@ -25,10 +25,17 @@ class Settings(BaseSettings):
     # When deployed behind a reverse proxy (nginx/Caddy/ALB/Traefik), the
     # direct TCP peer is the proxy — rate limiters keyed on `request.client.host`
     # then see every client as the same IP and either deny everyone or no-one.
-    # Setting this to True makes the rate limiters trust the left-most
-    # `X-Forwarded-For` entry. Only enable this when a trusted proxy is
-    # actually in front of the app; otherwise a client can spoof the header.
+    # Setting this to True makes the rate limiters read the client IP from
+    # `X-Forwarded-For`. Only enable this when a trusted proxy is actually in
+    # front of the app; otherwise a client can spoof the header.
     TRUST_PROXY: bool = False
+
+    # Number of trusted reverse-proxy hops in front of the app. The client IP
+    # is taken as the Nth-from-the-right `X-Forwarded-For` entry — the leftmost
+    # entries are client-supplied and MUST NOT be trusted. For a single nginx
+    # doing `proxy_add_x_forwarded_for`, the rightmost entry is the real client,
+    # so the default of 1 is correct. Increase only if you chain more proxies.
+    TRUST_PROXY_HOPS: int = 1
 
     # Public base URL the browser can reach. Used to build OIDC redirect_uri
     # and SSO-error redirects. In dev leave as localhost:8000; in prod set to

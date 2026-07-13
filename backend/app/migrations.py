@@ -189,6 +189,20 @@ async def _m012_user_bio(db: aiosqlite.Connection) -> None:
         await db.execute("ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''")
 
 
+async def _m013_user_is_active(db: aiosqlite.Connection) -> None:
+    """Add `is_active` to users so an account can be suspended without deleting.
+
+    NOT NULL DEFAULT 1 so every existing user stays enabled after the upgrade.
+    A deactivated user (is_active=0) is rejected at login and on every
+    credential check, but the row (and their content/history) is untouched —
+    distinct from soft-delete, which tombstones the account.
+    """
+    if not await _column_exists(db, "users", "is_active"):
+        await db.execute(
+            "ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1"
+        )
+
+
 MIGRATIONS: list[Migration] = [
     (1, "user_profile_columns", _m001_user_profile_columns),
     (2, "user_soft_delete", _m002_user_soft_delete),
@@ -202,6 +216,7 @@ MIGRATIONS: list[Migration] = [
     (10, "site_settings", _m010_site_settings),
     (11, "mindmap_layout", _m011_mindmap_layout),
     (12, "user_bio", _m012_user_bio),
+    (13, "user_is_active", _m013_user_is_active),
 ]
 
 

@@ -217,6 +217,190 @@ function ExportSection() {
   )
 }
 
+const WEBHOOK_EVENTS = ['page.created', 'page.updated', 'page.deleted']
+const DEFAULT_WEBHOOK_FORM = {
+  name: '',
+  url: '',
+  events: [...WEBHOOK_EVENTS],
+  is_active: true,
+}
+
+function WebhooksSection() {
+  const { t } = useTranslation()
+  const [hooks, setHooks] = useState([])
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState(DEFAULT_WEBHOOK_FORM)
+  const [error, setError] = useState('')
+
+  const load = async () => {
+    try {
+      const res = await api.get('/webhooks')
+      setHooks(Array.isArray(res.data) ? res.data : [])
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    api.get('/webhooks')
+      .then((res) => { if (!cancelled) setHooks(Array.isArray(res.data) ? res.data : []) })
+      .catch(() => { /* ignore */ })
+    return () => { cancelled = true }
+  }, [])
+
+  const resetForm = () => {
+    setForm(DEFAULT_WEBHOOK_FORM)
+    setShowForm(false)
+    setError('')
+  }
+
+  const toggleEvent = (ev) => {
+    setForm((f) => ({
+      ...f,
+      events: f.events.includes(ev)
+        ? f.events.filter((e) => e !== ev)
+        : [...f.events, ev],
+    }))
+  }
+
+  const handleCreate = async (e) => {
+    e.preventDefault()
+    setError('')
+    if (!form.name.trim() || !form.url.trim() || form.events.length === 0) {
+      setError(t('admin.webhooks.validation'))
+      return
+    }
+    try {
+      await api.post('/webhooks', {
+        name: form.name.trim(),
+        url: form.url.trim(),
+        events: form.events.join(','),
+        is_active: form.is_active,
+      })
+      resetForm()
+      load()
+    } catch (err) {
+      setError(err?.response?.data?.detail || t('admin.webhooks.createFailed'))
+    }
+  }
+
+  const handleToggleActive = async (h) => {
+    try {
+      await api.put(`/webhooks/${h.id}`, { is_active: !(h.is_active === 1 || h.is_active === true) })
+      load()
+    } catch (err) {
+      alert(err?.response?.data?.detail || t('admin.webhooks.updateFailed'))
+    }
+  }
+
+  const handleDelete = async (h) => {
+    if (!confirm(t('admin.webhooks.confirmDelete', { name: h.name }))) return
+    try {
+      await api.delete(`/webhooks/${h.id}`)
+      load()
+    } catch (err) {
+      alert(err?.response?.data?.detail || t('admin.webhooks.deleteFailed'))
+    }
+  }
+
+  return (
+    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-lg font-semibold text-text">{t('admin.webhooks.title')}</h2>
+        <button
+          onClick={() => setShowForm((s) => !s)}
+          className="px-3 py-1.5 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover"
+        >
+          {t('admin.webhooks.add')}
+        </button>
+      </div>
+      <p className="text-sm text-text-secondary mb-4">{t('admin.webhooks.intro')}</p>
+
+      {showForm && (
+        <form onSubmit={handleCreate} className="mb-4 p-4 border border-border rounded-lg space-y-3">
+          <input
+            type="text"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder={t('admin.webhooks.namePlaceholder')}
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-text"
+          />
+          <input
+            type="url"
+            value={form.url}
+            onChange={(e) => setForm({ ...form, url: e.target.value })}
+            placeholder={t('admin.webhooks.urlPlaceholder')}
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-text"
+          />
+          <div className="flex flex-wrap gap-3">
+            {WEBHOOK_EVENTS.map((ev) => (
+              <label key={ev} className="flex items-center gap-1.5 text-sm text-text">
+                <input
+                  type="checkbox"
+                  checked={form.events.includes(ev)}
+                  onChange={() => toggleEvent(ev)}
+                />
+                {ev}
+              </label>
+            ))}
+          </div>
+          {error && <div className="text-sm text-red-500" role="alert">{error}</div>}
+          <div className="flex gap-2">
+            <button type="submit" className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover">
+              {t('admin.webhooks.create')}
+            </button>
+            <button type="button" onClick={resetForm} className="px-4 py-2 text-text-secondary rounded-lg text-sm hover:bg-surface-hover">
+              {t('admin.webhooks.cancel')}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {hooks.length === 0 ? (
+        <div className="text-center py-6 text-text-secondary text-sm">{t('admin.webhooks.empty')}</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.webhooks.col.name')}</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.webhooks.col.url')}</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.webhooks.col.events')}</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.webhooks.col.status')}</th>
+                <th className="text-right py-2 px-3 text-text-secondary font-medium">{t('admin.webhooks.col.actions')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {hooks.map((h) => {
+                const active = h.is_active === 1 || h.is_active === true
+                return (
+                  <tr key={h.id} className="border-b border-border">
+                    <td className="py-2 px-3 text-text">{h.name}</td>
+                    <td className="py-2 px-3 text-text-secondary max-w-[16rem] truncate" title={h.url}>{h.url}</td>
+                    <td className="py-2 px-3 text-text-secondary">{h.events}</td>
+                    <td className="py-2 px-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${active ? 'bg-green-500/10 text-green-600 dark:text-green-400' : 'bg-red-500/10 text-red-600 dark:text-red-400'}`}>
+                        {active ? t('admin.webhooks.status.active') : t('admin.webhooks.status.disabled')}
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 text-right whitespace-nowrap">
+                      <button onClick={() => handleToggleActive(h)} className="text-text-secondary hover:text-text text-sm mr-3">
+                        {active ? t('admin.webhooks.disable') : t('admin.webhooks.enable')}
+                      </button>
+                      <button onClick={() => handleDelete(h)} className="text-red-500 hover:text-red-700 text-sm">
+                        {t('admin.webhooks.delete')}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function UsersSection() {
   const { t } = useTranslation()
   const [tab, setTab] = useState('active')
@@ -301,6 +485,22 @@ function UsersSection() {
       loadUsers()
     } catch (err) {
       alert(err?.response?.data?.detail || t('admin.users.roleUpdateFailed'))
+    }
+  }
+
+  const handleToggleActive = async (u) => {
+    const nextActive = u.is_active === 0 || u.is_active === false
+    if (
+      !nextActive &&
+      !confirm(t('admin.users.confirmDeactivate', { username: u.username }))
+    ) {
+      return
+    }
+    try {
+      await api.put(`/users/${u.id}`, { is_active: nextActive })
+      loadUsers()
+    } catch (err) {
+      alert(err?.response?.data?.detail || t('admin.users.statusUpdateFailed'))
     }
   }
 
@@ -455,12 +655,15 @@ function UsersSection() {
               <tr className="border-b border-border">
                 <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.users.col.username')}</th>
                 <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.users.col.role')}</th>
+                <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.users.col.status')}</th>
                 <th className="text-left py-2 px-3 text-text-secondary font-medium">{t('admin.users.col.created')}</th>
                 <th className="text-right py-2 px-3 text-text-secondary font-medium">{t('admin.users.col.actions')}</th>
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {users.map((u) => {
+                const inactive = u.is_active === 0 || u.is_active === false
+                return (
                 <tr key={u.id} className="border-b border-border">
                   <td className="py-2 px-3 text-text">
                     <Link
@@ -481,14 +684,32 @@ function UsersSection() {
                       <option value="admin">{t('admin.users.role.admin')}</option>
                     </select>
                   </td>
+                  <td className="py-2 px-3">
+                    {inactive ? (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
+                        {t('admin.users.status.suspended')}
+                      </span>
+                    ) : (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400">
+                        {t('admin.users.status.active')}
+                      </span>
+                    )}
+                  </td>
                   <td className="py-2 px-3 text-text-secondary">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '-'}</td>
-                  <td className="py-2 px-3 text-right">
+                  <td className="py-2 px-3 text-right whitespace-nowrap">
+                    <button
+                      onClick={() => handleToggleActive(u)}
+                      className="text-text-secondary hover:text-text text-sm mr-3"
+                    >
+                      {inactive ? t('admin.users.activate') : t('admin.users.deactivate')}
+                    </button>
                     <button onClick={() => handleDelete(u)} className="text-red-500 hover:text-red-700 text-sm">
                       {t('admin.users.delete')}
                     </button>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -1389,6 +1610,7 @@ export default function Admin() {
       <GroupsSection />
       <TemplatesSection />
       <LibrarySection />
+      <WebhooksSection />
       <BackupSection />
       <ExportSection />
     </div>

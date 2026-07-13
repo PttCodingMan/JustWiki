@@ -6,6 +6,7 @@ import en from './locales/en.json'
 import zhTW from './locales/zh-TW.json'
 import ja from './locales/ja.json'
 import ko from './locales/ko.json'
+import { setCalloutTitles } from './lib/calloutTitles'
 
 export const SUPPORTED_LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -48,5 +49,19 @@ i18n
       convertDetectedLanguage: normalizeLang,
     },
   })
+
+// Keep the shared markdown callout headers in sync with the active language.
+// The markdown pipeline is synchronous and shared by both render paths, so it
+// reads these from a mutable module instead of calling t() directly.
+function syncCalloutTitles() {
+  setCalloutTitles({
+    info: i18n.t('callout.info'),
+    warning: i18n.t('callout.warning'),
+    tip: i18n.t('callout.tip'),
+    danger: i18n.t('callout.danger'),
+  })
+}
+syncCalloutTitles()
+i18n.on('languageChanged', syncCalloutTitles)
 
 export default i18n

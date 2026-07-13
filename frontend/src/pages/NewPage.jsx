@@ -7,7 +7,7 @@ import api from '../api/client'
 import Editor from '../components/Editor/Editor'
 import MediaPickerModal from '../components/Editor/MediaPickerModal'
 import DrawioModal from '../components/DrawioModal'
-import useUnsavedWarning from '../hooks/useUnsavedWarning'
+import useUnsavedWarning, { confirmDiscard } from '../hooks/useUnsavedWarning'
 import { stripBrTags } from '../lib/markdown'
 import { MINDMAP_TEMPLATE } from '../lib/mindmap'
 
@@ -97,7 +97,13 @@ export default function NewPage() {
     setDrawioOpen(false)
   }, [])
 
-  useUnsavedWarning(dirty)
+  useUnsavedWarning(dirty, t('pageEdit.unsavedWarning'))
+
+  const handleCancel = useCallback(() => {
+    if (confirmDiscard(dirty, t('pageEdit.unsavedWarning'))) {
+      navigate('/')
+    }
+  }, [dirty, t, navigate])
 
   useEffect(() => {
     api.get('/templates').then((res) => setTemplates(res.data))
@@ -286,7 +292,7 @@ export default function NewPage() {
         />
         <div className="flex gap-2">
           <button
-            onClick={() => navigate('/')}
+            onClick={handleCancel}
             className="px-3 py-1.5 text-sm text-text-secondary rounded-lg hover:bg-surface-hover"
           >
             {t('newPage.cancel')}

@@ -35,6 +35,14 @@ const useChat = create((set, get) => ({
 
   clearHistory: () => set({ messages: [], error: null }),
 
+  // Full reset for logout: abort any in-flight stream and drop conversation
+  // state so the next user can't see the previous user's chat history.
+  reset: () => {
+    const ctrl = get().abortController
+    if (ctrl) ctrl.abort()
+    set({ messages: [], error: null, isStreaming: false, abortController: null })
+  },
+
   stopStreaming: () => {
     const ctrl = get().abortController
     if (ctrl) ctrl.abort()

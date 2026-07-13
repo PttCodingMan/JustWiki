@@ -261,7 +261,7 @@ async def list_users(
     count_rows = await db.execute_fetchall(f"SELECT COUNT(*) as cnt FROM users {where}")
     total = count_rows[0]["cnt"]
     rows = await db.execute_fetchall(
-        f"""SELECT id, username, original_username, role, deleted_at, created_at
+        f"""SELECT id, username, original_username, role, is_active, deleted_at, created_at
             FROM users {where}
             ORDER BY id LIMIT ? OFFSET ?""",
         (per_page, offset),
@@ -412,6 +412,30 @@ async def update_user(user_id: int, body: UserUpdate, user=Depends(require_admin
     if body.password is not None:
         updates.append("password_hash = ?")
         values.append(await hash_password_async(body.password))
+    if body.is_active is not None:
+        # Suspending an account (is_active=0) locks the user out on every
+        # credential path without deleting their data. Guard the same two
+        # footguns as role demotion: don't let an admin lock themselves out,
+        # and don't disable the last remaining admin.
+        if not body.is_active:
+            if user_id == user["id"]:
+                raise HTTPException(
+                    status_code=400, detail="Cannot deactivate yourself"
+                )
+            target_admin = await db.execute_fetchall(
+                "SELECT 1 FROM users WHERE id = ? AND role = 'admin'", (user_id,)
+            )
+            if target_admin:
+                admin_count = await db.execute_fetchall(
+                    "SELECT COUNT(*) as cnt FROM users "
+                    "WHERE role = 'admin' AND deleted_at IS NULL AND is_active = 1"
+                )
+                if admin_count[0]["cnt"] <= 1:
+                    raise HTTPException(
+                        status_code=400, detail="Cannot deactivate the last admin"
+                    )
+        updates.append("is_active = ?")
+        values.append(1 if body.is_active else 0)
 
     if updates:
         values.append(user_id)
@@ -421,7 +445,8 @@ async def update_user(user_id: int, body: UserUpdate, user=Depends(require_admin
             )
 
     row = await db.execute_fetchall(
-        "SELECT id, username, role, created_at FROM users WHERE id = ?", (user_id,)
+        "SELECT id, username, role, is_active, created_at FROM users WHERE id = ?",
+        (user_id,),
     )
     return dict(row[0])
 

@@ -28,27 +28,71 @@ _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 _CSRF_EXEMPT_PATHS = {"/api/auth/login", "/api/auth/logout"}
 
 _INSECURE_SECRETS = {"change-me-to-random-string", "secret", ""}
+_WEAK_ADMIN_PASSWORDS = {"admin", "password", "123456", ""}
+
+
+def _looks_production() -> bool:
+    """Heuristic for "this instance is being exposed, not run locally".
+
+    True when any config signals a real deployment: secure cookies are on,
+    the public URL is not localhost, or explicit allowed origins were set.
+    Pure localhost dev (the defaults) returns False so `make dev` keeps
+    working out of the box with only a loud warning.
+    """
+    url = settings.PUBLIC_BASE_URL
+    not_localhost = not (
+        url.startswith("http://localhost")
+        or url.startswith("http://127.0.0.1")
+    )
+    return settings.COOKIE_SECURE or not_localhost or bool(settings.ALLOWED_ORIGINS.strip())
 
 
 def _check_security():
-    """Warn loudly about insecure defaults on startup."""
+    """Warn on insecure defaults; refuse to start on a production-looking one.
+
+    Insecure defaults are tolerated (with a loud warning) for localhost dev,
+    but a deployment that looks internet-facing must not boot with a forgeable
+    SECRET_KEY or a guessable admin password — fail closed instead.
+    """
+    fatal: list[str] = []
+    production = _looks_production()
+
     if settings.SECRET_KEY.get_secret_value() in _INSECURE_SECRETS:
         safe_key = secrets.token_urlsafe(32)
-        logger.critical(
-            "\n"
-            "╔══════════════════════════════════════════════════════╗\n"
-            "║  ⚠  SECRET_KEY is set to an insecure default!      ║\n"
-            "║  Anyone can forge JWT tokens with this key.         ║\n"
-            "║  Set SECRET_KEY in .env to a random value, e.g.:   ║\n"
-            "║  SECRET_KEY=%s  ║\n"
-            "╚══════════════════════════════════════════════════════╝",
-            safe_key[:44],
-        )
+        if production:
+            fatal.append(
+                "SECRET_KEY is set to an insecure default — anyone can forge "
+                f"JWT tokens. Set SECRET_KEY in .env to a random value, e.g.: {safe_key}"
+            )
+        else:
+            logger.critical(
+                "\n"
+                "╔══════════════════════════════════════════════════════╗\n"
+                "║  ⚠  SECRET_KEY is set to an insecure default!      ║\n"
+                "║  Anyone can forge JWT tokens with this key.         ║\n"
+                "║  Set SECRET_KEY in .env to a random value, e.g.:   ║\n"
+                "║  SECRET_KEY=%s  ║\n"
+                "╚══════════════════════════════════════════════════════╝",
+                safe_key[:44],
+            )
     admin_pass = settings.ADMIN_PASS.get_secret_value()
-    if admin_pass in {"admin", "password", "123456", ""}:
-        logger.warning(
-            "ADMIN_PASS is set to a weak default. "
-            "Change it in .env before deploying to production.",
+    if admin_pass in _WEAK_ADMIN_PASSWORDS:
+        if production:
+            fatal.append(
+                "ADMIN_PASS is set to a weak default. Set a strong ADMIN_PASS "
+                "in .env before exposing the app."
+            )
+        else:
+            logger.warning(
+                "ADMIN_PASS is set to a weak default. "
+                "Change it in .env before deploying to production.",
+            )
+
+    if fatal:
+        raise RuntimeError(
+            "Refusing to start with insecure configuration:\n  - "
+            + "\n  - ".join(fatal)
+            + "\nThese are tolerated only for localhost development."
         )
     # Either SSO path issues the session cookie (OIDC state/nonce/PKCE) over
     # the wire. Without TLS marking, a passive attacker on the path can
@@ -190,8 +234,17 @@ async def csrf_guard(request: Request, call_next):
         except ValueError:
             return None
 
+    def _is_localhost(url: str | None) -> bool:
+        # Exact host match, not a prefix — startswith("http://localhost")
+        # would wrongly accept attacker origins like http://localhost.evil.com.
+        if not url:
+            return False
+        from urllib.parse import urlsplit
+
+        return urlsplit(url).hostname in ("localhost", "127.0.0.1")
+
     candidate = origin or _origin_of(referer)
-    is_localhost = candidate is not None and candidate.startswith("http://localhost")
+    is_localhost = _is_localhost(candidate)
     if not is_localhost and candidate not in _ALLOWED_ORIGINS:
         return JSONResponse(
             status_code=403,

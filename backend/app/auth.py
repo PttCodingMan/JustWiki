@@ -91,7 +91,7 @@ async def _resolve_api_token(token: str) -> dict | None:
     rows = await db.execute_fetchall(
         """SELECT t.id, t.expires_at, t.revoked_at,
                   u.id AS user_id, u.username, u.role, u.display_name, u.email,
-                  u.deleted_at
+                  u.deleted_at, u.is_active
            FROM api_tokens t
            JOIN users u ON u.id = t.user_id
            WHERE t.token_hash = ?""",
@@ -100,7 +100,8 @@ async def _resolve_api_token(token: str) -> dict | None:
     if not rows:
         return None
     row = dict(rows[0])
-    if row["deleted_at"] is not None or row["revoked_at"] is not None:
+    # A deactivated or deleted owner invalidates the token immediately.
+    if row["deleted_at"] is not None or row["revoked_at"] is not None or not row["is_active"]:
         return None
     if row["expires_at"] is not None:
         # SQLite stores these as strings; parse tolerantly so 'YYYY-MM-DD HH:MM:SS'
@@ -160,7 +161,8 @@ async def resolve_request_credentials(request: Request) -> dict | None:
 
     db = await get_db()
     row = await db.execute_fetchall(
-        "SELECT id, username, role, display_name, email FROM users WHERE id = ? AND deleted_at IS NULL",
+        "SELECT id, username, role, display_name, email FROM users "
+        "WHERE id = ? AND deleted_at IS NULL AND is_active = 1",
         (user_id,),
     )
     if not row:

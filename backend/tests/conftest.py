@@ -59,6 +59,21 @@ async def _bound_db_per_test():
             await close_db()
 
 
+@pytest.fixture(autouse=True)
+def _reset_login_rate_limit():
+    """Clear the in-memory login rate-limiter between tests.
+
+    The limiter is process-global and its 60s window never elapses within a
+    fast test run, so login attempts would otherwise accumulate across tests
+    on the shared client IP and trip a 429 in an unrelated later test.
+    """
+    from app.routers import auth_router
+
+    auth_router._login_attempts.clear()
+    yield
+    auth_router._login_attempts.clear()
+
+
 @pytest.fixture
 async def client():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:

@@ -105,7 +105,14 @@ export default function PageView() {
     return () => { cancelled = true }
   }, [slug, getPage, fetchPageTags, checkBookmark, navigate, isGuest])
 
+  const watchBusy = useRef(false)
+  const bookmarkBusy = useRef(false)
+
   const handleToggleWatch = async () => {
+    // Guard against double-clicks: a second request in flight can desync
+    // watching/watcherCount from the server.
+    if (watchBusy.current) return
+    watchBusy.current = true
     try {
       if (watching) {
         await api.delete(`/pages/${slug}/watch`)
@@ -118,6 +125,8 @@ export default function PageView() {
       }
     } catch (err) {
       console.error('Toggle watch failed:', err)
+    } finally {
+      watchBusy.current = false
     }
   }
 
@@ -129,13 +138,19 @@ export default function PageView() {
   }
 
   const handleToggleBookmark = async () => {
-    if (bookmarked) {
-      await removeBookmark(slug)
-    } else {
-      await addBookmark(slug)
+    if (bookmarkBusy.current) return
+    bookmarkBusy.current = true
+    try {
+      if (bookmarked) {
+        await removeBookmark(slug)
+      } else {
+        await addBookmark(slug)
+      }
+      setBookmarked(!bookmarked)
+      fetchBookmarks()
+    } finally {
+      bookmarkBusy.current = false
     }
-    setBookmarked(!bookmarked)
-    fetchBookmarks()
   }
 
   const handleAddTag = async (e) => {

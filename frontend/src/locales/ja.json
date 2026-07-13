@@ -1,4 +1,10 @@
 {
+  "callout": {
+    "info": "情報",
+    "warning": "警告",
+    "tip": "ヒント",
+    "danger": "危険"
+  },
   "common": {
     "loading": "読み込み中…",
     "loadingGraph": "グラフを読み込み中…",
@@ -84,7 +90,10 @@
     "post": "投稿",
     "posting": "投稿中…",
     "confirmDelete": "このコメントを削除しますか？",
-    "signInToReply": "ログインしてディスカッションに参加してください。"
+    "signInToReply": "ログインしてディスカッションに参加してください。",
+    "postFailed": "コメントを投稿できませんでした。もう一度お試しください。",
+    "deleteFailed": "コメントを削除できませんでした。もう一度お試しください。",
+    "updateFailed": "編集を保存できませんでした。もう一度お試しください。"
   },
   "acl": {
     "title": "権限を管理",
@@ -180,6 +189,35 @@
       "intro": "Wiki 全体を静的 HTML サイトとして書き出します。",
       "btn": "静的サイトをエクスポート (.zip)"
     },
+    "webhooks": {
+      "title": "Webhook",
+      "intro": "ページの作成・更新・削除時に、外部 URL へ JSON ペイロードを POST します。",
+      "add": "+ Webhook を追加",
+      "namePlaceholder": "名前（例: Slack 通知）",
+      "urlPlaceholder": "https://example.com/hook",
+      "create": "作成",
+      "cancel": "キャンセル",
+      "validation": "名前・URL・少なくとも 1 つのイベントが必要です。",
+      "createFailed": "Webhook の作成に失敗しました",
+      "updateFailed": "Webhook の更新に失敗しました",
+      "deleteFailed": "Webhook の削除に失敗しました",
+      "confirmDelete": "Webhook「{{name}}」を削除しますか？",
+      "empty": "Webhook は設定されていません。",
+      "enable": "有効化",
+      "disable": "無効化",
+      "delete": "削除",
+      "status": {
+        "active": "有効",
+        "disabled": "無効"
+      },
+      "col": {
+        "name": "名前",
+        "url": "URL",
+        "events": "イベント",
+        "status": "ステータス",
+        "actions": "操作"
+      }
+    },
     "users": {
       "title": "ユーザー",
       "tabActive": "有効",
@@ -199,12 +237,21 @@
       "col": {
         "username": "ユーザー名",
         "role": "ロール",
+        "status": "ステータス",
         "created": "作成日",
         "actions": "操作",
         "originalUsername": "元ユーザー名",
         "displayName": "表示名",
         "deleted": "削除日"
       },
+      "status": {
+        "active": "有効",
+        "suspended": "停止中"
+      },
+      "activate": "有効化",
+      "deactivate": "無効化",
+      "confirmDeactivate": "「{{username}}」を無効化しますか？サインアウトされ、再有効化するまでログインできなくなります。ページと履歴は保持されます。",
+      "statusUpdateFailed": "ステータスの更新に失敗しました",
       "delete": "削除",
       "confirmDelete": "ユーザー「{{username}}」を削除しますか？\n\nこれはソフト削除です。アカウントは無効化され、ユーザー名「{{username}}」は再利用可能になります。作成済みのページは作者情報を保持します。「削除済み」タブから復元できます。",
       "deleteFailed": "ユーザーの削除に失敗しました",
@@ -452,6 +499,7 @@
     "save": "保存",
     "saving": "保存中…",
     "saveFailed": "保存に失敗しました",
+    "unsavedWarning": "保存していない変更があります。保存せずに移動しますか？",
     "conflict": {
       "title": "⚠ 編集競合",
       "default": "このページは他のユーザーによって変更されました。",

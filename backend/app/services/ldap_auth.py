@@ -201,10 +201,15 @@ async def authenticate(username: str, password: str) -> Optional[LdapUser]:
 
 async def _load_user_by_id(db, user_id: int) -> dict:
     rows = await db.execute_fetchall(
-        "SELECT id, username, role, display_name, email FROM users WHERE id = ?",
+        "SELECT id, username, role, display_name, email, is_active FROM users WHERE id = ?",
         (user_id,),
     )
-    return dict(rows[0])
+    if not rows or not rows[0]["is_active"]:
+        # A deactivated account must not be able to sign in via LDAP either.
+        raise LdapError("User account is disabled.")
+    user = dict(rows[0])
+    user.pop("is_active", None)
+    return user
 
 
 def _admin_groups() -> set[str]:

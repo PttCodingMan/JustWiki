@@ -108,10 +108,15 @@ async def test_drawio_inline(auth_client, client, db):
         "slug": "public-diag",
     })
     await auth_client.put("/api/pages/public-diag", json={"is_public": True})
+    page_rows = await db.execute_fetchall(
+        "SELECT id FROM pages WHERE slug = ?", ("public-diag",)
+    )
+    public_page_id = page_rows[0]["id"]
 
+    # Diagram owned by the public page → inlined.
     await db.execute(
-        "INSERT INTO diagrams (id, name, xml_data, svg_cache) VALUES (?, ?, ?, ?)",
-        (42, "test", "<mxfile/>", "<svg>hi</svg>"),
+        "INSERT INTO diagrams (id, name, xml_data, svg_cache, page_id) VALUES (?, ?, ?, ?, ?)",
+        (42, "test", "<mxfile/>", "<svg>hi</svg>", public_page_id),
     )
     await db.commit()
 
@@ -119,6 +124,39 @@ async def test_drawio_inline(auth_client, client, db):
     assert res.status_code == 200
     body = res.json()
     assert body["diagrams"] == {"42": "<svg>hi</svg>"}
+
+
+@pytest.mark.asyncio
+async def test_drawio_inline_rejects_private_diagram(auth_client, client, db):
+    """A public page must not exfiltrate a diagram owned by a private page."""
+    # Public page embeds a diagram id owned by a private page.
+    await auth_client.post("/api/pages", json={
+        "title": "Public Host",
+        "content_md": "before ::drawio[91] after",
+        "slug": "public-host",
+    })
+    await auth_client.put("/api/pages/public-host", json={"is_public": True})
+
+    await auth_client.post("/api/pages", json={
+        "title": "Private Owner",
+        "content_md": "owns a secret diagram",
+        "slug": "private-owner",
+    })
+    priv_rows = await db.execute_fetchall(
+        "SELECT id FROM pages WHERE slug = ?", ("private-owner",)
+    )
+    private_page_id = priv_rows[0]["id"]
+
+    await db.execute(
+        "INSERT INTO diagrams (id, name, xml_data, svg_cache, page_id) VALUES (?, ?, ?, ?, ?)",
+        (91, "secret", "<mxfile/>", "<svg>secret</svg>", private_page_id),
+    )
+    await db.commit()
+
+    res = await client.get("/api/public/pages/public-host")
+    assert res.status_code == 200
+    # The private diagram's SVG is NOT inlined.
+    assert res.json()["diagrams"] == {}
 
 
 @pytest.mark.asyncio

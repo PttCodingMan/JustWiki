@@ -1,4 +1,10 @@
 {
+  "callout": {
+    "info": "정보",
+    "warning": "경고",
+    "tip": "팁",
+    "danger": "위험"
+  },
   "common": {
     "loading": "불러오는 중…",
     "loadingGraph": "그래프 불러오는 중…",
@@ -84,7 +90,10 @@
     "post": "댓글 등록",
     "posting": "등록 중…",
     "confirmDelete": "이 댓글을 삭제할까요?",
-    "signInToReply": "로그인하여 토론에 참여하세요."
+    "signInToReply": "로그인하여 토론에 참여하세요.",
+    "postFailed": "댓글을 게시하지 못했습니다. 다시 시도해 주세요.",
+    "deleteFailed": "댓글을 삭제하지 못했습니다. 다시 시도해 주세요.",
+    "updateFailed": "수정 내용을 저장하지 못했습니다. 다시 시도해 주세요."
   },
   "acl": {
     "title": "권한 관리",
@@ -180,6 +189,35 @@
       "intro": "위키 전체를 정적 HTML 사이트로 내보냅니다.",
       "btn": "정적 사이트 내보내기 (.zip)"
     },
+    "webhooks": {
+      "title": "웹훅",
+      "intro": "페이지가 생성·수정·삭제될 때 외부 URL로 JSON 페이로드를 POST합니다.",
+      "add": "+ 웹훅 추가",
+      "namePlaceholder": "이름 (예: Slack 알림)",
+      "urlPlaceholder": "https://example.com/hook",
+      "create": "생성",
+      "cancel": "취소",
+      "validation": "이름, URL, 하나 이상의 이벤트가 필요합니다.",
+      "createFailed": "웹훅 생성에 실패했습니다",
+      "updateFailed": "웹훅 업데이트에 실패했습니다",
+      "deleteFailed": "웹훅 삭제에 실패했습니다",
+      "confirmDelete": "웹훅 \"{{name}}\"을(를) 삭제할까요?",
+      "empty": "구성된 웹훅이 없습니다.",
+      "enable": "활성화",
+      "disable": "비활성화",
+      "delete": "삭제",
+      "status": {
+        "active": "활성",
+        "disabled": "비활성"
+      },
+      "col": {
+        "name": "이름",
+        "url": "URL",
+        "events": "이벤트",
+        "status": "상태",
+        "actions": "작업"
+      }
+    },
     "users": {
       "title": "사용자",
       "tabActive": "활성",
@@ -199,12 +237,21 @@
       "col": {
         "username": "사용자명",
         "role": "역할",
+        "status": "상태",
         "created": "생성일",
         "actions": "작업",
         "originalUsername": "원래 사용자명",
         "displayName": "표시 이름",
         "deleted": "삭제 시각"
       },
+      "status": {
+        "active": "활성",
+        "suspended": "정지됨"
+      },
+      "activate": "활성화",
+      "deactivate": "비활성화",
+      "confirmDeactivate": "\"{{username}}\"을(를) 비활성화할까요? 로그아웃되며 다시 활성화하기 전까지 로그인할 수 없습니다. 페이지와 기록은 유지됩니다.",
+      "statusUpdateFailed": "상태 업데이트에 실패했습니다",
       "delete": "삭제",
       "confirmDelete": "사용자 \"{{username}}\"을(를) 삭제할까요?\n\n소프트 삭제입니다 — 계정이 비활성화되고, 사용자명 \"{{username}}\"은 다시 사용할 수 있게 풀리며, 작성한 페이지는 작성자 정보를 유지합니다. 삭제됨 탭에서 복원할 수 있습니다.",
       "deleteFailed": "사용자 삭제에 실패했습니다",
@@ -452,6 +499,7 @@
     "save": "저장",
     "saving": "저장 중…",
     "saveFailed": "저장에 실패했습니다",
+    "unsavedWarning": "저장하지 않은 변경 사항이 있습니다. 저장하지 않고 나가시겠습니까?",
     "conflict": {
       "title": "⚠ 편집 충돌",
       "default": "이 페이지가 다른 사용자에 의해 수정되었습니다.",

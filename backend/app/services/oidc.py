@@ -263,7 +263,8 @@ async def _pick_unique_username(db, email: str) -> str:
 
 async def _load_user_by_id(db, user_id: int) -> dict:
     rows = await db.execute_fetchall(
-        "SELECT id, username, role, display_name, email FROM users WHERE id = ? AND deleted_at IS NULL",
+        "SELECT id, username, role, display_name, email FROM users "
+        "WHERE id = ? AND deleted_at IS NULL AND is_active = 1",
         (user_id,),
     )
     if not rows:

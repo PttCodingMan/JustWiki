@@ -1,4 +1,10 @@
 {
+  "callout": {
+    "info": "Info",
+    "warning": "Warning",
+    "tip": "Tip",
+    "danger": "Danger"
+  },
   "common": {
     "loading": "Loading...",
     "loadingGraph": "Loading graph…",
@@ -84,7 +90,10 @@
     "post": "Comment",
     "posting": "Posting...",
     "confirmDelete": "Delete this comment?",
-    "signInToReply": "Sign in to join the discussion."
+    "signInToReply": "Sign in to join the discussion.",
+    "postFailed": "Could not post your comment. Please try again.",
+    "deleteFailed": "Could not delete the comment. Please try again.",
+    "updateFailed": "Could not save your edit. Please try again."
   },
   "acl": {
     "title": "Manage permissions",
@@ -180,6 +189,35 @@
       "intro": "Export the entire wiki as a static HTML website.",
       "btn": "Export Static Site (.zip)"
     },
+    "webhooks": {
+      "title": "Webhooks",
+      "intro": "POST a JSON payload to an external URL when pages are created, updated, or deleted.",
+      "add": "+ Add Webhook",
+      "namePlaceholder": "Name (e.g. Slack notifier)",
+      "urlPlaceholder": "https://example.com/hook",
+      "create": "Create",
+      "cancel": "Cancel",
+      "validation": "Name, URL, and at least one event are required.",
+      "createFailed": "Failed to create webhook",
+      "updateFailed": "Failed to update webhook",
+      "deleteFailed": "Failed to delete webhook",
+      "confirmDelete": "Delete webhook \"{{name}}\"?",
+      "empty": "No webhooks configured.",
+      "enable": "Enable",
+      "disable": "Disable",
+      "delete": "Delete",
+      "status": {
+        "active": "Active",
+        "disabled": "Disabled"
+      },
+      "col": {
+        "name": "Name",
+        "url": "URL",
+        "events": "Events",
+        "status": "Status",
+        "actions": "Actions"
+      }
+    },
     "users": {
       "title": "Users",
       "tabActive": "Active",
@@ -199,12 +237,21 @@
       "col": {
         "username": "Username",
         "role": "Role",
+        "status": "Status",
         "created": "Created",
         "actions": "Actions",
         "originalUsername": "Original username",
         "displayName": "Display name",
         "deleted": "Deleted"
       },
+      "status": {
+        "active": "Active",
+        "suspended": "Suspended"
+      },
+      "activate": "Activate",
+      "deactivate": "Deactivate",
+      "confirmDeactivate": "Deactivate \"{{username}}\"? They will be signed out and unable to log in until reactivated. Their pages and history are kept.",
+      "statusUpdateFailed": "Failed to update status",
       "delete": "Delete",
       "confirmDelete": "Delete user \"{{username}}\"?\n\nThis is a soft-delete — the account is deactivated, the username \"{{username}}\" is freed for reuse, and pages they authored keep their authorship. You can restore the account from the Deleted tab.",
       "deleteFailed": "Failed to delete user",
@@ -452,6 +499,7 @@
     "save": "Save",
     "saving": "Saving...",
     "saveFailed": "Save failed",
+    "unsavedWarning": "You have unsaved changes. Leave without saving?",
     "conflict": {
       "title": "⚠ Edit conflict",
       "default": "This page was modified by someone else.",

@@ -16,6 +16,34 @@ ALLOWED_TYPES = {
     "application/pdf", "text/plain", "text/markdown",
 }
 
+# Canonical on-disk extension per allowed MIME. The stored filename's
+# extension is derived from the *validated* content type — never from the
+# uploader-supplied filename — so a `text/plain` upload named "x.html" can't
+# be stored as `<uuid>.html` and later served as text/html (stored XSS).
+_MIME_EXT = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/svg+xml": ".svg",
+    "application/pdf": ".pdf",
+    "text/plain": ".txt",
+    "text/markdown": ".md",
+}
+
+# Extensions the browser may render inline, each mapped to the explicit
+# Content-Type we serve it as. Anything NOT in this set is served as a
+# download with a neutral type so it can never execute as active content
+# (HTML/SVG/script) in the app's origin.
+_INLINE_SAFE_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".pdf": "application/pdf",
+}
+
 MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20 MB
 
 # SVG can carry embedded scripts. We keep SVG uploads in the allow-list for
@@ -104,7 +132,11 @@ async def upload_media(
             detail="SVG upload contains scripting or event handlers",
         )
 
-    ext = Path(file.filename or "file").suffix
+    # Derive the stored extension from the validated content type, not the
+    # uploader's filename — the filename extension is attacker-controlled and
+    # drives the served Content-Type. content_type is guaranteed to be in
+    # ALLOWED_TYPES (checked above), which is exactly _MIME_EXT's keyset.
+    ext = _MIME_EXT.get(file.content_type, "")
     filename = f"{uuid.uuid4().hex}{ext}"
     filepath = Path(settings.MEDIA_DIR) / filename
 
@@ -238,16 +270,22 @@ _ALWAYS_PUBLIC_FILENAMES = {"logo.png"}
 
 
 def _safe_media_response(filepath: Path) -> FileResponse:
-    """FileResponse hardened against browsers inferring active-content from SVG.
+    """FileResponse hardened against the browser rendering active content.
 
-    SVG is the only format in the allow-list that can execute script; even
-    after upload-time filtering we serve it as an attachment with nosniff so
-    a polyglot slip-through can never run inline in the app's origin.
+    Only a fixed allow-list of image/pdf extensions is served inline, each
+    with an explicit trusted Content-Type so the browser never sniffs or
+    guesses from the (attacker-influenced) extension. Everything else —
+    SVG, text, or any unexpected extension — is served as a neutral
+    ``application/octet-stream`` attachment, so a stored file can never run
+    as HTML/SVG/script in the app's origin even if it slipped past the
+    upload-time content checks.
     """
     headers = {"X-Content-Type-Options": "nosniff"}
-    if filepath.suffix.lower() in {".svg", ".svgz"}:
-        headers["Content-Disposition"] = f'attachment; filename="{filepath.name}"'
-    return FileResponse(filepath, headers=headers)
+    inline_type = _INLINE_SAFE_TYPES.get(filepath.suffix.lower())
+    if inline_type is not None:
+        return FileResponse(filepath, media_type=inline_type, headers=headers)
+    headers["Content-Disposition"] = f'attachment; filename="{filepath.name}"'
+    return FileResponse(filepath, media_type="application/octet-stream", headers=headers)
 
 
 async def _media_is_public(db, filename: str) -> bool:

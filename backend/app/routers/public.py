@@ -24,10 +24,10 @@ _HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
 # on restart; an attacker who can rotate IPs (or trigger restarts) gets
 # fresh budget. Acceptable for a self-hosted small-team wiki.
 #
-# Memory: empty buckets are dropped after the prune so a one-off visitor
-# doesn't leave a permanent entry; if the dict still grows past _MAX_IPS
-# we drop the oldest-touched entries. Without this, an IP-rotating scraper
-# would leak memory linearly.
+# Memory: each active IP keeps one bucket; once the dict grows past _MAX_IPS
+# the oldest-touched entries are evicted (insertion order tracks recency via
+# the pop+reinsert below). Without this cap, an IP-rotating scraper would
+# leak memory linearly.
 _access_log: dict[str, list[float]] = defaultdict(list)
 _RATE_LIMIT_MAX = 60
 _RATE_LIMIT_WINDOW = 60  # seconds
@@ -77,13 +77,20 @@ async def get_public_page(slug: str, request: Request):
     # Strip HTML comments from source (Q8).
     page["content_md"] = _HTML_COMMENT_RE.sub("", page["content_md"])
 
-    # Inline drawio SVGs (Q3).
+    # Inline drawio SVGs (Q3). Only diagrams that live on a public, non-deleted
+    # page may be inlined — otherwise an editor could embed ::drawio[<any id>]
+    # into a public page and exfiltrate the rendered SVG of a diagram owned by
+    # a page they can't read (the authenticated path gates this by page ACL).
     ids = set(_DRAWIO_ID_RE.findall(page["content_md"]))
     diagrams: dict[str, str] = {}
     if ids:
         placeholders = ",".join("?" * len(ids))
         diag_rows = await db.execute_fetchall(
-            f"SELECT id, svg_cache FROM diagrams WHERE id IN ({placeholders})",
+            f"""SELECT d.id, d.svg_cache
+                FROM diagrams d
+                JOIN pages dp ON dp.id = d.page_id
+                WHERE d.id IN ({placeholders})
+                  AND dp.is_public = 1 AND dp.deleted_at IS NULL""",
             list(ids),
         )
         diagrams = {

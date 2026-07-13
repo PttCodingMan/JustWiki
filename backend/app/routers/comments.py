@@ -44,7 +44,7 @@ async def list_comments(
            FROM comments c
            LEFT JOIN users u ON u.id = c.user_id
            WHERE c.page_id = ?
-           ORDER BY c.created_at ASC
+           ORDER BY c.created_at ASC, c.id ASC
            LIMIT ? OFFSET ?""",
         (page_id, per_page, offset),
     )

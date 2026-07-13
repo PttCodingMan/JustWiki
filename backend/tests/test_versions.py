@@ -28,8 +28,10 @@ async def test_versions(auth_client):
     assert response.status_code == 200
     assert response.json()["title"] == "Version Page"
 
-    # Restore version
-    response = await auth_client.post(f"/api/pages/version-page/revert/{version_num}")
+    # Restore version — base_version is required (page is at v2 after the edit).
+    response = await auth_client.post(
+        f"/api/pages/version-page/revert/{version_num}", json={"base_version": 2}
+    )
     assert response.status_code == 200
     assert response.json()["title"] == "Version Page"
 

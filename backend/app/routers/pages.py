@@ -152,7 +152,10 @@ async def list_pages(
     total = count_row[0]["cnt"]
 
     rows = await db.execute_fetchall(
-        f"SELECT * FROM pages {where} ORDER BY sort_order, updated_at DESC LIMIT ? OFFSET ?",
+        # `id` tiebreak makes the order total — without it, pages sharing
+        # sort_order and a same-second updated_at can duplicate/skip across
+        # LIMIT/OFFSET pages.
+        f"SELECT * FROM pages {where} ORDER BY sort_order, updated_at DESC, id DESC LIMIT ? OFFSET ?",
         params + [per_page, offset],
     )
     pages = [dict(r) for r in rows]
@@ -396,6 +399,17 @@ async def update_page(
     sort_order = body.sort_order if body.sort_order is not None else current["sort_order"]
 
     if "parent_id" in body.model_fields_set and parent_id != current["parent_id"]:
+        if parent_id is not None:
+            # Validate the target parent exists and is live BEFORE hitting the
+            # FK — a nonexistent parent_id would otherwise surface as an opaque
+            # 500 (IntegrityError), and a soft-deleted parent would silently
+            # nest a live page under a trashed one.
+            parent_rows = await db.execute_fetchall(
+                "SELECT id FROM pages WHERE id = ? AND deleted_at IS NULL",
+                (parent_id,),
+            )
+            if not parent_rows:
+                raise HTTPException(status_code=400, detail="Parent page not found")
         if await _would_create_parent_cycle(db, current["id"], parent_id):
             raise HTTPException(
                 status_code=400,
@@ -422,17 +436,47 @@ async def update_page(
     # is_public / page_type changes do NOT bump version (metadata, not content)
     new_version = current["version"] + 1 if (content_changed or title_changed) else current["version"]
 
+    versioned_edit = content_changed or title_changed
     async with write_transaction(db):
         # Save current state as a version before updating (only if content/title actually changed).
         # Publicity/page_type toggles are metadata, not content, so they don't create a version.
-        if content_changed or title_changed:
+        if versioned_edit:
             await save_version(db, current["id"], current["title"], current["content_md"], user["id"])
 
-        await db.execute(
-            """UPDATE pages SET title = ?, content_md = ?, parent_id = ?, sort_order = ?,
-               is_public = ?, page_type = ?, mindmap_layout = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?""",
-            (title, content, parent_id, sort_order, 1 if is_public else 0, page_type, mindmap_layout, new_version, slug),
+        # Atomic optimistic lock: for a versioned edit, guard the write with
+        # `AND version = base_version` so the version check and the write are
+        # a single statement. `current["version"]` equals the base_version we
+        # validated above; if a concurrent writer bumped the row in between,
+        # this matches 0 rows and we 409 instead of silently clobbering. The
+        # pre-write comparison alone was a TOCTOU (read on a reader connection,
+        # write on the writer) that could lose a concurrent save.
+        where_sql = "WHERE slug = ?"
+        params = [
+            title, content, parent_id, sort_order, 1 if is_public else 0,
+            page_type, mindmap_layout, new_version, slug,
+        ]
+        if versioned_edit:
+            where_sql = "WHERE slug = ? AND version = ?"
+            params.append(current["version"])
+        cursor = await db.execute(
+            f"""UPDATE pages SET title = ?, content_md = ?, parent_id = ?, sort_order = ?,
+               is_public = ?, page_type = ?, mindmap_layout = ?, version = ?,
+               updated_at = CURRENT_TIMESTAMP {where_sql}""",
+            params,
         )
+        if versioned_edit and cursor.rowcount == 0:
+            latest = await db.execute_fetchall(
+                "SELECT version FROM pages WHERE slug = ?", (slug,)
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "conflict",
+                    "message": "This page was modified by someone else. Reload to see the latest version.",
+                    "current_version": latest[0]["version"] if latest else None,
+                    "your_version": body.base_version,
+                },
+            )
 
         # Update search index
         await rebuild_search_index(db, current["id"], title, content)
@@ -515,6 +559,17 @@ async def move_page(
     updates = []
     params = []
     if "parent_id" in body.model_fields_set:
+        if body.parent_id is not None:
+            # Reject a nonexistent/soft-deleted destination up front. Without
+            # this, resolve_page_permission on an unknown id returns the
+            # open-default and the UPDATE then trips the FK as an opaque 500,
+            # or nests the page under a trashed parent.
+            parent_rows = await db.execute_fetchall(
+                "SELECT id FROM pages WHERE id = ? AND deleted_at IS NULL",
+                (body.parent_id,),
+            )
+            if not parent_rows:
+                raise HTTPException(status_code=400, detail="Parent page not found")
         if await _would_create_parent_cycle(db, page_id, body.parent_id):
             raise HTTPException(
                 status_code=400,

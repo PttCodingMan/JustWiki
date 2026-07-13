@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import useAuth from './useAuth'
 import useSettings from './useSettings'
+import useChat from './useChat'
 import { isGuestMode } from '../lib/authState'
 
 // Mock the API client
@@ -85,6 +86,29 @@ describe('useAuth Store', () => {
     // (CSRF-y operations, AI chat, profile edit) treats guest as logged-out.
     expect(result.current.isAuthenticated).toBe(false)
     expect(isGuestMode()).toBe(true)
+  })
+
+  it('should NOT log the user out on a transient (non-401) error', async () => {
+    // A logged-in user hits a 500 / network blip on /auth/me at boot.
+    const mockUser = { id: 1, username: 'admin', role: 'admin' }
+    client.get.mockResolvedValueOnce({ data: mockUser })
+    const { result } = renderHook(() => useAuth())
+    await act(async () => { await result.current.checkAuth() })
+    expect(result.current.user).toEqual(mockUser)
+
+    client.get.mockRejectedValueOnce({ response: { status: 500 } })
+    await act(async () => { await result.current.checkAuth() })
+
+    // Session preserved — a transient failure must not sign the user out.
+    expect(result.current.user).toEqual(mockUser)
+    expect(result.current.isAuthenticated).toBe(true)
+  })
+
+  it('should reset chat history on logout', async () => {
+    useChat.setState({ messages: [{ role: 'user', content: 'secret question' }] })
+    const { result } = renderHook(() => useAuth())
+    await act(async () => { await result.current.logout() })
+    expect(useChat.getState().messages).toEqual([])
   })
 
   it('should clear guest mode after a real login', async () => {

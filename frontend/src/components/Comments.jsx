@@ -16,8 +16,9 @@ function CommentItem({ comment, currentUser, onDelete, onUpdate, pageSlug }) {
 
   const handleSave = async () => {
     if (!editContent.trim()) return
-    await onUpdate(comment.id, editContent.trim())
-    setEditing(false)
+    // Keep edit mode open if the update failed so the edit isn't lost.
+    const ok = await onUpdate(comment.id, editContent.trim())
+    if (ok !== false) setEditing(false)
   }
 
   return (
@@ -87,6 +88,7 @@ export default function Comments({ slug }) {
   const [loadedSlug, setLoadedSlug] = useState(slug)
   const [newComment, setNewComment] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [actionError, setActionError] = useState('')
 
   // Reset loading when the slug changes (adjusting state during render).
   if (loadedSlug !== slug) {
@@ -119,27 +121,39 @@ export default function Comments({ slug }) {
     e.preventDefault()
     if (!newComment.trim() || submitting) return
     setSubmitting(true)
+    setActionError('')
     try {
       await api.post(`/pages/${slug}/comments`, { content: newComment.trim() })
       setNewComment('')
       loadComments()
-    } catch { /* ignore */ }
+    } catch {
+      // Keep the draft in the textarea so the user doesn't lose it.
+      setActionError(t('comments.postFailed'))
+    }
     setSubmitting(false)
   }
 
   const handleDelete = async (commentId) => {
     if (!confirm(t('comments.confirmDelete'))) return
+    setActionError('')
     try {
       await api.delete(`/pages/${slug}/comments/${commentId}`)
       loadComments()
-    } catch { /* ignore */ }
+    } catch {
+      setActionError(t('comments.deleteFailed'))
+    }
   }
 
   const handleUpdate = async (commentId, content) => {
+    setActionError('')
     try {
       await api.put(`/pages/${slug}/comments/${commentId}`, { content })
       loadComments()
-    } catch { /* ignore */ }
+      return true
+    } catch {
+      setActionError(t('comments.updateFailed'))
+      return false
+    }
   }
 
   return (
@@ -164,6 +178,12 @@ export default function Comments({ slug }) {
                   pageSlug={slug}
                 />
               ))}
+            </div>
+          )}
+
+          {actionError && (
+            <div className="mb-3 text-sm text-red-600 dark:text-red-400" role="alert">
+              {actionError}
             </div>
           )}
 
