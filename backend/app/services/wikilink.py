@@ -27,10 +27,16 @@ async def parse_and_update_backlinks(db, source_page_id: int, content_md: str):
     if not slugs:
         return
 
-    # Resolve slugs to page IDs (skip soft-deleted targets)
+    # Resolve slugs to page IDs. We deliberately DO NOT skip soft-deleted
+    # targets here: if a linked page is currently in the trash and the source
+    # page is re-saved, dropping the backlink would lose it permanently —
+    # restoring the target only rebuilds ITS outgoing links, not inbound ones.
+    # Keeping the row is safe because every read path (backlinks panel, graph)
+    # filters deleted pages, and the ON DELETE CASCADE FKs clean it up if the
+    # target is ever purged.
     placeholders = ",".join("?" for _ in slugs)
     rows = await db.execute_fetchall(
-        f"SELECT id, slug FROM pages WHERE slug IN ({placeholders}) AND deleted_at IS NULL",
+        f"SELECT id, slug FROM pages WHERE slug IN ({placeholders})",
         list(slugs),
     )
 

@@ -44,6 +44,53 @@ async def test_delete_self_fails(admin_client, admin_user):
     assert response.json()["detail"] == "Cannot delete yourself"
 
 
+@pytest.mark.asyncio
+async def test_deactivate_blocks_login_and_token(admin_client, db):
+    """A deactivated user cannot log in and their session/token stops working."""
+    pw = "secretpw"
+    cursor = await db.execute(
+        "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+        ("suspendme", hash_password(pw), "editor"),
+    )
+    user_id = cursor.lastrowid
+    await db.commit()
+
+    # Login works while active.
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        ok = await c.post("/api/auth/login", json={"username": "suspendme", "password": pw})
+        assert ok.status_code == 200
+
+    # Their JWT resolves while active.
+    token = create_token(user_id, "suspendme", "editor")
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test",
+        headers={"Authorization": f"Bearer {token}"},
+    ) as c:
+        assert (await c.get("/api/auth/me")).status_code == 200
+
+    # Deactivate.
+    res = await admin_client.put(f"/api/users/{user_id}", json={"is_active": False})
+    assert res.status_code == 200
+    assert res.json()["is_active"] == 0
+
+    # Login now fails generically, and the existing JWT no longer resolves.
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        bad = await c.post("/api/auth/login", json={"username": "suspendme", "password": pw})
+        assert bad.status_code == 401
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test",
+        headers={"Authorization": f"Bearer {token}"},
+    ) as c:
+        assert (await c.get("/api/auth/me")).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_cannot_deactivate_self(admin_client, admin_user):
+    user_id = admin_user["user"]["id"]
+    res = await admin_client.put(f"/api/users/{user_id}", json={"is_active": False})
+    assert res.status_code == 400
+
+
 # --- Soft-delete -----------------------------------------------------------
 
 

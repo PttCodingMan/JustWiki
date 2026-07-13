@@ -22,10 +22,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-# Simple in-memory rate limiter for login: max 5 attempts per IP per 60 seconds
-_login_attempts: dict[str, list[float]] = defaultdict(list)
+# Simple in-memory rate limiter for login: max 5 attempts per IP per 60 seconds.
+# Memory is bounded: emptied buckets are dropped and, past _MAX_IPS, the
+# oldest-touched entries are evicted so an IP-rotating attacker can't leak the
+# dict linearly.
+_login_attempts: dict[str, list[float]] = {}
 _RATE_LIMIT_MAX = 5
 _RATE_LIMIT_WINDOW = 60  # seconds
+_MAX_IPS = 10_000
 
 # Pre-computed bcrypt hash for the constant-time login path. Verifying
 # against this when the username doesn't exist (or is a shell account with
@@ -36,15 +40,22 @@ _DUMMY_PASSWORD_HASH = hash_password("dummy-constant-time-guard")
 
 def _check_rate_limit(ip: str):
     now = time.monotonic()
-    attempts = _login_attempts[ip]
-    # Prune old entries
-    _login_attempts[ip] = [t for t in attempts if now - t < _RATE_LIMIT_WINDOW]
-    if len(_login_attempts[ip]) >= _RATE_LIMIT_MAX:
+    # pop+reinsert so insertion order tracks recency for the LRU eviction below.
+    attempts = _login_attempts.pop(ip, [])
+    pruned = [t for t in attempts if now - t < _RATE_LIMIT_WINDOW]
+    if len(pruned) >= _RATE_LIMIT_MAX:
+        _login_attempts[ip] = pruned
         raise HTTPException(
             status_code=429,
             detail="Too many login attempts. Please wait before trying again.",
         )
-    _login_attempts[ip].append(now)
+    pruned.append(now)
+    _login_attempts[ip] = pruned
+
+    if len(_login_attempts) > _MAX_IPS:
+        # Drop oldest-touched entries first; cheap one-shot loop only at the cap.
+        for stale in list(_login_attempts)[: len(_login_attempts) - _MAX_IPS]:
+            _login_attempts.pop(stale, None)
 
 
 @router.post("/login")
@@ -52,8 +63,12 @@ async def login(body: LoginRequest, request: Request, response: Response):
     _check_rate_limit(client_ip(request))
 
     db = await get_db()
+    # `is_active = 1` folds deactivated accounts into the same generic-failure
+    # path as a wrong username, so login stays timing-safe and doesn't reveal
+    # whether an account exists-but-suspended.
     rows = await db.execute_fetchall(
-        "SELECT id, username, password_hash, role, display_name, email FROM users WHERE username = ? AND deleted_at IS NULL",
+        "SELECT id, username, password_hash, role, display_name, email FROM users "
+        "WHERE username = ? AND deleted_at IS NULL AND is_active = 1",
         (body.username,),
     )
 

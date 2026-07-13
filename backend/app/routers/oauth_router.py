@@ -35,7 +35,14 @@ def _safe_redirect(raw: str | None) -> str:
     """
     if not raw or not isinstance(raw, str):
         return "/"
-    if not raw.startswith("/") or raw.startswith("//"):
+    # Must be a same-origin absolute path. Reject:
+    #   - anything not starting with "/"        (absolute URLs, schemes)
+    #   - "//host"  → protocol-relative redirect
+    #   - "/\host"  → browsers normalize "\" to "/", so this becomes "//host"
+    #   - embedded backslashes / control chars used to smuggle the above
+    if not raw.startswith("/") or raw[1:2] in ("/", "\\"):
+        return "/"
+    if any(c in raw for c in ("\\", "\n", "\r", "\t")):
         return "/"
     return raw
 

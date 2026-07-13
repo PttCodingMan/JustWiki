@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import api from '../api/client'
 import useSettings from './useSettings'
+import useChat from './useChat'
 import { setGuestMode } from '../lib/authState'
 
 // Synthetic user used when ANONYMOUS_READ is on and the visitor has no
@@ -30,6 +31,9 @@ const useAuth = create((set) => ({
   logout: async () => {
     await api.post('/auth/logout').catch(() => {})
     setGuestMode(false)
+    // Drop per-user client state that would otherwise linger for the next
+    // account signing in on the same tab (SPA logout does no full reload).
+    useChat.getState().reset()
     set({ user: null, isAuthenticated: false })
   },
 
@@ -38,11 +42,18 @@ const useAuth = create((set) => ({
       const res = await api.get('/auth/me')
       setGuestMode(false)
       set({ user: res.data, isAuthenticated: true, loading: false })
-    } catch {
-      // /auth/me 401 means "no real session". Whether to fall back to a
-      // guest viewer depends on the server-side ANONYMOUS_READ flag, which
-      // ships in /api/settings. Make sure settings have loaded first so the
-      // boot sequence doesn't race and miscategorise a guest as logged-out.
+    } catch (err) {
+      // Only a real 401 means "no session". A transient network blip or 5xx
+      // must NOT be treated as logged-out — that would silently sign a valid
+      // user out until they reload. Leave auth state untouched in that case.
+      if (err?.response && err.response.status !== 401) {
+        set({ loading: false })
+        return
+      }
+      // 401 → no real session. Whether to fall back to a guest viewer depends
+      // on the server-side ANONYMOUS_READ flag, which ships in /api/settings.
+      // Make sure settings have loaded first so the boot sequence doesn't race
+      // and miscategorise a guest as logged-out.
       const settings = useSettings.getState()
       if (!settings.loaded) {
         await settings.fetch()

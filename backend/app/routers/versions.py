@@ -7,6 +7,8 @@ from app.services.acl import PageAccess, page_dep
 from app.services.search import rebuild_search_index
 from app.services.wikilink import parse_and_update_backlinks
 from app.services.media_ref import parse_and_update_media_refs
+from app.services.notifications import notify_page_updated
+from app.services.mention import notify_mentions
 from app.routers.activity import log_activity
 
 
@@ -130,17 +132,17 @@ async def revert_to_version(
     current = ctx.page
 
     # Optimistic lock — same contract as PUT /pages/{slug}. Reverting always
-    # changes content, so the client must pin to a known base_version. If
-    # someone else edited the page between the user opening the versions
-    # page and clicking revert, return 409 instead of silently clobbering.
-    if body.base_version is not None and body.base_version != current["version"]:
+    # changes content, so the client MUST pin to a known base_version (no
+    # silent fallback, matching update_page). If someone else edited the page
+    # between the user opening the versions list and clicking revert, we 409
+    # instead of clobbering.
+    if body.base_version is None:
         raise HTTPException(
-            status_code=409,
+            status_code=400,
             detail={
-                "error": "conflict",
-                "message": "This page was modified by someone else. Reload the versions list and try again.",
+                "error": "base_version_required",
+                "message": "base_version is required to revert.",
                 "current_version": current["version"],
-                "your_version": body.base_version,
             },
         )
 
@@ -151,17 +153,34 @@ async def revert_to_version(
     if not version:
         raise HTTPException(status_code=404, detail="Version not found")
 
+    old_content = current["content_md"]
     async with write_transaction(db):
         # Save current state as a new version before reverting
         await save_version(db, current["id"], current["title"], current["content_md"], user["id"])
 
-        # Revert — bump the optimistic lock version so concurrent editors get a 409
+        # Revert with an ATOMIC optimistic lock: guard the write with
+        # `AND version = base_version` so the check and the write are a single
+        # statement. A concurrent writer that already bumped the version makes
+        # this match 0 rows → 409, closing the TOCTOU the pre-read check had.
         new_version = current["version"] + 1
-        await db.execute(
+        cursor = await db.execute(
             """UPDATE pages SET title = ?, content_md = ?, version = ?,
-               updated_at = CURRENT_TIMESTAMP WHERE slug = ?""",
-            (version[0]["title"], version[0]["content_md"], new_version, slug),
+               updated_at = CURRENT_TIMESTAMP WHERE slug = ? AND version = ?""",
+            (version[0]["title"], version[0]["content_md"], new_version, slug, body.base_version),
         )
+        if cursor.rowcount == 0:
+            latest = await db.execute_fetchall(
+                "SELECT version FROM pages WHERE slug = ?", (slug,)
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "conflict",
+                    "message": "This page was modified by someone else. Reload the versions list and try again.",
+                    "current_version": latest[0]["version"] if latest else None,
+                    "your_version": body.base_version,
+                },
+            )
         await rebuild_search_index(db, current["id"], version[0]["title"], version[0]["content_md"])
         await parse_and_update_backlinks(db, current["id"], version[0]["content_md"])
         await parse_and_update_media_refs(db, current["id"], version[0]["content_md"])
@@ -171,4 +190,19 @@ async def revert_to_version(
         )
 
     rows = await db.execute_fetchall("SELECT * FROM pages WHERE slug = ?", (slug,))
-    return dict(rows[0])
+    updated = dict(rows[0])
+
+    # A revert changes content like any edit, so watchers and @mentions in the
+    # reverted-to content must be notified (previously skipped).
+    await notify_page_updated(
+        db, updated, user, {"title_changed": True, "content_changed": True}
+    )
+    await notify_mentions(
+        db,
+        content_md=version[0]["content_md"],
+        page_id=current["id"],
+        actor=user,
+        old_content_md=old_content,
+    )
+
+    return updated

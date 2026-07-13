@@ -61,9 +61,9 @@ import { visit } from 'unist-util-visit'
 
 import { remarkWikilinkPlugin } from './plugins/wikilink'
 import { remarkMentionPlugin } from './plugins/mention'
+import { CALLOUT_TITLES } from '../calloutTitles'
 
 const CALLOUT_TYPES = new Set(['info', 'warning', 'tip', 'danger'])
-const CALLOUT_TITLES = { info: 'Info', warning: 'Warning', tip: 'Tip', danger: 'Danger' }
 
 // Inline SVGs kept identical to the v1 renderer's output so styling stays
 // pixel-stable when toggling the flag.

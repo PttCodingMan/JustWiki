@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS users (
     email             TEXT DEFAULT '',
     bio               TEXT NOT NULL DEFAULT '',
     original_username TEXT,
+    is_active         INTEGER NOT NULL DEFAULT 1,
     deleted_at        TIMESTAMP,
     created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -1321,20 +1322,25 @@ async def _ensure_fts5_index(db) -> bool:
         create_sql = rows[0]["sql"] or ""
         match = _TOKENIZE_RE.search(create_sql)
         current = match.group(1).lower() if match else None
+        # page_id must be UNINDEXED — otherwise it's part of the full-text
+        # index and a numeric query (e.g. "100") matches page ids via their
+        # trigrams, returning irrelevant pages. Older DBs created it indexed.
+        page_id_unindexed = "page_id unindexed" in create_sql.lower()
 
-        if current == preferred:
-            return False  # Already using the right tokenizer
+        if current == preferred and page_id_unindexed:
+            return False  # Already correct — right tokenizer, page_id excluded
 
         logger.info(
-            "Migrating search_index tokenizer from '%s' to '%s' …",
+            "Migrating search_index (tokenizer '%s'→'%s', page_id UNINDEXED=%s) …",
             current or "unknown",
             preferred,
+            page_id_unindexed,
         )
         await db.execute("DROP TABLE IF EXISTS search_index")
 
     await db.execute(
         f"CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5("
-        f"page_id, title, content_segmented, tokenize='{preferred}')"
+        f"page_id UNINDEXED, title, content_segmented, tokenize='{preferred}')"
     )
     await db.commit()
     logger.info("FTS5 search_index ready (tokenizer=%s)", preferred)
@@ -1704,7 +1710,9 @@ async def rebuild_all_search_indexes(db):
     if rows[0]["cnt"] > 0:
         return  # Already populated
 
-    pages = await db.execute_fetchall("SELECT id, title, content_md FROM pages")
+    pages = await db.execute_fetchall(
+        "SELECT id, title, content_md FROM pages WHERE deleted_at IS NULL"
+    )
     for p in pages:
         await rebuild_search_index(db, p["id"], p["title"], p["content_md"])
     if pages:
@@ -1719,7 +1727,9 @@ async def rebuild_all_backlinks(db):
     if rows[0]["cnt"] > 0:
         return  # Already populated
 
-    pages = await db.execute_fetchall("SELECT id, content_md FROM pages")
+    pages = await db.execute_fetchall(
+        "SELECT id, content_md FROM pages WHERE deleted_at IS NULL"
+    )
     for p in pages:
         await parse_and_update_backlinks(db, p["id"], p["content_md"])
     if pages:
@@ -1741,7 +1751,9 @@ async def rebuild_all_media_refs(db):
     if current & 0x1:
         return
 
-    pages = await db.execute_fetchall("SELECT id, content_md FROM pages")
+    pages = await db.execute_fetchall(
+        "SELECT id, content_md FROM pages WHERE deleted_at IS NULL"
+    )
     for p in pages:
         await parse_and_update_media_refs(db, p["id"], p["content_md"])
     await db.execute(f"PRAGMA user_version = {current | 0x1}")

@@ -17,22 +17,25 @@ async def log_activity(db, user_id: int, action: str, target_type: str, target_i
     )
 
 
-def _readable_clause(readable: frozenset[int] | set[int]) -> tuple[str, list]:
-    """SQL fragment + params for "target_type='page' AND target_id ∈ readable".
+def _readable_clause(
+    readable: frozenset[int] | set[int], is_admin: bool
+) -> tuple[str, list]:
+    """SQL fragment + params scoping the activity feed to the caller.
 
-    Non-page rows (e.g. comment activity) are kept as-is — currently every
-    write that calls log_activity uses target_type='page', so the filter is
-    effectively a whitelist; if non-page targets are added later, they'll
-    pass through and may need their own ACL gate.
+    Non-admins see ONLY page activity for pages they can read. Non-page rows
+    (group create/delete + membership, api_token create/revoke, ACL changes)
+    carry org-structure and credential-lifecycle metadata, so they are
+    admin-only — otherwise any authenticated user (or an anonymous visitor
+    under ANONYMOUS_READ) could enumerate group names, who was added/removed
+    from which group, and other users' token names via /api/activity.
     """
+    if is_admin:
+        return "1 = 1", []
     if not readable:
-        # No readable pages → drop every page-targeted row.
-        return "(a.target_type != 'page')", []
+        # No readable pages and not admin → nothing to show.
+        return "0 = 1", []
     id_clause, id_params = build_id_clause(readable, column="a.target_id")
-    return (
-        f"(a.target_type != 'page' OR {id_clause})",
-        id_params,
-    )
+    return (f"(a.target_type = 'page' AND {id_clause})", id_params)
 
 
 @router.get("")
@@ -46,9 +49,10 @@ async def list_activity(
 
     # Filter activity to entries about pages the caller can read; otherwise
     # the feed leaks titles/slugs of restricted pages via the metadata blob.
-    # Admin is short-circuited inside list_readable_page_ids.
+    # Admins additionally see non-page (group/token/ACL) activity.
+    is_admin = user.get("role") == "admin"
     readable = await list_readable_page_ids(db, user)
-    where_sql, where_params = _readable_clause(readable)
+    where_sql, where_params = _readable_clause(readable, is_admin)
 
     count_rows = await db.execute_fetchall(
         f"SELECT COUNT(*) as cnt FROM activity_log a WHERE {where_sql}",
@@ -121,7 +125,11 @@ async def activity_stats(user=Depends(get_current_user)):
         f"""SELECT p.id, p.slug, p.title, p.view_count
            FROM pages p
            WHERE {p_id_clause}
-             AND p.id NOT IN (SELECT target_page_id FROM backlinks)
+             AND p.id NOT IN (
+                 SELECT b.target_page_id FROM backlinks b
+                 JOIN pages sp ON sp.id = b.source_page_id
+                 WHERE sp.deleted_at IS NULL
+             )
              AND p.parent_id IS NULL
            ORDER BY p.updated_at DESC LIMIT 20""",
         p_id_params,

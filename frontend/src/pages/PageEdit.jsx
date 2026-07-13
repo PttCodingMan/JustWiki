@@ -11,7 +11,7 @@ import MarkdownViewer from '../components/Viewer/MarkdownViewer'
 import MindmapView from '../components/MindmapView'
 import MindmapLayoutSelect from '../components/MindmapLayoutSelect'
 import DrawioModal from '../components/DrawioModal'
-import useUnsavedWarning from '../hooks/useUnsavedWarning'
+import useUnsavedWarning, { confirmDiscard } from '../hooks/useUnsavedWarning'
 import { stripBrTags } from '../lib/markdown'
 import api from '../api/client'
 
@@ -62,7 +62,13 @@ export default function PageEdit() {
     }
   }, [])
 
-  useUnsavedWarning(dirty)
+  useUnsavedWarning(dirty, t('pageEdit.unsavedWarning'))
+
+  const handleCancel = useCallback(() => {
+    if (confirmDiscard(dirty, t('pageEdit.unsavedWarning'))) {
+      navigate(`/page/${slug}`)
+    }
+  }, [dirty, t, navigate, slug])
 
   useEffect(() => {
     getPage(slug).then((p) => {
@@ -279,7 +285,15 @@ export default function PageEdit() {
     return () => window.removeEventListener('keydown', handler)
   }, [handleSave])
 
-  if (!page) return <div className="text-text-secondary">{t('common.loading')}</div>
+  // Gate on the loaded page matching the current slug. React Router keeps
+  // PageEdit mounted across slug transitions, so while navigating A→B the
+  // still-loaded page is A (page.slug !== slug); showing the loader unmounts
+  // the uncontrolled Milkdown editor until B's content arrives, so a save can
+  // never write the previous page's body onto the new one. (Editor also keys
+  // on slug as a second guard.)
+  if (!page || page.slug !== slug) {
+    return <div className="text-text-secondary">{t('common.loading')}</div>
+  }
 
   return (
     <div className={showPreview ? 'edit-split-root' : 'max-w-4xl mx-auto'}>
@@ -344,6 +358,7 @@ export default function PageEdit() {
         <div className={showPreview ? 'edit-split-editor' : ''}>
           <div className="bg-surface rounded-xl shadow-sm border border-border min-h-[500px]">
             <Editor
+              key={slug}
               ref={editorRef}
               defaultValue={content}
               onChange={setContent}
@@ -422,7 +437,7 @@ export default function PageEdit() {
           </svg>
         </button>
         <button
-          onClick={() => navigate(`/page/${slug}`)}
+          onClick={handleCancel}
           className="fab-btn fab-btn-secondary"
         >
           {t('pageEdit.cancel')}
