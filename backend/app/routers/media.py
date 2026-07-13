@@ -281,9 +281,21 @@ def _safe_media_response(filepath: Path) -> FileResponse:
     upload-time content checks.
     """
     headers = {"X-Content-Type-Options": "nosniff"}
-    inline_type = _INLINE_SAFE_TYPES.get(filepath.suffix.lower())
+    ext = filepath.suffix.lower()
+    inline_type = _INLINE_SAFE_TYPES.get(ext)
     if inline_type is not None:
         return FileResponse(filepath, media_type=inline_type, headers=headers)
+    if ext == ".svg":
+        # SVG can carry script, but it only executes as a *top-level* document
+        # (direct navigation, <iframe>, <object>) — never when painted through
+        # <img>. Force an attachment disposition so navigating straight to the
+        # URL downloads instead of rendering, while still serving the explicit
+        # image/svg+xml type so legitimate `![icon](/api/media/x.svg)` embeds
+        # keep rendering in <img>.
+        headers["Content-Disposition"] = f'attachment; filename="{filepath.name}"'
+        return FileResponse(filepath, media_type="image/svg+xml", headers=headers)
+    # Everything else (text, svgz, or an unexpected extension): neutral
+    # download so it can never run as active content in the app's origin.
     headers["Content-Disposition"] = f'attachment; filename="{filepath.name}"'
     return FileResponse(filepath, media_type="application/octet-stream", headers=headers)
 

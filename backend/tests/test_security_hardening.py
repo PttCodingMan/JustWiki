@@ -49,6 +49,25 @@ async def test_upload_png_served_inline_with_explicit_type(auth_client):
 
 
 @pytest.mark.asyncio
+async def test_upload_svg_serves_as_image_with_attachment(auth_client):
+    """A clean SVG icon still renders in <img> (explicit image/svg+xml) but
+    downloads on direct navigation (attachment), so it can't run as a
+    top-level document."""
+    svg = b'<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>'
+    files = {"file": ("icon.svg", svg, "image/svg+xml")}
+    res = await auth_client.post("/api/media/upload", files=files)
+    assert res.status_code == 201
+    filename = res.json()["filename"]
+    assert filename.endswith(".svg")
+
+    got = await auth_client.get(f"/api/media/{filename}")
+    assert got.status_code == 200
+    assert got.headers["content-type"].startswith("image/svg+xml")
+    assert "attachment" in got.headers.get("content-disposition", "").lower()
+    assert got.headers.get("x-content-type-options") == "nosniff"
+
+
+@pytest.mark.asyncio
 async def test_activity_feed_hides_group_activity_from_non_admin(
     admin_client, auth_client
 ):
