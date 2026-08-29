@@ -406,6 +406,11 @@
       "media": { "label": "Media Library", "desc": "Pick from uploaded files" }
     }
   },
+  "editor": {
+    "switchToSource": "Edit source (Markdown)",
+    "switchToRichText": "Rich text editor",
+    "sourcePlaceholder": "Write Markdown here..."
+  },
   "tableTooltip": {
     "addRowAbove": "Insert row above",
     "addRowBelow": "Insert row below",

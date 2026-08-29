@@ -1,4 +1,4 @@
-import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Editor as MilkdownEditor, rootCtx, defaultValueCtx, commandsCtx, serializerCtx, editorViewCtx } from '@milkdown/kit/core'
 import { commonmark, headingSchema, blockquoteSchema, hrSchema, bulletListSchema, orderedListSchema, codeBlockSchema, insertImageCommand } from '@milkdown/kit/preset/commonmark'
@@ -588,6 +588,20 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
   const mediaHandlerRef = useRef(onMediaPickerOpen)
   const onTabOutRef = useRef(onTabOut)
   const editorViewRef = useRef(null)
+  // Source ("plain Markdown") mode is a textarea-based fallback. The Milkdown
+  // contenteditable mishandles IME composition on Windows (committing a Zhuyin
+  // selection with Enter can revert to the raw phonetic buffer and drop the
+  // last keystrokes); a native <textarea> has none of that. The preference is
+  // persisted so affected users set it once.
+  const SOURCE_MODE_KEY = 'editor.sourceMode'
+  const [sourceMode, setSourceMode] = useState(
+    () => typeof localStorage !== 'undefined' && localStorage.getItem(SOURCE_MODE_KEY) === '1'
+  )
+  const sourceRef = useRef(null)
+  // Latest markdown, kept current in both modes so we can seed the other mode
+  // when the user toggles.
+  const markdownRef = useRef(defaultValue)
+  const [sourceText, setSourceText] = useState(defaultValue)
   // The slash menu and wikilink menu both render plain DOM (not React),
   // so they cannot read t() from context. Snapshot translated strings into
   // refs before the editor's init effect runs.
@@ -631,29 +645,54 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
   useImperativeHandle(ref, () => ({
     insertText(text) {
       const view = editorViewRef.current
-      if (!view) return
+      if (!view) {
+        // Source mode: splice at the textarea caret.
+        const ta = sourceRef.current
+        if (!ta) return
+        const start = ta.selectionStart ?? ta.value.length
+        const end = ta.selectionEnd ?? start
+        const next = ta.value.slice(0, start) + text + ta.value.slice(end)
+        markdownRef.current = next
+        setSourceText(next)
+        onChangeRef.current?.(next)
+        requestAnimationFrame(() => {
+          const el = sourceRef.current
+          if (!el) return
+          const caret = start + text.length
+          el.focus()
+          el.setSelectionRange(caret, caret)
+        })
+        return
+      }
       const { state, dispatch } = view
       const pos = state.selection.from
       dispatch(state.tr.insertText(text, pos))
     },
     focus() {
       const view = editorViewRef.current
-      if (!view) return
+      if (!view) {
+        sourceRef.current?.focus()
+        return
+      }
       view.focus()
     },
     getMarkdown() {
       const editor = editorRef.current
-      if (!editor) return null
+      // Source mode (or before init): the textarea text is the source of truth.
+      if (!editor) return markdownRef.current
       let md = null
       editor.action((ctx) => {
         const view = ctx.get(editorViewCtx)
         md = ctx.get(serializerCtx)(view.state.doc)
       })
+      markdownRef.current = md
       return md
     },
   }), [])
 
   useEffect(() => {
+    // Source mode renders a plain textarea instead — no Milkdown to build.
+    if (sourceMode) return
     if (!containerRef.current) return
 
     let cancelled = false
@@ -843,7 +882,9 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
       const editor = await MilkdownEditor.make()
         .config((ctx) => {
           ctx.set(rootCtx, containerRef.current)
-          ctx.set(defaultValueCtx, defaultValue)
+          // Seed from the live markdown (so toggling back from source mode keeps
+          // edits), falling back to the initial prop on first mount.
+          ctx.set(defaultValueCtx, markdownRef.current ?? defaultValue)
           ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
             // Skip parent state updates while IME composition is active —
             // the React re-render they trigger can interrupt composition on
@@ -851,6 +892,7 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
             // compositionend, which fires the listener again with the
             // committed text, so no input is lost.
             if (editorViewRef.current?.composing) return
+            markdownRef.current = markdown
             onChangeRef.current?.(markdown)
           })
           let slashMenuView = null
@@ -905,10 +947,11 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
         containerRef.current.innerHTML = ''
       }
     }
-  }, [])
+  }, [sourceMode])
 
   // Image paste handler
   useEffect(() => {
+    if (sourceMode) return
     const container = containerRef.current
     if (!container) return
 
@@ -944,10 +987,62 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
 
     container.addEventListener('paste', handlePaste)
     return () => container.removeEventListener('paste', handlePaste)
-  }, [])
+  }, [sourceMode])
+
+  const handleSourceChange = (e) => {
+    const v = e.target.value
+    markdownRef.current = v
+    setSourceText(v)
+    onChangeRef.current?.(v)
+  }
+
+  const toggleSourceMode = () => {
+    const goingToSource = !sourceMode
+    if (goingToSource) {
+      // Capture live markdown from Milkdown before it's torn down so the
+      // textarea opens on exactly what's on screen.
+      const editor = editorRef.current
+      let md = markdownRef.current
+      if (editor) {
+        editor.action((ctx) => {
+          const view = ctx.get(editorViewCtx)
+          md = ctx.get(serializerCtx)(view.state.doc)
+        })
+      }
+      markdownRef.current = md ?? ''
+      setSourceText(md ?? '')
+    }
+    // source -> wysiwyg needs no capture: markdownRef already holds the
+    // textarea text, and the init effect re-seeds Milkdown from it.
+    try {
+      localStorage.setItem(SOURCE_MODE_KEY, goingToSource ? '1' : '0')
+    } catch { /* ignore */ }
+    setSourceMode(goingToSource)
+  }
 
   return (
-    <div className="milkdown" ref={containerRef} />
+    <div className="milkdown-shell">
+      <button
+        type="button"
+        className="editor-mode-toggle"
+        onClick={toggleSourceMode}
+        title={sourceMode ? t('editor.switchToRichText') : t('editor.switchToSource')}
+      >
+        {sourceMode ? t('editor.switchToRichText') : t('editor.switchToSource')}
+      </button>
+      {sourceMode ? (
+        <textarea
+          ref={sourceRef}
+          className="editor-source"
+          value={sourceText}
+          onChange={handleSourceChange}
+          placeholder={t('editor.sourcePlaceholder')}
+          spellCheck={false}
+        />
+      ) : (
+        <div className="milkdown" ref={containerRef} />
+      )}
+    </div>
   )
 })
 
