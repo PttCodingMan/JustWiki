@@ -6,12 +6,13 @@ import useBookmarks from '../../store/useBookmarks'
 import useAuth from '../../store/useAuth'
 import useChat from '../../store/useChat'
 import AppFooter from '../AppFooter'
+import ConfirmDialog from '../ConfirmDialog'
 
 function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
   const { t } = useTranslation()
   const location = useLocation()
   const navigate = useNavigate()
-  const { movePage } = usePages()
+  const { movePage, deletePage, fetchTree } = usePages()
   const { user } = useAuth()
   // viewer covers both real viewers and the synthetic guest, since both
   // resolve to permission='read' and can't reorder pages.
@@ -23,7 +24,18 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
   )
   const [trackedPath, setTrackedPath] = useState(location.pathname)
   const [dropPosition, setDropPosition] = useState(null) // 'before' | 'inside' | 'after'
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const rowRef = useRef(null)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   // Auto-expand when navigation lands on a descendant (adjusting state during render).
   if (trackedPath !== location.pathname) {
@@ -86,6 +98,19 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
     }
   }
 
+  const handleDelete = async () => {
+    setDeleteConfirmOpen(false)
+    setMenuOpen(false)
+    try {
+      await deletePage(node.slug)
+      await fetchTree()
+      // Viewing the page (or a descendant) we just trashed -> bounce home.
+      if (isChildActive(node, location.pathname)) navigate('/')
+    } catch (err) {
+      console.error('Delete failed:', err)
+    }
+  }
+
   const dropIndicatorClass =
     dropPosition === 'before' ? 'border-t-2 border-blue-400' :
     dropPosition === 'after' ? 'border-b-2 border-blue-400' :
@@ -138,22 +163,41 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
           {node.title}
         </Link>
         {canAuthor && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              navigate(`/new?parent=${node.id}`)
-            }}
-            draggable={false}
-            aria-label={t('sidebar.newSubpageUnder', { title: node.title })}
-            title={t('sidebar.newSubpage')}
-            className="w-6 h-6 mr-1 flex items-center justify-center shrink-0 rounded opacity-0 group-hover:opacity-100 focus:opacity-100 text-text-secondary hover:text-text hover:bg-surface-hover"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
-            </svg>
-          </button>
+          <div className="relative shrink-0 mr-1" ref={menuRef}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setMenuOpen(!menuOpen)
+              }}
+              draggable={false}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label={t('sidebar.pageActionsFor', { title: node.title })}
+              title={t('sidebar.pageActions')}
+              className={`w-6 h-6 flex items-center justify-center rounded group-hover:opacity-100 focus:opacity-100 text-text-secondary hover:text-text hover:bg-surface-hover ${menuOpen ? 'opacity-100' : 'opacity-0'}`}
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <circle cx="4" cy="10" r="1.5" />
+                <circle cx="10" cy="10" r="1.5" />
+                <circle cx="16" cy="10" r="1.5" />
+              </svg>
+            </button>
+            {menuOpen && (
+              <div role="menu" className="absolute right-0 top-full mt-1 bg-surface border border-border rounded-xl shadow-lg p-1 z-50 w-40">
+                <MenuItem onClick={() => { setMenuOpen(false); navigate(`/new?parent=${node.id}`) }}>
+                  {t('sidebar.newSubpage')}
+                </MenuItem>
+                <MenuItem onClick={() => { setMenuOpen(false); navigate(`/page/${node.slug}/edit`) }}>
+                  {t('pageView.edit')}
+                </MenuItem>
+                <MenuItem danger onClick={() => { setMenuOpen(false); setDeleteConfirmOpen(true) }}>
+                  {t('pageView.delete')}
+                </MenuItem>
+              </div>
+            )}
+          </div>
         )}
       </div>
       {hasChildren && expanded && (
@@ -163,7 +207,41 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
           ))}
         </div>
       )}
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        title={t('pageView.confirm.deleteTitle')}
+        description={
+          <>
+            <div className="font-medium text-text mb-1">&quot;{node.title}&quot;</div>
+            <div>{t('pageView.confirm.deleteBody')}</div>
+          </>
+        }
+        confirmLabel={t('pageView.confirm.deleteLabel')}
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteConfirmOpen(false)}
+      />
     </div>
+  )
+}
+
+function MenuItem({ onClick, danger = false, children }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      draggable={false}
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        onClick()
+      }}
+      className={`w-full text-left px-3 py-1.5 text-sm rounded-lg hover:bg-surface-hover ${
+        danger ? 'text-red-600' : 'text-text'
+      }`}
+    >
+      {children}
+    </button>
   )
 }
 

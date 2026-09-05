@@ -44,8 +44,9 @@
     "bookmarks": "ブックマーク",
     "pages": "ページ",
     "noPages": "ページはまだありません",
-    "newSubpageUnder": "「{{title}}」配下に新しいサブページ",
-    "newSubpage": "新しいサブページ"
+    "newSubpage": "新しいサブページ",
+    "pageActions": "ページ操作",
+    "pageActionsFor": "「{{title}}」のページ操作"
   },
   "notifications": {
     "title": "通知",

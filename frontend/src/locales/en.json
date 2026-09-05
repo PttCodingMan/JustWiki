@@ -44,8 +44,9 @@
     "bookmarks": "Bookmarks",
     "pages": "Pages",
     "noPages": "No pages yet",
-    "newSubpageUnder": "New subpage under {{title}}",
-    "newSubpage": "New subpage"
+    "newSubpage": "New subpage",
+    "pageActions": "Page actions",
+    "pageActionsFor": "Page actions for {{title}}"
   },
   "notifications": {
     "title": "Notifications",

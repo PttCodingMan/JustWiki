@@ -44,8 +44,9 @@
     "bookmarks": "書籤",
     "pages": "頁面",
     "noPages": "尚未有任何頁面",
-    "newSubpageUnder": "在「{{title}}」下新增子頁面",
-    "newSubpage": "新增子頁面"
+    "newSubpage": "新增子頁面",
+    "pageActions": "頁面選項",
+    "pageActionsFor": "「{{title}}」的頁面選項"
   },
   "notifications": {
     "title": "通知",

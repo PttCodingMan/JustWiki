@@ -1,6 +1,6 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import usePages from '../../store/usePages'
@@ -31,6 +31,8 @@ describe('Sidebar Component', () => {
         ]}
       ],
       movePage: vi.fn(),
+      deletePage: vi.fn(),
+      fetchTree: vi.fn(),
     })
     
     useBookmarks.mockReturnValue({
@@ -110,7 +112,7 @@ describe('Sidebar Component', () => {
     expect(screen.getByText('Child Page')).toBeDefined()
   })
 
-  it('hides "New subpage" buttons for viewers', () => {
+  it('hides page action menus for viewers', () => {
     useAuth.mockReturnValue({ user: { role: 'viewer' } })
 
     render(
@@ -119,15 +121,12 @@ describe('Sidebar Component', () => {
       </MemoryRouter>
     )
 
-    // Editor/admin renders a "New subpage under <title>" button per tree
+    // Editor/admin renders a "Page actions for <title>" button per tree
     // node. Viewers must not see any of them.
-    const newSubpageButtons = screen.queryAllByRole('button', {
-      name: /New subpage under/i,
-    })
-    expect(newSubpageButtons).toHaveLength(0)
+    expect(screen.queryAllByRole('button', { name: /Page actions for/i })).toHaveLength(0)
   })
 
-  it('shows "New subpage" buttons for editors', () => {
+  it('shows a page action menu with new/edit/delete for editors', () => {
     useAuth.mockReturnValue({ user: { role: 'editor' } })
 
     render(
@@ -136,9 +135,12 @@ describe('Sidebar Component', () => {
       </MemoryRouter>
     )
 
-    const newSubpageButtons = screen.queryAllByRole('button', {
-      name: /New subpage under/i,
-    })
-    expect(newSubpageButtons.length).toBeGreaterThan(0)
+    const menuButtons = screen.queryAllByRole('button', { name: /Page actions for/i })
+    expect(menuButtons.length).toBeGreaterThan(0)
+
+    fireEvent.click(menuButtons[0])
+    expect(screen.getByRole('menuitem', { name: 'New subpage' })).toBeDefined()
+    expect(screen.getByRole('menuitem', { name: 'Edit' })).toBeDefined()
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeDefined()
   })
 })
