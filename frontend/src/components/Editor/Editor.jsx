@@ -12,6 +12,7 @@ import { TextSelection, Plugin, PluginKey } from '@milkdown/kit/prose/state'
 import { $prose } from '@milkdown/kit/utils'
 import api from '../../api/client'
 import { wikilink } from './wikilink'
+import { linkInputRule } from './linkInputRule'
 import { mention } from './mention'
 import { math, mathBlockSchema } from './math'
 import { tableTooltip } from './tableTooltip'
@@ -875,6 +876,7 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
         .use(history)
         .use(slash)
         .use(wikilink)
+        .use(linkInputRule)
         .use(wikilinkPlugin)
         .use(mention)
         .use(mentionPlugin)

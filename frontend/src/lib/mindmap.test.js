@@ -27,10 +27,14 @@ describe('sanitize', () => {
     expect(sanitize('  foo\t\tbar\n')).toBe('foo bar')
   })
 
-  it('truncates long text with ellipsis', () => {
+  it('keeps long text intact so the node can wrap', () => {
     const long = 'a'.repeat(60)
-    const out = sanitize(long)
-    expect(out.length).toBe(30)
+    expect(sanitize(long)).toBe(long)
+  })
+
+  it('truncates only pathologically long text', () => {
+    const out = sanitize('a'.repeat(500))
+    expect(out.length).toBe(200)
     expect(out.endsWith('…')).toBe(true)
   })
 })

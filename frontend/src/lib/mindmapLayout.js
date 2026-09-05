@@ -41,6 +41,12 @@ export const LAYOUT = Object.freeze({
   CORNER_R: 6,
   IMG_SIZE: 48,
   IMG_GAP: 8,
+  // Long labels wrap instead of being cut off: MAX_TEXT_W is the widest a
+  // node's text block may get before wrapping, LINE_H the line box height.
+  // LINE_H * 1 + PAD_Y * 2 === NODE_H, so single-line nodes keep their
+  // original 28px height.
+  MAX_TEXT_W: 220,
+  LINE_H: 16,
   FONT_SIZE,
   FONT_FAMILY,
   FONT: `${FONT_SIZE}px ${FONT_FAMILY}`,
@@ -119,6 +125,45 @@ export function measureText(text) {
   return width
 }
 
+function sumWidth(text) {
+  let w = 0
+  for (const ch of text) w += measureText(ch)
+  return w
+}
+
+/**
+ * Greedy word/character wrap so long node labels become a taller box instead
+ * of being truncated. Latin text breaks at the last space on the line; CJK
+ * breaks anywhere (no spaces to break on).
+ * ponytail: a single word longer than maxW overflows its line rather than
+ * being hyphenated — add mid-word breaking if that ever shows up for real.
+ */
+export function wrapText(text, maxW = LAYOUT.MAX_TEXT_W) {
+  if (!text) return []
+  if (measureText(text) <= maxW) return [text]
+  const lines = []
+  let line = ''
+  let w = 0
+  for (const ch of text) {
+    const cw = measureText(ch)
+    if (line && w + cw > maxW) {
+      const sp = line.lastIndexOf(' ')
+      if (sp > 0 && !isWideChar(ch.charCodeAt(0))) {
+        lines.push(line.slice(0, sp))
+        line = line.slice(sp + 1)
+      } else {
+        lines.push(line)
+        line = ''
+      }
+      w = sumWidth(line)
+    }
+    line += ch
+    w += cw
+  }
+  if (line) lines.push(line)
+  return lines
+}
+
 export function _resetMeasureCacheForTests() {
   measureCache.clear()
   measureCtx = null
@@ -188,15 +233,31 @@ export function buildRadialEdge(from, to, origin = { x: 0, y: 0 }) {
 // -----------------------------------------------------------------------------
 
 function naturalContentDims(node) {
-  const textW = node.text ? Math.ceil(measureText(node.text)) : 0
+  const lines = wrapText(node.text || '')
+  const textW = lines.length > 0 ? Math.ceil(Math.max(...lines.map(measureText))) : 0
+  const textH = lines.length * LAYOUT.LINE_H
   const hasImage = !!node.image
   let inner = textW
   if (hasImage) {
     inner = textW > 0 ? LAYOUT.IMG_SIZE + LAYOUT.IMG_GAP + textW : LAYOUT.IMG_SIZE
   }
   const rectW = inner + LAYOUT.PAD_X * 2
-  const rectH = hasImage ? LAYOUT.IMG_SIZE + LAYOUT.PAD_Y * 2 : LAYOUT.NODE_H
-  return { textW, rectW, rectH }
+  const contentH = hasImage ? Math.max(LAYOUT.IMG_SIZE, textH) : textH
+  const rectH = Math.max(LAYOUT.NODE_H, contentH + LAYOUT.PAD_Y * 2)
+  return { lines, textW, rectW, rectH }
+}
+
+/**
+ * Flush sibling heights to the tallest single-line/image sibling. Wrapped
+ * (multi-line) children are excluded on both sides: they keep their own
+ * taller box, and they don't force every sibling to match it.
+ */
+function equalizeChildHeights(children) {
+  const flushable = children.filter((c) => c.lines.length <= 1)
+  if (flushable.length === 0) return
+  let maxH = 0
+  for (const c of flushable) if (c.rectH > maxH) maxH = c.rectH
+  for (const c of flushable) c.rectH = maxH
 }
 
 function annotate(node, depth, parentId, out, nextId) {
@@ -217,17 +278,12 @@ function cloneTree(node) {
 
 function measureRectsAndEqualizeChildHeights(node) {
   const dims = naturalContentDims(node)
+  node.lines = dims.lines
   node.textW = dims.textW
   node.rectW = dims.rectW
   node.rectH = dims.rectH
   for (const c of node.children) measureRectsAndEqualizeChildHeights(c)
-  if (node.children.length > 0) {
-    let maxChildH = 0
-    for (const c of node.children) {
-      if (c.rectH > maxChildH) maxChildH = c.rectH
-    }
-    for (const c of node.children) c.rectH = maxChildH
-  }
+  equalizeChildHeights(node.children)
   node.subtreeH =
     node.children.length === 0
       ? node.rectH
@@ -309,6 +365,7 @@ function layoutOrthogonal(tree, { dir = 'lr' } = {}) {
     id: n._id,
     depth: n._depth,
     text: n.text,
+    lines: n.lines,
     image: n.image || null,
     textW: n.textW,
     x: n.x,
@@ -362,6 +419,7 @@ function layoutOrthogonal(tree, { dir = 'lr' } = {}) {
 
 function measureRadial(node) {
   const dims = naturalContentDims(node)
+  node.lines = dims.lines
   node.textW = dims.textW
   node.rectW = dims.rectW
   node.rectH = dims.rectH
@@ -483,13 +541,7 @@ function layoutRadial(tree) {
   annotate(root, 0, null, flat, { n: 0 })
   measureRadial(root)
   // Equalize child heights per parent for visual flush, same rule as LR/RL.
-  for (const n of flat) {
-    if (n.children.length > 0) {
-      let maxChildH = 0
-      for (const c of n.children) if (c.rectH > maxChildH) maxChildH = c.rectH
-      for (const c of n.children) c.rectH = maxChildH
-    }
-  }
+  for (const n of flat) equalizeChildHeights(n.children)
 
   // Root anchors the world origin; its `angle`/`r` carry no geometric
   // meaning, but the renderer expects the fields to exist on every node.
@@ -503,6 +555,7 @@ function layoutRadial(tree) {
     id: n._id,
     depth: n._depth,
     text: n.text,
+    lines: n.lines,
     image: n.image || null,
     textW: n.textW,
     x: n.x,

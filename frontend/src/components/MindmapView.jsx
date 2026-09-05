@@ -181,7 +181,8 @@ export default function MindmapView({ content, title, layout: layoutStrategy }) 
           {layout.nodes.map((n) => {
             const s = levelStyle(palette, n.depth)
             const hasImage = !!n.image
-            const hasText = !!n.text
+            const lines = n.lines && n.lines.length > 0 ? n.lines : n.text ? [n.text] : []
+            const hasText = lines.length > 0
             // Layout image + text within the node's local frame (origin = rect
             // center). Image-and-text: a left-anchored block centered in the
             // rect, image on the left. Image-only: image centered. Text-only:
@@ -233,7 +234,15 @@ export default function MindmapView({ content, title, layout: layoutStrategy }) 
                     textAnchor="middle"
                     dominantBaseline="central"
                   >
-                    {n.text}
+                    {lines.map((line, i) => (
+                      <tspan
+                        key={i}
+                        x={textX}
+                        dy={i === 0 ? -((lines.length - 1) * LAYOUT.LINE_H) / 2 : LAYOUT.LINE_H}
+                      >
+                        {line}
+                      </tspan>
+                    ))}
                   </text>
                 )}
               </g>

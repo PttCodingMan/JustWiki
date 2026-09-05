@@ -6,6 +6,7 @@ import {
   buildRadialEdge,
   layoutMindmap,
   measureText,
+  wrapText,
   _resetMeasureCacheForTests,
 } from './mindmapLayout'
 
@@ -463,5 +464,51 @@ describe('layoutMindmap — radial subtree-local placement', () => {
     // a1 reached via A: |R→a1| ≈ |R→A| + |A→a1| within rounding (a1 sits
     // along the outward direction from A).
     expect(distRtoA1).toBeCloseTo(distRtoA + distAtoA1, 0)
+  })
+})
+
+describe('wrapText', () => {
+  it('keeps short text on one line', () => {
+    expect(wrapText('hello')).toEqual(['hello'])
+  })
+
+  it('wraps long latin text at spaces', () => {
+    const lines = wrapText('the quick brown fox jumps over the lazy dog again and again')
+    expect(lines.length).toBeGreaterThan(1)
+    expect(lines.join(' ')).toBe('the quick brown fox jumps over the lazy dog again and again')
+    expect(lines.every((l) => measureText(l) <= LAYOUT.MAX_TEXT_W)).toBe(true)
+  })
+
+  it('wraps CJK text that has no spaces', () => {
+    const text = '這是一段很長的中文說明文字用來測試節點自動換行的行為'
+    const lines = wrapText(text)
+    expect(lines.length).toBeGreaterThan(1)
+    expect(lines.join('')).toBe(text)
+  })
+
+  it('grows the node box instead of clipping long text', () => {
+    const long = '這是一段很長的中文說明文字用來測試節點自動換行的行為'
+    const { nodes } = layoutMindmap({
+      text: 'root',
+      image: null,
+      children: [{ text: long, image: null, children: [] }],
+    })
+    const child = nodes.find((n) => n.depth === 1)
+    expect(child.lines.length).toBeGreaterThan(1)
+    expect(child.h).toBeGreaterThan(LAYOUT.NODE_H)
+  })
+
+  it('does not inflate single-line siblings of a wrapped node', () => {
+    const long = '這是一段很長的中文說明文字用來測試節點自動換行的行為'
+    const { nodes } = layoutMindmap({
+      text: 'root',
+      image: null,
+      children: [
+        { text: long, image: null, children: [] },
+        { text: '短', image: null, children: [] },
+      ],
+    })
+    const short = nodes.find((n) => n.text === '短')
+    expect(short.h).toBe(LAYOUT.NODE_H)
   })
 })

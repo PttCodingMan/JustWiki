@@ -14,7 +14,9 @@
 import MarkdownIt from 'markdown-it'
 
 const MAX_BULLET_DEPTH = 4
-const MAX_NODE_TEXT = 30
+// Long labels wrap into a taller node box (see mindmapLayout.wrapText); this
+// cap is only a runaway guard for pathological paragraphs.
+const MAX_NODE_TEXT = 200
 
 // Node labels render inside an SVG <text> element, so there is no HTML/Mermaid
 // grammar to escape. We still normalize a few characters for visual cleanliness:
