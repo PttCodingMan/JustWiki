@@ -1,12 +1,11 @@
 /**
- * Mention remark plugin — single source of truth for `@user` and
- * `@@group` parsing.
+ * Mention remark plugin — parses `@user` and
+ * `@@group` mentions.
  *
- * Used both by the Milkdown editor (wrapped via `$remark`) and by the
- * v2 viewer renderer (passed directly to unified). Keeping the regex
- * and tree-replace logic in one place prevents the editor and the
- * viewer from drifting on boundary handling — e.g. how `foo@bar` (an
- * email) or `github.com/@octo` (a URL path) are rejected.
+ * Used by the Milkdown editor (wrapped via `$remark`). Boundary handling
+ * — e.g. how `foo@bar` (an email) or `github.com/@octo` (a URL path) are
+ * rejected — must stay in step with the viewer's mention rule in
+ * lib/markdown.js.
  *
  * mdast node shape produced:
  *   { type: 'mention', name, group, data: { hName: 'span' } }
