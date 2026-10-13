@@ -83,7 +83,7 @@ export default function Profile() {
   }
 
   if (!profile) {
-    return <div className="text-center text-gray-500 mt-8">{t('common.loading')}</div>
+    return <div className="text-center text-text-tertiary mt-8">{t('common.loading')}</div>
   }
 
   return (
@@ -164,7 +164,7 @@ export default function Profile() {
             <p className="mt-1 text-xs text-text-secondary">{t('profile.edit.bioHint')}</p>
           </div>
           {message && (
-            <div className={`p-3 rounded-lg text-sm ${message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
+            <div className={`p-3 rounded-lg text-sm ${message.type === 'success' ? 'bg-green-500/10 text-green-700 dark:text-green-300 border border-green-500/25' : 'bg-red-500/10 text-red-600 dark:text-red-300 border border-red-500/25'}`}>
               {message.text}
             </div>
           )}
@@ -218,7 +218,7 @@ export default function Profile() {
             />
           </div>
           {pwMessage && (
-            <div className={`p-3 rounded-lg text-sm ${pwMessage.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
+            <div className={`p-3 rounded-lg text-sm ${pwMessage.type === 'success' ? 'bg-green-500/10 text-green-700 dark:text-green-300 border border-green-500/25' : 'bg-red-500/10 text-red-600 dark:text-red-300 border border-red-500/25'}`}>
               {pwMessage.text}
             </div>
           )}
@@ -326,12 +326,12 @@ function ApiTokensCard({ role }) {
       </p>
 
       {justCreated && (
-        <div className="mb-4 p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900">
+        <div className="mb-4 p-3 rounded-lg border border-amber-500/35 bg-amber-500/10 text-amber-900 dark:text-amber-300">
           <div className="font-medium text-sm mb-1">
             {t('tokens.copyNow')}
           </div>
           <div className="flex items-center gap-2">
-            <code className="flex-1 text-xs break-all bg-white/70 p-2 rounded border border-amber-200">
+            <code className="flex-1 text-xs break-all bg-white/70 p-2 rounded border border-amber-500/25">
               {justCreated.token}
             </code>
             <button
@@ -342,7 +342,7 @@ function ApiTokensCard({ role }) {
             </button>
             <button
               onClick={() => setJustCreated(null)}
-              className="px-3 py-1.5 text-sm rounded-lg border border-amber-300 hover:bg-amber-100"
+              className="px-3 py-1.5 text-sm rounded-lg border border-amber-500/35 hover:bg-amber-100"
             >
               {t('tokens.dismiss')}
             </button>
@@ -393,7 +393,7 @@ function ApiTokensCard({ role }) {
       )}
 
       {err && (
-        <div className="mb-3 p-3 rounded-lg text-sm bg-red-50 text-red-600 border border-red-200">
+        <div className="mb-3 p-3 rounded-lg text-sm bg-red-500/10 text-red-600 border border-red-500/25">
           {err}
         </div>
       )}
@@ -427,7 +427,7 @@ function ApiTokensCard({ role }) {
                     : t('tokens.status.active')
                 const statusCls = revoked || expired
                   ? 'text-text-secondary'
-                  : 'text-green-700'
+                  : 'text-green-700 dark:text-green-300'
                 return (
                   <tr key={tok.id} className="border-b border-border/60">
                     <td className="py-2 pr-2 font-medium text-text">{tok.name}</td>

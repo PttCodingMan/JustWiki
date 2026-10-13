@@ -193,7 +193,7 @@ function BackupSection() {
         </div>
       </div>
       {message && (
-        <div className={`mt-4 p-3 rounded-lg text-sm ${message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
+        <div className={`mt-4 p-3 rounded-lg text-sm ${message.type === 'success' ? 'bg-green-500/10 text-green-700 dark:text-green-300 border border-green-500/25' : 'bg-red-500/10 text-red-600 dark:text-red-300 border border-red-500/25'}`}>
           {message.text}
         </div>
       )}

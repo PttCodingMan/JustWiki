@@ -9,9 +9,9 @@ import useAuth from '../store/useAuth'
 const BIO_MAX_LEN = 1000
 
 const ACTION_BADGE = {
-  created: 'text-green-700 bg-green-50 border-green-200',
-  updated: 'text-blue-700 bg-blue-50 border-blue-200',
-  commented: 'text-purple-700 bg-purple-50 border-purple-200',
+  created: 'text-green-700 dark:text-green-300 bg-green-500/10 border-green-500/25',
+  updated: 'text-blue-700 dark:text-blue-300 bg-blue-500/10 border-blue-500/25',
+  commented: 'text-purple-700 dark:text-purple-300 bg-purple-500/10 border-purple-500/25',
 }
 
 const ACTION_ICON = {
@@ -281,7 +281,7 @@ function UserProfileFor({ username }) {
         ) : (
           <ol className="space-y-3">
             {profile.recent_activity.map((entry) => {
-              const badgeClass = ACTION_BADGE[entry.action] || 'text-gray-700 bg-gray-50 border-gray-200'
+              const badgeClass = ACTION_BADGE[entry.action] || 'text-text-secondary bg-text/[0.03] border-border'
               const verbKey = `userProfile.actions.${entry.action}`
               const verb = t(verbKey, { defaultValue: entry.action })
               const target =

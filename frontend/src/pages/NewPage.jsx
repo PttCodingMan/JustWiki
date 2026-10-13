@@ -176,7 +176,7 @@ export default function NewPage() {
 
   const parentHint = parentId ? (
     parentMissing ? (
-      <div className="flex items-center gap-2 text-xs mb-3 px-3 py-2 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800">
+      <div className="flex items-center gap-2 text-xs mb-3 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/25 text-yellow-800 dark:text-yellow-300">
         <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M4.93 19h14.14a2 2 0 001.74-3l-7.07-12a2 2 0 00-3.48 0l-7.07 12a2 2 0 001.74 3z" />
         </svg>
@@ -184,7 +184,7 @@ export default function NewPage() {
         <button
           type="button"
           onClick={() => navigate('/new', { replace: true })}
-          className="ml-auto text-yellow-800 hover:text-yellow-900 underline"
+          className="ml-auto text-yellow-800 dark:text-yellow-300 hover:text-yellow-900 underline"
         >
           {t('newPage.parent.dismiss')}
         </button>
@@ -318,7 +318,7 @@ export default function NewPage() {
         </div>
       </div>
       {error && (
-        <div className="mb-3 px-3 py-2 bg-red-50 text-red-600 text-sm rounded-lg border border-red-200">
+        <div className="mb-3 px-3 py-2 bg-red-500/10 text-red-600 text-sm rounded-lg border border-red-500/25">
           {error}
         </div>
       )}

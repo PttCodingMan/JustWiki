@@ -440,6 +440,10 @@
     "insertMedia": "{{name}} を挿入",
     "insertDiagram": "::drawio[{{id}}] を挿入"
   },
+  "codeBlock": {
+    "copy": "コードをコピー",
+    "copied": "コピーしました"
+  },
   "toc": {
     "title": "このページの目次",
     "empty": "見出しはまだありません。",

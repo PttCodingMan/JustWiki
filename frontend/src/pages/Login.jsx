@@ -137,7 +137,10 @@ export default function Login() {
       </section>
 
       {/* Form panel */}
-      <section className="relative flex flex-col items-center justify-center px-6 py-12">
+      <section className="relative isolate overflow-hidden flex flex-col items-center justify-center px-6 py-12">
+        <div className="login-aurora lg:hidden !opacity-35" aria-hidden="true">
+          <span /><span /><span />
+        </div>
         <div className="w-full max-w-[22rem] animate-enter">
           <div className="lg:hidden flex flex-col items-center text-center mb-10">
             <img src="/favicon.png" alt="" className="h-12 w-12 mb-4" />

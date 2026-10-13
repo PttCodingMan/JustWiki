@@ -440,6 +440,10 @@
     "insertMedia": "{{name}} 삽입",
     "insertDiagram": "::drawio[{{id}}] 삽입"
   },
+  "codeBlock": {
+    "copy": "코드 복사",
+    "copied": "복사됨"
+  },
   "toc": {
     "title": "이 페이지에서",
     "empty": "아직 제목이 없습니다.",

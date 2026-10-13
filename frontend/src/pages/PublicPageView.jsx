@@ -84,8 +84,11 @@ export default function PublicPageView({ notFound }) {
   const showLoading = state.slug !== slug
   if (showLoading) {
     return (
-      <div className="min-h-screen bg-bg text-text flex items-center justify-center">
-        <div className="text-text-secondary">{t('publicView.loading')}</div>
+      <div className="min-h-screen bg-bg text-text flex items-center justify-center" aria-busy="true">
+        <div className="flex items-center gap-3 text-text-tertiary text-sm">
+          <span className="w-4 h-4 rounded-full border-2 border-primary/25 border-t-primary animate-spin" aria-hidden="true" />
+          {t('publicView.loading')}
+        </div>
       </div>
     )
   }
@@ -94,33 +97,53 @@ export default function PublicPageView({ notFound }) {
 
   return (
     <div className="min-h-screen bg-bg text-text flex flex-col">
-      <header className="flex justify-between items-center px-6 py-3 border-b border-border">
-        <div className="text-sm font-semibold text-text">{siteName}</div>
-        <div className="flex items-center gap-3">
+      <header className="app-nav sticky top-0 z-40 h-14 flex justify-between items-center px-4 sm:px-6 no-print">
+        <div className="flex items-center gap-2 min-w-0">
+          <img src="/favicon.png" alt="" className="h-7 w-7 shrink-0" />
+          <span className="font-display text-[1.45rem] leading-none text-text truncate translate-y-[1px]">{siteName}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
           <ThemeSwitcher />
-          <Link
-            to={loginHref}
-            className="text-sm px-3 py-1.5 rounded-md bg-primary text-primary-text hover:bg-primary-hover transition-colors"
-          >
+          <Link to={loginHref} className="btn-primary ml-1">
             {t('publicView.login')}
           </Link>
         </div>
       </header>
-      <main className="flex-1 w-full px-4 sm:px-8 py-8">
-        <div className="max-w-6xl xl:max-w-7xl 2xl:max-w-[100rem] mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_220px] 2xl:grid-cols-[minmax(0,1fr)_260px] lg:gap-8 2xl:gap-12">
-          <article>
-            <h1 className="page-title !text-[clamp(2.6rem,2rem+2.5vw,3.6rem)] mb-4">{page.title}</h1>
-            <div className="text-sm text-text-secondary mb-6">
-              {page.author_name && <>{page.author_name} &middot; </>}
-              {t('publicView.updated', { date: new Date(page.updated_at).toLocaleString() })}
-            </div>
-            <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6 sm:p-8">
+      <main className="flex-1 w-full px-4 sm:px-8 py-10 sm:py-14">
+        <div className="max-w-[72rem] mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-14 xl:gap-20">
+          <article className="min-w-0 max-w-[46rem] w-full animate-enter">
+            <header className="mb-10 sm:mb-12">
+              <h1 className="font-display text-[2.6rem] sm:text-[3.6rem] leading-[1.02] tracking-[-0.025em] text-text text-balance break-words">{page.title}</h1>
+              <div className="mt-6 flex items-center flex-wrap gap-x-3 gap-y-2 text-[13px] text-text-secondary">
+                {page.author_name && (
+                  <>
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold text-primary-text"
+                        style={{ background: 'linear-gradient(135deg, var(--color-primary), color-mix(in oklab, var(--color-primary) 55%, var(--color-accent)))' }}
+                        aria-hidden="true"
+                      >
+                        {page.author_name.trim().charAt(0).toUpperCase()}
+                      </span>
+                      <span className="font-medium text-text">{page.author_name}</span>
+                    </span>
+                    <span className="text-text-tertiary" aria-hidden="true">·</span>
+                  </>
+                )}
+                <time dateTime={page.updated_at}>
+                  {t('publicView.updated', { date: new Date(page.updated_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) })}
+                </time>
+              </div>
+            </header>
+            <div>
               {page.page_type === 'mindmap' ? (
-                <MindmapView
-                  content={page.content_md}
-                  title={page.title}
-                  layout={page.mindmap_layout || 'lr'}
-                />
+                <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-4 sm:p-6">
+                  <MindmapView
+                    content={page.content_md}
+                    title={page.title}
+                    layout={page.mindmap_layout || 'lr'}
+                  />
+                </div>
               ) : (
                 <MarkdownViewer
                   content={page.content_md}
@@ -133,14 +156,14 @@ export default function PublicPageView({ notFound }) {
           </article>
 
           <aside className="hidden lg:block no-print">
-            <div className="page-right-rail">
+            <div className="page-right-rail !top-24">
               <TableOfContents headings={headings} />
             </div>
           </aside>
         </div>
       </main>
       {footerText && (
-        <footer className="text-center text-xs text-text-secondary py-4">
+        <footer className="text-center text-xs text-text-tertiary py-8 mt-8 border-t border-hairline">
           {footerText}
         </footer>
       )}
@@ -159,7 +182,8 @@ export default function PublicPageView({ notFound }) {
 function PublicNotFound() {
   const { t } = useTranslation()
   return (
-    <div className="min-h-screen bg-bg text-text flex flex-col items-center justify-center">
+    <div className="min-h-screen bg-bg text-text flex flex-col items-center justify-center px-6 text-center animate-enter">
+      <div className="font-display text-[7rem] leading-none text-text-tertiary/50 mb-2" aria-hidden="true">404</div>
       <h1 className="page-title mb-3">{t('publicView.notFoundTitle')}</h1>
       <p className="text-text-secondary">{t('publicView.notFoundBody')}</p>
     </div>

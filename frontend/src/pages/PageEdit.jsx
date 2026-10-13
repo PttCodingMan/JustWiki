@@ -318,18 +318,18 @@ export default function PageEdit() {
         />
       </div>
       {page?.is_public && (
-        <div className="mb-3 px-3 py-2 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200 rounded-lg text-sm flex items-center gap-2">
+        <div className="mb-3 px-3 py-2 bg-yellow-500/10 dark:bg-yellow-900/30 border border-yellow-500/35 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200 rounded-lg text-sm flex items-center gap-2">
           <span role="img" aria-hidden="true">⚠</span>
           <span>{t('pageEdit.publicWarning')}</span>
         </div>
       )}
       {error && (
-        <div className="mb-3 px-3 py-2 bg-red-50 text-red-600 text-sm rounded-lg border border-red-200">
+        <div className="mb-3 px-3 py-2 bg-red-500/10 text-red-600 text-sm rounded-lg border border-red-500/25">
           {error}
         </div>
       )}
       {conflict && (
-        <div className="mb-3 px-3 py-3 bg-amber-50 text-amber-900 text-sm rounded-lg border border-amber-300">
+        <div className="mb-3 px-3 py-3 bg-amber-500/10 text-amber-900 dark:text-amber-300 text-sm rounded-lg border border-amber-500/35">
           <div className="font-semibold mb-1">{t('pageEdit.conflict.title')}</div>
           <div className="mb-2">
             {t('pageEdit.conflict.detail', {
@@ -342,7 +342,7 @@ export default function PageEdit() {
             <button
               type="button"
               onClick={handleReloadLatest}
-              className="px-3 py-1 bg-white border border-amber-400 text-amber-900 rounded hover:bg-amber-100"
+              className="px-3 py-1 bg-white border border-amber-400 text-amber-900 dark:text-amber-300 rounded hover:bg-amber-100"
             >
               {t('pageEdit.conflict.discardMine')}
             </button>

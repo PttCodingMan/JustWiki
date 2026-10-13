@@ -1,5 +1,6 @@
 import React, { useMemo, useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import DOMPurify from 'dompurify'
 import 'katex/dist/katex.min.css'
 import { renderMarkdown } from '../../lib/markdown'
@@ -85,6 +86,7 @@ export default function MarkdownViewer({
   }, [content])
   const containerRef = useRef(null)
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [lightboxSvg, setLightboxSvg] = useState(null)
   const [lightboxImg, setLightboxImg] = useState(null)
 
@@ -121,8 +123,46 @@ export default function MarkdownViewer({
     onHeadings(items)
   }, [html, onHeadings])
 
+  // Decorate fenced code blocks with a language label and a copy button.
+  // The <pre> is wrapped so the chrome stays pinned while long lines scroll.
+  useEffect(() => {
+    const root = containerRef.current
+    if (!root) return
+    root.querySelectorAll('pre:not(.mermaid-error) > code').forEach((code) => {
+      const pre = code.parentElement
+      if (pre.parentElement?.classList.contains('code-block')) return
+      const wrap = document.createElement('div')
+      wrap.className = 'code-block'
+      const lang = (code.className.match(/language-([\w+#-]+)/) || [])[1]
+      if (lang) wrap.dataset.lang = lang
+      pre.replaceWith(wrap)
+      wrap.appendChild(pre)
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'code-copy'
+      btn.setAttribute('aria-label', t('codeBlock.copy'))
+      btn.title = t('codeBlock.copy')
+      wrap.appendChild(btn)
+    })
+  }, [html, t])
+
   const handleClick = useCallback(
     (e) => {
+      const copyBtn = e.target.closest('.code-copy')
+      if (copyBtn) {
+        const code = copyBtn.parentElement?.querySelector('pre > code')
+        const done = () => {
+          copyBtn.dataset.copied = 'true'
+          copyBtn.setAttribute('aria-label', t('codeBlock.copied'))
+          setTimeout(() => {
+            delete copyBtn.dataset.copied
+            copyBtn.setAttribute('aria-label', t('codeBlock.copy'))
+          }, 1600)
+        }
+        navigator.clipboard?.writeText(code?.textContent ?? '').then(done, () => {})
+        return
+      }
+
       // Wikilinks: intercept and navigate via router instead of full page load
       const link = e.target.closest('a.wikilink')
       if (link) {
@@ -166,7 +206,7 @@ export default function MarkdownViewer({
         }
       }
     },
-    [navigate, onDiagramClick],
+    [navigate, onDiagramClick, t],
   )
 
   // Hoisted so both the top-level effect and the transclusion loader can
@@ -293,11 +333,11 @@ export default function MarkdownViewer({
         } catch (err) {
           const status = err?.response?.status
           if (status === 404) {
-            el.innerHTML = '<em class="text-gray-400">Page not found</em>'
+            el.innerHTML = '<em class="text-text-tertiary">Page not found</em>'
           } else if (status === 403) {
             el.innerHTML = '<em class="text-text-secondary">(no access)</em>'
           } else {
-            el.innerHTML = '<em class="text-gray-400">Failed to load transclusion</em>'
+            el.innerHTML = '<em class="text-text-tertiary">Failed to load transclusion</em>'
           }
         }
       }))

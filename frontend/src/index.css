@@ -3,8 +3,8 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-primary: #7ea7d8;
-  --color-primary-hover: #6691c4;
+  --color-primary: #4a78bb;
+  --color-primary-hover: #3d67a6;
   --color-primary-soft: #eef4fb;
   --color-primary-text: #ffffff;
   --color-accent: #a8c5e4;
@@ -89,8 +89,8 @@
 
 /* Lavender — ColorHunt #9b8ec7, #bda6ce, #b4d3d9, #f2eae0 */
 [data-theme="lavender"] {
-  --color-primary: #9b8ec7;
-  --color-primary-hover: #8577b5;
+  --color-primary: #7568a8;
+  --color-primary-hover: #635796;
   --color-primary-soft: #f0eaf8;
   --color-primary-text: #ffffff;
   --color-accent: #bda6ce;
@@ -126,8 +126,8 @@
 
 /* Rose — ColorHunt #ffeabb, #fbc3c1, #faacbf, #fe81d4 */
 [data-theme="rose"] {
-  --color-primary: #e06bad;
-  --color-primary-hover: #c85a99;
+  --color-primary: #c24d93;
+  --color-primary-hover: #a93f7f;
   --color-primary-soft: #fff0f7;
   --color-primary-text: #ffffff;
   --color-accent: #fe81d4;
@@ -163,8 +163,8 @@
 
 /* Sand — ColorHunt #babf94, #f3e4c9, #bfa28c, #a98b76 */
 [data-theme="sand"] {
-  --color-primary: #9a7860;
-  --color-primary-hover: #84644d;
+  --color-primary: #8f6d55;
+  --color-primary-hover: #7a5c46;
   --color-primary-soft: #f5eee5;
   --color-primary-text: #ffffff;
   --color-accent: #babf94;
@@ -182,10 +182,10 @@
 
 /* Sunset (dark) — ColorHunt #6faf4f, #f2d479, #d97a2b, #c44a3a */
 [data-theme="sunset"] {
-  --color-primary: #d97a2b;
-  --color-primary-hover: #c06a1e;
+  --color-primary: #e08638;
+  --color-primary-hover: #c97424;
   --color-primary-soft: #2d1f10;
-  --color-primary-text: #ffffff;
+  --color-primary-text: #1a1410;
   --color-accent: #f2d479;
   --color-sidebar-dark: #1a1410;
   --color-sidebar-active: #2d1f10;
@@ -278,6 +278,14 @@ body {
     outline-offset: 2px;
   }
   input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offset: 0; }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+  textarea,
+  select {
+    transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+  }
+  input[type="checkbox"], input[type="radio"], input[type="range"], progress {
+    accent-color: var(--color-primary);
+  }
 }
 
 /* Quiet, theme-aware scrollbars */
@@ -736,7 +744,7 @@ code, samp, pre,
   --callout-hue: #3b82f6;
   position: relative;
   border: 1px solid color-mix(in oklab, var(--callout-hue) 26%, var(--color-border));
-  background: color-mix(in oklab, var(--callout-hue) 5%, var(--color-surface));
+  background: color-mix(in oklab, var(--callout-hue) 3.5%, var(--color-surface));
   border-radius: 14px;
   padding: 0.95em 1.2em 1em 1.35em;
   margin: 1.5em 0;
@@ -1104,6 +1112,61 @@ mark {
   line-height: 1.7;
   box-shadow: var(--shadow-md), inset 0 1px 0 color-mix(in oklab, white 6%, transparent);
 }
+/* Code block chrome: language label + copy button (see MarkdownViewer) */
+.markdown-viewer .code-block {
+  position: relative;
+  margin: 1.5em 0;
+}
+.markdown-viewer .code-block > pre { margin: 0; }
+.markdown-viewer .code-block[data-lang] > pre { padding-top: 2.4em; }
+.markdown-viewer .code-block[data-lang]::before {
+  content: attr(data-lang);
+  position: absolute;
+  top: 0.85em;
+  left: 1.6em;
+  z-index: 1;
+  font-family: var(--font-mono);
+  font-size: 0.7em;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--code-muted);
+  pointer-events: none;
+}
+.markdown-viewer .code-copy {
+  position: absolute;
+  top: 0.55em;
+  right: 0.55em;
+  z-index: 1;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9px;
+  color: var(--code-muted);
+  background: color-mix(in oklab, var(--code-text) 8%, transparent);
+  opacity: 0;
+  transition: opacity 0.2s, background-color 0.2s, color 0.2s;
+}
+.markdown-viewer .code-copy::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 15px;
+  height: 15px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='9' width='12' height='12' rx='2'/%3E%3Cpath d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='9' width='12' height='12' rx='2'/%3E%3Cpath d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.markdown-viewer .code-copy[data-copied]::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5L20 7'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5L20 7'/%3E%3C/svg%3E");
+}
+.markdown-viewer .code-copy[data-copied] { color: #4ade80; opacity: 1; }
+.markdown-viewer .code-block:hover .code-copy,
+.markdown-viewer .code-copy:focus-visible { opacity: 1; }
+.markdown-viewer .code-copy:hover { color: var(--code-text); background: color-mix(in oklab, var(--code-text) 14%, transparent); }
+@media (hover: none) { .markdown-viewer .code-copy { opacity: 1; } }
+
 .markdown-viewer pre code {
   background: none;
   padding: 0;
@@ -1229,8 +1292,8 @@ mark {
   display: inline;
 }
 .katex-error {
-  color: #b86a6a;
-  background: #fdf5f5;
+  color: #c0504a;
+  background: color-mix(in oklab, #e0453a 8%, var(--color-surface));
   padding: 0.15em 0.4em;
   border-radius: 3px;
   font-size: 0.85em;
@@ -1242,13 +1305,13 @@ mark {
   margin: 0.75em 0;
   padding: 0.5em 0.75em;
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.02);
+  background: color-mix(in oklab, var(--color-text) 2.5%, transparent);
   cursor: pointer;
   text-align: center;
   overflow-x: auto;
 }
 .math-block-node:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: color-mix(in oklab, var(--color-text) 5%, transparent);
 }
 .math-inline-node {
   cursor: pointer;
@@ -1256,10 +1319,10 @@ mark {
   border-radius: 3px;
 }
 .math-inline-node:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: color-mix(in oklab, var(--color-text) 5%, transparent);
 }
 .math-empty {
-  color: #888;
+  color: var(--color-text-tertiary);
   font-style: italic;
 }
 .math-block-editor {
@@ -1270,31 +1333,31 @@ mark {
   font-size: 0.9em;
   line-height: 1.45;
   padding: 0.5em 0.75em;
-  border: 1px solid #d0d7de;
-  border-radius: 6px;
-  background: #f6f8fa;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--color-text) 3%, var(--color-surface));
   color: inherit;
   resize: vertical;
   outline: none;
 }
 .math-block-editor:focus {
-  border-color: #0969da;
-  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.2);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-ring);
 }
 .math-inline-editor {
   font-family: var(--font-mono);
   font-size: 0.9em;
   padding: 0 0.35em;
-  border: 1px solid #d0d7de;
-  border-radius: 3px;
-  background: #f6f8fa;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--color-text) 3%, var(--color-surface));
   color: inherit;
   min-width: 6em;
   outline: none;
 }
 .math-inline-editor:focus {
-  border-color: #0969da;
-  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.2);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-ring);
 }
 
 /* Draw.io embeds */
@@ -1321,8 +1384,8 @@ mark {
   background: color-mix(in oklab, var(--color-text) 3%, var(--color-surface));
 }
 .drawio-error {
-  color: #b86a6a;
-  background: #fdf5f5;
+  color: #c0504a;
+  background: color-mix(in oklab, #e0453a 6%, var(--color-surface));
 }
 .drawio-clickable {
   cursor: pointer;
@@ -1403,15 +1466,15 @@ mark {
 .diagram-edit-preview {
   position: relative;
   background: white;
-  border: 1px solid #e6ecf4;
-  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
   overflow: hidden;
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .diagram-edit-preview:hover {
-  border-color: #7ea7d8;
-  box-shadow: 0 0 0 1px #7ea7d8;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-ring);
 }
 .diagram-edit-preview-svg {
   padding: 1em;
@@ -1424,8 +1487,8 @@ mark {
 .diagram-edit-preview-placeholder {
   padding: 2em;
   text-align: center;
-  color: #7a8798;
-  font-style: italic;
+  color: var(--color-text-tertiary);
+  font-size: 0.85em;
 }
 .diagram-edit-preview-overlay {
   position: absolute;
@@ -1433,7 +1496,7 @@ mark {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(126, 167, 216, 0.12);
+  background: color-mix(in oklab, var(--color-primary) 10%, transparent);
   opacity: 0;
   transition: opacity 0.15s;
 }
@@ -1703,6 +1766,8 @@ mark {
   opacity: 0.6;
 }
 
+/* Layered so Tailwind responsive utilities (lg:hidden) can hide it */
+@layer components {
 /* Mobile TOC: FAB + bottom-sheet drawer */
 .toc-fab {
   position: fixed;
@@ -1782,6 +1847,7 @@ mark {
   border: none;
   border-radius: 0;
   padding: 0;
+}
 }
 
 /* Headings should clear the navbar when scrolled-to via TOC */
@@ -1910,7 +1976,7 @@ mark {
 
 /* Print — strip chrome so Ctrl+P / "Save as PDF" produces a clean article */
 @media print {
-  .no-print { display: none !important; }
+  .no-print, .code-copy { display: none !important; }
   html, body { background: #ffffff !important; color: #000000 !important; }
   /* Unfreeze the flex scroll container so the article flows across pages */
   .h-screen { height: auto !important; }

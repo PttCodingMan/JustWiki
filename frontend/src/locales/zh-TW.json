@@ -440,6 +440,10 @@
     "insertMedia": "插入 {{name}}",
     "insertDiagram": "插入 ::drawio[{{id}}]"
   },
+  "codeBlock": {
+    "copy": "複製程式碼",
+    "copied": "已複製"
+  },
   "toc": {
     "title": "本頁目錄",
     "empty": "尚無標題。",

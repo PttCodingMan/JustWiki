@@ -63,7 +63,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
         <h2 className="section-title mb-4">{t('changePassword.title')}</h2>
 
         {success ? (
-          <div className="p-3 rounded-lg text-sm bg-green-50 text-green-700 border border-green-200">
+          <div className="p-3 rounded-lg text-sm bg-green-500/10 text-green-700 dark:text-green-300 border border-green-500/25">
             {t('changePassword.success')}
           </div>
         ) : (

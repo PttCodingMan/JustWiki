@@ -442,6 +442,10 @@
     "insertMedia": "Insert {{name}}",
     "insertDiagram": "Insert ::drawio[{{id}}]"
   },
+  "codeBlock": {
+    "copy": "Copy code",
+    "copied": "Copied"
+  },
   "toc": {
     "title": "On this page",
     "empty": "No headings yet.",

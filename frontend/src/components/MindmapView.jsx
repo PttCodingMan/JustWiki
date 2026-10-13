@@ -146,7 +146,7 @@ export default function MindmapView({ content, title, layout: layoutStrategy }) 
 
   if (parsed.error) {
     return (
-      <div className="p-4 text-amber-800 bg-amber-50 border border-amber-200 rounded-lg">
+      <div className="p-4 text-amber-800 dark:text-amber-300 bg-amber-500/10 border border-amber-500/25 rounded-lg">
         {parsed.error}
       </div>
     )

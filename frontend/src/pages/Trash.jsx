@@ -74,7 +74,7 @@ export default function Trash() {
       </p>
 
       {error && (
-        <div className="mb-4 px-3 py-2 bg-red-50 text-red-600 text-sm rounded-lg border border-red-200">
+        <div className="mb-4 px-3 py-2 bg-red-500/10 text-red-600 text-sm rounded-lg border border-red-500/25">
           {error}
         </div>
       )}
