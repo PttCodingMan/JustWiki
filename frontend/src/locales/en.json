@@ -170,6 +170,8 @@
       "footer": "Public footer text",
       "footerPlaceholder": "Powered by JustWiki",
       "footerHint": "Footer on the anonymous public page viewer.",
+      "sessionDays": "Login session length (days)",
+      "sessionDaysHint": "How long a sign-in stays valid (1–365). Applies to new logins; existing sessions keep their current expiry.",
       "saving": "Saving…",
       "save": "Save",
       "saveSuccess": "Settings saved.",

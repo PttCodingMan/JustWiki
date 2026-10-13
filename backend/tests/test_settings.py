@@ -1,7 +1,11 @@
 """Tests for /api/settings — site-wide branding and homepage knobs."""
-import pytest
+from datetime import datetime, timezone
 
-from app.routers.settings import DEFAULT_SETTINGS
+import pytest
+from jose import jwt
+
+from app.auth import hash_password
+from app.routers.settings import DEFAULT_SESSION_DAYS, DEFAULT_SETTINGS, MAX_SESSION_DAYS
 
 
 @pytest.mark.asyncio
@@ -96,3 +100,51 @@ async def test_put_partial_update_leaves_other_keys_alone(admin_client):
     data = res.json()
     assert data["site_name"] == "Second"
     assert data["footer_text"] == "Footer1"
+
+
+@pytest.fixture
+async def reset_session_days(db):
+    """The test DB is shared across the session; don't leak a non-default
+    session length into tests that log in later."""
+    yield
+    await db.execute("DELETE FROM site_settings WHERE key = 'session_days'")
+    await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_session_days_defaults_to_one_day(client):
+    res = await client.get("/api/settings")
+    assert res.json()["session_days"] == DEFAULT_SESSION_DAYS
+
+
+@pytest.mark.asyncio
+async def test_put_session_days_validates_range(admin_client, reset_session_days):
+    assert (await admin_client.put("/api/settings", json={"session_days": 0})).status_code == 422
+    assert (
+        await admin_client.put("/api/settings", json={"session_days": MAX_SESSION_DAYS + 1})
+    ).status_code == 422
+    res = await admin_client.put("/api/settings", json={"session_days": 30})
+    assert res.status_code == 200
+    assert res.json()["session_days"] == 30
+
+
+@pytest.mark.asyncio
+async def test_login_uses_configured_session_days(admin_client, client, db, reset_session_days):
+    """Both the cookie max_age and the JWT exp follow the admin setting."""
+    await db.execute(
+        "INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'editor')",
+        ("sessionuser", hash_password("sessionpass")),
+    )
+    await db.commit()
+    await admin_client.put("/api/settings", json={"session_days": 14})
+    res = await client.post(
+        "/api/auth/login", json={"username": "sessionuser", "password": "sessionpass"}
+    )
+    assert res.status_code == 200
+    set_cookie = res.headers["set-cookie"]
+    assert f"Max-Age={14 * 86400}" in set_cookie
+
+    token = res.cookies["token"]
+    claims = jwt.get_unverified_claims(token)
+    lifetime = claims["exp"] - datetime.now(timezone.utc).timestamp()
+    assert 13 * 86400 < lifetime <= 14 * 86400

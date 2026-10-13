@@ -16,6 +16,7 @@ from app.auth import (
 )
 from app.config import settings
 from app.database import get_db, write_transaction
+from app.routers.settings import get_session_max_age
 from app.services.client_ip import client_ip
 
 logger = logging.getLogger(__name__)
@@ -115,14 +116,15 @@ async def login(body: LoginRequest, request: Request, response: Response):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     logger.info("login ok user=%s role=%s", user["username"], user["role"])
-    token = create_token(user["id"], user["username"], user["role"])
+    max_age = await get_session_max_age()
+    token = create_token(user["id"], user["username"], user["role"], max_age=max_age)
     response.set_cookie(
         key="token",
         value=token,
         httponly=True,
         secure=settings.COOKIE_SECURE,
         samesite="lax",
-        max_age=86400,
+        max_age=max_age,
     )
     return {
         "user": {

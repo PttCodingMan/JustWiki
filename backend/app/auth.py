@@ -69,8 +69,14 @@ async def verify_password_async(password: str, hashed: str) -> bool:
     return await asyncio.to_thread(verify_password, password, hashed)
 
 
-def create_token(user_id: int, username: str, role: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS)
+def create_token(
+    user_id: int, username: str, role: str, max_age: int | None = None
+) -> str:
+    """Issue a session JWT. `max_age` (seconds) defaults to TOKEN_EXPIRE_HOURS;
+    login routes pass the admin-configured value from site settings."""
+    if max_age is None:
+        max_age = TOKEN_EXPIRE_HOURS * 3600
+    expire = datetime.now(timezone.utc) + timedelta(seconds=max_age)
     payload = {
         "sub": str(user_id),
         "username": username,

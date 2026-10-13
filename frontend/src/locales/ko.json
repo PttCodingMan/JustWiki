@@ -168,6 +168,8 @@
       "footer": "공개 페이지 푸터 텍스트",
       "footerPlaceholder": "Powered by JustWiki",
       "footerHint": "익명 공개 페이지 뷰어에 표시되는 푸터입니다.",
+      "sessionDays": "로그인 세션 유지 기간(일)",
+      "sessionDaysHint": "로그인 상태가 유지되는 일수(1–365). 이후 새 로그인부터 적용되며, 기존 세션은 원래 만료 시간을 유지합니다.",
       "saving": "저장 중…",
       "save": "저장",
       "saveSuccess": "설정이 저장되었습니다.",

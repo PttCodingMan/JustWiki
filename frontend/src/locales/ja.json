@@ -168,6 +168,8 @@
       "footer": "公開フッターテキスト",
       "footerPlaceholder": "Powered by JustWiki",
       "footerHint": "匿名公開ページ閲覧時のフッター。",
+      "sessionDays": "ログインセッションの有効期間（日）",
+      "sessionDaysHint": "ログイン状態を保持する日数（1〜365）。新しいログインから適用され、既存のセッションは元の有効期限のままです。",
       "saving": "保存中…",
       "save": "保存",
       "saveSuccess": "設定を保存しました。",

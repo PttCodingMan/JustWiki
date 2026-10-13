@@ -17,6 +17,7 @@ from fastapi.responses import RedirectResponse
 
 from app.auth import create_token
 from app.config import settings
+from app.routers.settings import get_session_max_age
 from app.services.oidc import (
     OAuthAccessError,
     exchange_and_resolve,
@@ -88,7 +89,8 @@ async def oauth_callback(provider: str, request: Request):
     except OAuthAccessError as e:
         return _error_redirect(e.code, e.detail)
 
-    token = create_token(user["id"], user["username"], user["role"])
+    max_age = await get_session_max_age()
+    token = create_token(user["id"], user["username"], user["role"], max_age=max_age)
 
     redirect_to = _safe_redirect(request.session.pop("oauth_redirect", "/"))
     response = RedirectResponse(redirect_to, status_code=303)
@@ -98,6 +100,6 @@ async def oauth_callback(provider: str, request: Request):
         httponly=True,
         secure=settings.COOKIE_SECURE,
         samesite="lax",
-        max_age=86400,
+        max_age=max_age,
     )
     return response

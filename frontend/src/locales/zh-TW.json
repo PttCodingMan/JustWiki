@@ -168,6 +168,8 @@
       "footer": "公開頁面頁尾文字",
       "footerPlaceholder": "Powered by JustWiki",
       "footerHint": "顯示於匿名公開頁面瀏覽器的頁尾。",
+      "sessionDays": "登入有效期（天）",
+      "sessionDaysHint": "登入後保持有效的天數（1–365）。只套用於之後的新登入，已登入的 session 維持原本的到期時間。",
       "saving": "儲存中…",
       "save": "儲存",
       "saveSuccess": "設定已儲存。",

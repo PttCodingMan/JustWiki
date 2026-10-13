@@ -24,6 +24,7 @@ function SiteSettingsSection() {
     login_subtitle: '',
     home_page_slug: '',
     footer_text: '',
+    session_days: 1,
   })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
@@ -35,15 +36,16 @@ function SiteSettingsSection() {
       login_subtitle: settings.login_subtitle,
       home_page_slug: settings.home_page_slug,
       footer_text: settings.footer_text,
+      session_days: settings.session_days,
     })
-  }, [settings.site_name, settings.login_title, settings.login_subtitle, settings.home_page_slug, settings.footer_text])
+  }, [settings.site_name, settings.login_title, settings.login_subtitle, settings.home_page_slug, settings.footer_text, settings.session_days])
 
   const handleSave = async (e) => {
     e.preventDefault()
     setSaving(true)
     setMessage(null)
     try {
-      await updateSettings(form)
+      await updateSettings({ ...form, session_days: Number(form.session_days) })
       setMessage({ type: 'success', text: t('admin.site.saveSuccess') })
     } catch (err) {
       setMessage({ type: 'error', text: err?.response?.data?.detail || t('admin.site.saveFailed') })
@@ -120,6 +122,19 @@ function SiteSettingsSection() {
             className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
           />
           <p className="text-xs text-text-secondary mt-1">{t('admin.site.footerHint')}</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">{t('admin.site.sessionDays')}</label>
+          <input
+            type="number"
+            value={form.session_days}
+            onChange={field('session_days')}
+            min={1}
+            max={365}
+            required
+            className="w-32 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
+          />
+          <p className="text-xs text-text-secondary mt-1">{t('admin.site.sessionDaysHint')}</p>
         </div>
         <div className="flex items-center gap-3">
           <button

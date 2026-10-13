@@ -27,6 +27,13 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "footer_text": "Powered by JustWiki",
 }
 
+# Login session lifetime (JWT `exp` + cookie max_age). Kept out of
+# DEFAULT_SETTINGS because it's an int, not a branding string. Changing it
+# only affects sessions issued afterwards; existing cookies keep their exp.
+SESSION_DAYS_KEY = "session_days"
+DEFAULT_SESSION_DAYS = 1
+MAX_SESSION_DAYS = 365
+
 
 class SettingsResponse(BaseModel):
     site_name: str
@@ -34,6 +41,7 @@ class SettingsResponse(BaseModel):
     login_subtitle: str
     home_page_slug: str
     footer_text: str
+    session_days: int
     # Server-side toggle, surfaced read-only so the frontend can decide
     # whether an unauthenticated visitor should be rendered as a guest
     # (Layout + read-only UI) or bounced to /login. Driven by the
@@ -47,13 +55,33 @@ class SettingsUpdate(BaseModel):
     login_subtitle: Optional[str] = Field(default=None, max_length=200)
     home_page_slug: Optional[str] = Field(default=None, max_length=200)
     footer_text: Optional[str] = Field(default=None, max_length=200)
+    session_days: Optional[int] = Field(default=None, ge=1, le=MAX_SESSION_DAYS)
 
 
-async def _read_all() -> dict[str, str]:
+def _parse_session_days(raw: Optional[str]) -> int:
+    try:
+        days = int(raw) if raw is not None else DEFAULT_SESSION_DAYS
+    except ValueError:
+        return DEFAULT_SESSION_DAYS
+    return min(max(days, 1), MAX_SESSION_DAYS)
+
+
+async def _read_all() -> dict:
     db = await get_db()
     rows = await db.execute_fetchall("SELECT key, value FROM site_settings")
     overrides = {r["key"]: r["value"] for r in rows}
-    return {k: overrides.get(k, default) for k, default in DEFAULT_SETTINGS.items()}
+    result: dict = {k: overrides.get(k, default) for k, default in DEFAULT_SETTINGS.items()}
+    result[SESSION_DAYS_KEY] = _parse_session_days(overrides.get(SESSION_DAYS_KEY))
+    return result
+
+
+async def get_session_max_age() -> int:
+    """Seconds a newly issued login session stays valid."""
+    db = await get_db()
+    rows = await db.execute_fetchall(
+        "SELECT value FROM site_settings WHERE key = ?", (SESSION_DAYS_KEY,)
+    )
+    return _parse_session_days(rows[0]["value"] if rows else None) * 86400
 
 
 @router.get("", response_model=SettingsResponse)
