@@ -12,6 +12,7 @@ import MindmapView from '../components/MindmapView'
 import MindmapLayoutSelect from '../components/MindmapLayoutSelect'
 import DrawioModal from '../components/DrawioModal'
 import useUnsavedWarning, { confirmDiscard } from '../hooks/useUnsavedWarning'
+import { useMediaPicker, useSaveShortcut } from '../hooks/useEditorPage'
 import { stripBrTags } from '../lib/markdown'
 import api from '../api/client'
 
@@ -59,15 +60,7 @@ export default function PageEdit() {
   const [editingDiagram, setEditingDiagram] = useState(null) // { id, xml } or null for new
   const [diagrams, setDiagrams] = useState({}) // id -> diagram data
 
-  // Media picker state
-  const [mediaPickerOpen, setMediaPickerOpen] = useState(false)
-  const handleMediaPickerOpen = useCallback(() => setMediaPickerOpen(true), [])
-  const handleMediaPickerClose = useCallback(() => setMediaPickerOpen(false), [])
-  const handleMediaInsert = useCallback((snippet) => {
-    if (editorRef.current) {
-      editorRef.current.insertText(`\n${snippet}\n`)
-    }
-  }, [])
+  const mediaPicker = useMediaPicker(editorRef)
 
   useUnsavedWarning(dirty, t('pageEdit.unsavedWarning'))
 
@@ -282,17 +275,7 @@ export default function PageEdit() {
     await handleSave()
   }, [getPage, slug, handleSave, content, t])
 
-  // Ctrl+S handler
-  useEffect(() => {
-    const handler = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault()
-        handleSave()
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [handleSave])
+  useSaveShortcut(handleSave)
 
   // Gate on the loaded page matching the current slug. React Router keeps
   // PageEdit mounted across slug transitions, so while navigating A→B the
@@ -378,7 +361,7 @@ export default function PageEdit() {
               onChange={setContent}
               changeDelay={page?.page_type === 'mindmap' ? MINDMAP_CHANGE_DELAY : undefined}
               onDrawioOpen={handleDrawioOpen}
-              onMediaPickerOpen={handleMediaPickerOpen}
+              onMediaPickerOpen={mediaPicker.onOpen}
               onTabOut={handleEditorTabOut}
               pageSlug={slug}
             />
@@ -475,9 +458,9 @@ export default function PageEdit() {
       />
 
       <MediaPickerModal
-        open={mediaPickerOpen}
-        onClose={handleMediaPickerClose}
-        onInsert={handleMediaInsert}
+        open={mediaPicker.open}
+        onClose={mediaPicker.onClose}
+        onInsert={mediaPicker.onInsert}
       />
     </div>
   )

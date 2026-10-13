@@ -8,6 +8,7 @@ import Editor from '../components/Editor/Editor'
 import MediaPickerModal from '../components/Editor/MediaPickerModal'
 import DrawioModal from '../components/DrawioModal'
 import useUnsavedWarning, { confirmDiscard } from '../hooks/useUnsavedWarning'
+import { useMediaPicker, useSaveShortcut } from '../hooks/useEditorPage'
 import { stripBrTags } from '../lib/markdown'
 import { MINDMAP_TEMPLATE } from '../lib/mindmap'
 
@@ -67,15 +68,7 @@ export default function NewPage() {
     setDrawioOpen(true)
   }, [])
 
-  // Media picker state
-  const [mediaPickerOpen, setMediaPickerOpen] = useState(false)
-  const handleMediaPickerOpen = useCallback(() => setMediaPickerOpen(true), [])
-  const handleMediaPickerClose = useCallback(() => setMediaPickerOpen(false), [])
-  const handleMediaInsert = useCallback((snippet) => {
-    if (editorRef.current) {
-      editorRef.current.insertText(`\n${snippet}\n`)
-    }
-  }, [])
+  const mediaPicker = useMediaPicker(editorRef)
 
   const handleDrawioSave = useCallback(async ({ xml, svg }) => {
     try {
@@ -166,17 +159,7 @@ export default function NewPage() {
     }
   }, [title, content, saving, selectedTemplate, parentId, parentMissing, pageType, createPage, fetchTree, navigate, t])
 
-  // Ctrl+S
-  useEffect(() => {
-    const handler = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault()
-        handleSave()
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [handleSave])
+  useSaveShortcut(handleSave)
 
   const parentHint = parentId ? (
     parentMissing ? (
@@ -355,7 +338,7 @@ export default function NewPage() {
           defaultValue={content}
           onChange={setContent}
           onDrawioOpen={handleDrawioOpen}
-          onMediaPickerOpen={handleMediaPickerOpen}
+          onMediaPickerOpen={mediaPicker.onOpen}
           onTabOut={handleEditorTabOut}
         />
       </div>
@@ -368,9 +351,9 @@ export default function NewPage() {
       />
 
       <MediaPickerModal
-        open={mediaPickerOpen}
-        onClose={handleMediaPickerClose}
-        onInsert={handleMediaInsert}
+        open={mediaPicker.open}
+        onClose={mediaPicker.onClose}
+        onInsert={mediaPicker.onInsert}
       />
     </div>
   )
