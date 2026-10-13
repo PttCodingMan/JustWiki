@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from typing import Optional
 
 from app.auth import require_real_user
 from app.database import get_db, write_transaction

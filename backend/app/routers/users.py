@@ -8,7 +8,6 @@ from typing import Optional
 
 from app.auth import (
     check_password_policy,
-    get_current_user,
     hash_password_async,
     require_admin,
     require_real_user,

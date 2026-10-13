@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import time
-from collections import defaultdict
 from fastapi import APIRouter, HTTPException, Response, Depends, Request
 from app.schemas import LoginRequest, UserResponse
 from typing import Optional

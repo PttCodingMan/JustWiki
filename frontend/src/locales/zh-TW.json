@@ -127,19 +127,6 @@
     "failedSave": "儲存權限失敗",
     "failedClear": "清除權限失敗"
   },
-  "changePassword": {
-    "title": "變更密碼",
-    "current": "目前密碼",
-    "new": "新密碼",
-    "confirm": "確認新密碼",
-    "tooShort": "新密碼長度至少需 {{min}} 個字元",
-    "mismatch": "兩次輸入的新密碼不一致",
-    "failed": "變更密碼失敗",
-    "success": "密碼已變更！",
-    "cancel": "取消",
-    "saving": "儲存中…",
-    "submit": "變更密碼"
-  },
   "mindmap": {
     "themeLabel": "心智圖主題",
     "layout": {

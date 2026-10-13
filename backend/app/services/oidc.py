@@ -147,12 +147,6 @@ def get_oauth() -> OAuth:
     return oauth
 
 
-def reset_oauth_registry() -> None:
-    """Clear the cached registry (used by tests that mutate settings)."""
-    global _oauth
-    _oauth = None
-
-
 # ── Userinfo fetchers ─────────────────────────────────────────────────────
 
 

@@ -1,6 +1,5 @@
 from pydantic import BaseModel
 from typing import Literal
-from datetime import datetime
 
 
 # ── Page types ──
@@ -74,17 +73,6 @@ class PageResponse(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
     effective_permission: str | None = None
-
-
-class PublicPageResponse(BaseModel):
-    slug: str
-    title: str
-    content_md: str
-    page_type: PageType = "document"
-    mindmap_layout: MindmapLayout | None = None
-    updated_at: str | None = None
-    author_name: str | None = None
-    diagrams: dict[str, str] = {}
 
 
 class PageListResponse(BaseModel):

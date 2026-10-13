@@ -129,19 +129,6 @@
     "failedSave": "Failed to save ACL",
     "failedClear": "Failed to clear ACL"
   },
-  "changePassword": {
-    "title": "Change Password",
-    "current": "Current Password",
-    "new": "New Password",
-    "confirm": "Confirm New Password",
-    "tooShort": "New password must be at least {{min}} characters",
-    "mismatch": "New passwords do not match",
-    "failed": "Failed to change password",
-    "success": "Password changed successfully!",
-    "cancel": "Cancel",
-    "saving": "Saving...",
-    "submit": "Change Password"
-  },
   "mindmap": {
     "themeLabel": "Mindmap theme",
     "layout": {
