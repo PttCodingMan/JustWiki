@@ -10,19 +10,15 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse, HTMLResponse
+from markdown_it import MarkdownIt
+from markdown_it.rules_inline import StateInline
+from mdit_py_plugins.container import container_plugin
+from mdit_py_plugins.tasklists import tasklists_plugin
 
 from app.auth import require_admin
 from app.config import settings
 from app.database import get_db
 from app.services.acl import PageAccess, page_dep
-
-
-def _sanitize_url(url: str) -> str:
-    """Block javascript:, data:text/html, and vbscript: URLs."""
-    decoded = urllib.parse.unquote(url).replace(" ", "").lower()
-    if decoded.startswith(("javascript:", "data:text/html", "vbscript:")):
-        return "about:blank"
-    return url
 
 
 # Matches `src="/api/media/<name>"` (optionally with a scheme+host prefix or
@@ -78,6 +74,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   p {{ margin: 0.5em 0; }}
   ul, ol {{ padding-left: 1.6em; margin: 0.5em 0; }}
   li {{ margin: 0.25em 0; }}
+  li.task-list-item {{ list-style: none; }}
   pre {{ background: #1e293b; color: #e2e8f0; padding: 1em; border-radius: 8px; overflow-x: auto; font-size: 0.9em; }}
   code {{ background: #f1f5f9; padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.9em; font-family: 'SF Mono', Menlo, Consolas, monospace; }}
   pre code {{ background: none; padding: 0; color: inherit; font-size: 1em; }}
@@ -127,117 +124,71 @@ SITE_INDEX_TEMPLATE = """<!DOCTYPE html>
 </html>"""
 
 
+def _wikilink_rule(state: StateInline, silent: bool) -> bool:
+    """Inline rule for ``[[slug]]``, ``[[slug|display]]`` and ``![[slug]]``.
+
+    Mirrors ``wikilinkRule`` in ``frontend/src/lib/markdown.js``. Transclusion
+    can't be resolved in a static file, so ``![[slug]]`` exports as a link.
+    """
+    src, start = state.src, state.pos
+    if src.startswith("![[", start):
+        open_len = 3
+    elif src.startswith("[[", start):
+        open_len = 2
+    else:
+        return False
+    close = src.find("]]", start + open_len)
+    if close == -1:
+        return False
+    inside = src[start + open_len:close]
+    if not inside or "\n" in inside:
+        return False
+    if not silent:
+        slug, sep, display = inside.partition("|")
+        token = state.push("wikilink", "", 0)
+        token.meta = {"slug": slug.strip(), "display": (display if sep else slug).strip()}
+    state.pos = close + 2
+    return True
+
+
+def _render_wikilink(self, tokens, idx, options, env) -> str:
+    meta = tokens[idx].meta
+    # Same href form as the site index, so links resolve inside the zip.
+    href = _html.escape(urllib.parse.quote(meta["slug"], safe=""))
+    return f'<a href="{href}.html" class="wikilink">{_html.escape(meta["display"])}</a>'
+
+
+def _render_callout(self, tokens, idx, options, env) -> str:
+    if tokens[idx].nesting == 1:
+        # Only the validated first word — `info` holds the rest of the
+        # `:::` line verbatim, which is user text.
+        kind = tokens[idx].info.split(maxsplit=1)[0]
+        return f'<div class="callout callout-{kind}">\n'
+    return "</div>\n"
+
+
+def _build_markdown() -> MarkdownIt:
+    # Same base as the web viewer (lib/markdown.js): CommonMark + GFM tables,
+    # strikethrough, task lists, linkify, raw HTML off. markdown-it's link
+    # validation already drops javascript:/vbscript:/data: URLs.
+    md = (
+        MarkdownIt("commonmark", {"html": False, "linkify": True})
+        .enable(["table", "strikethrough", "linkify"])
+        .use(tasklists_plugin)
+    )
+    for kind in ("info", "warning", "tip", "danger"):
+        md.use(container_plugin, name=kind, render=_render_callout)
+    md.inline.ruler.before("link", "wikilink", _wikilink_rule)
+    md.add_render_rule("wikilink", _render_wikilink)
+    return md
+
+
+_md = _build_markdown()
+
+
 def md_to_simple_html(text):
-    """Minimal markdown-to-HTML for export (no JS deps)."""
-    if not text:
-        return ""
-
-    # Code blocks
-    blocks = []
-    def save_block(m):
-        lang = m.group(1)
-        code = m.group(2)
-        idx = len(blocks)
-        escaped = code.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        blocks.append(f'<pre><code class="language-{lang}">{escaped}</code></pre>')
-        return f"%%BLOCK_{idx}%%"
-
-    html = re.sub(r"```(\w*)\n([\s\S]*?)```", save_block, text)
-
-    # Escape HTML
-    html = html.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
-
-    # Restore blocks
-    for i, b in enumerate(blocks):
-        html = html.replace(f"%%BLOCK_{i}%%", b)
-
-    # Inline code — stash before other transforms so content can't be mangled
-    # (e.g. `**x**` inside code must stay literal). Double-backtick form first so
-    # an escaped backtick inside ``…`` doesn't desync single-backtick pairing —
-    # otherwise every `code` span later in the document gets flipped (</code>
-    # where <code> was expected), which is how the 部署方式 section broke.
-    inline_codes = []
-    def save_inline(content):
-        idx = len(inline_codes)
-        inline_codes.append(content)
-        return f"%%INLINE_{idx}%%"
-
-    html = re.sub(r"``\s*(.+?)\s*``", lambda m: save_inline(m.group(1)), html)
-    html = re.sub(r"`([^`\n]+)`", lambda m: save_inline(m.group(1)), html)
-
-    # Headers
-    for i in range(6, 0, -1):
-        html = re.sub(rf"^{'#' * i}\s+(.+)$", rf"<h{i}>\1</h{i}>", html, flags=re.MULTILINE)
-
-    # HR
-    html = re.sub(r"^---$", "<hr />", html, flags=re.MULTILINE)
-
-    # Bold/italic
-    html = re.sub(r"\*\*\*(.+?)\*\*\*", r"<strong><em>\1</em></strong>", html)
-    html = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", html)
-    html = re.sub(r"\*(.+?)\*", r"<em>\1</em>", html)
-
-    # Wikilinks
-    html = re.sub(r"\[\[([^\]|]+?)\|([^\]]+?)\]\]", r'<a href="\1.html">\2</a>', html)
-    html = re.sub(r"\[\[([^\]|]+?)\]\]", r'<a href="\1.html">\1</a>', html)
-
-    # Images
-    html = re.sub(
-        r"!\[([^\]]*)\]\(([^)]+)\)",
-        lambda m: f'<img src="{_sanitize_url(m.group(2))}" alt="{m.group(1)}" />',
-        html,
-    )
-
-    # Links
-    html = re.sub(
-        r"\[([^\]]+)\]\(([^)]+)\)",
-        lambda m: f'<a href="{_sanitize_url(m.group(2))}">{m.group(1)}</a>',
-        html,
-    )
-
-    # Blockquotes
-    html = re.sub(r"^&gt;\s+(.+)$", r"<blockquote>\1</blockquote>", html, flags=re.MULTILINE)
-
-    # Unordered lists
-    html = re.sub(r"^[-*]\s+(.+)$", r"<li>\1</li>", html, flags=re.MULTILINE)
-    html = re.sub(r"(<li>.*?</li>\n?)+", lambda m: f"<ul>{m.group(0)}</ul>", html)
-
-    # Ordered lists
-    html = re.sub(r"^\d+\.\s+(.+)$", r"<li>\1</li>", html, flags=re.MULTILINE)
-
-    # Tables (simple)
-    def parse_table(m):
-        lines = m.group(0).strip().split("\n")
-        if len(lines) < 2:
-            return m.group(0)
-        header_cells = [c.strip() for c in lines[0].strip("|").split("|")]
-        out = "<table><thead><tr>" + "".join(f"<th>{c}</th>" for c in header_cells) + "</tr></thead><tbody>"
-        for line in lines[2:]:
-            cells = [c.strip() for c in line.strip("|").split("|")]
-            out += "<tr>" + "".join(f"<td>{c}</td>" for c in cells) + "</tr>"
-        out += "</tbody></table>"
-        return out
-
-    html = re.sub(r"(\|.+\|\n)+", parse_table, html)
-
-    # Callouts — run after inline transforms so the body already has <strong>,
-    # <em>, wikilinks etc., but before paragraph wrapping so the `:::` markers
-    # haven't been swallowed into <p> blocks. Non-recursive: the body is taken
-    # verbatim, which avoids the double HTML-escape bug of the earlier design.
-    html = re.sub(
-        r":::[ \t]*(info|warning|tip|danger)\s*\n([\s\S]*?):::",
-        lambda m: f'<div class="callout callout-{m.group(1)}">{m.group(2).strip()}</div>',
-        html,
-    )
-
-    # Paragraphs
-    html = re.sub(r"^(?!<[a-z/])((?!\s*$).+)$", r"<p>\1</p>", html, flags=re.MULTILINE)
-
-    # Restore stashed inline code
-    for i, content in enumerate(inline_codes):
-        html = html.replace(f"%%INLINE_{i}%%", f"<code>{content}</code>")
-
-    return html
+    """Render page markdown to HTML for export (no JS deps)."""
+    return _md.render(text or "")
 
 
 @router.get("/page/{slug}")
