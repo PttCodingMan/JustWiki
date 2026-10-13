@@ -12,6 +12,10 @@ const DEFAULTS = {
   login_subtitle: 'Just clone, run, and write.',
   home_page_slug: '',
   footer_text: 'Powered by JustWiki',
+  session_days: 1,
+  session_auto_renew: false,
+  max_upload_mb: 20,
+  password_min_length: 8,
   anonymous_read: false,
 }
 

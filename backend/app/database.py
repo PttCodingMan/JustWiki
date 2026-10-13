@@ -510,7 +510,7 @@ Press `Ctrl+K` to open the search panel. It supports:
 
 - **Paste images** directly into the editor to auto-upload
 - **Drag and drop** files onto the editor
-- Maximum file size: 20 MB
+- Maximum file size: 20 MB by default (admins can change it under Admin → Site settings)
 
 ---
 
@@ -900,7 +900,7 @@ $$
 
 - 在編輯器中直接 **貼上圖片** 即可自動上傳
 - 也可以透過 **拖曳** 上傳圖片
-- 支援最大 20MB 的檔案
+- 預設支援最大 20MB 的檔案（管理員可在「管理 → 網站設定」調整）
 
 ---
 

@@ -1,12 +1,13 @@
 import asyncio
 import hashlib
 from datetime import datetime, timedelta, timezone
-from fastapi import Depends, HTTPException, status, Request
+from fastapi import Depends, HTTPException, status, Request, Response
 from jose import JWTError, jwt
 import bcrypt
 
 from app.config import settings
 from app.database import get_db, write_transaction
+from app.services import site_settings
 
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
@@ -69,8 +70,15 @@ async def verify_password_async(password: str, hashed: str) -> bool:
     return await asyncio.to_thread(verify_password, password, hashed)
 
 
-def create_token(user_id: int, username: str, role: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS)
+def create_token(
+    user_id: int, username: str, role: str, max_age: int | None = None
+) -> str:
+    """Issue a session JWT. `max_age` (seconds) defaults to TOKEN_EXPIRE_HOURS;
+    login routes go through `set_session_cookie`, which passes the
+    admin-configured value from site settings."""
+    if max_age is None:
+        max_age = TOKEN_EXPIRE_HOURS * 3600
+    expire = datetime.now(timezone.utc) + timedelta(seconds=max_age)
     payload = {
         "sub": str(user_id),
         "username": username,
@@ -78,6 +86,44 @@ def create_token(user_id: int, username: str, role: str) -> str:
         "exp": expire,
     }
     return jwt.encode(payload, settings.SECRET_KEY.get_secret_value(), algorithm=ALGORITHM)
+
+
+async def set_session_cookie(response: Response, user: dict) -> None:
+    """Issue a fresh session JWT for `user` and set it as the `token` cookie.
+
+    The JWT exp and the cookie max_age both follow the admin-configured
+    session length so they always expire together.
+    """
+    max_age = await site_settings.get_session_max_age()
+    token = create_token(user["id"], user["username"], user["role"], max_age=max_age)
+    response.set_cookie(
+        key="token",
+        value=token,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite="lax",
+        max_age=max_age,
+    )
+
+
+def is_cookie_session(request: Request) -> bool:
+    """True when the request authenticates via the session cookie (not a
+    Bearer header or a personal API token stored in the cookie)."""
+    auth_header = request.headers.get("Authorization") or ""
+    if auth_header.startswith("Bearer "):
+        return False
+    token = request.cookies.get("token")
+    return bool(token) and not token.startswith(API_TOKEN_PREFIX)
+
+
+async def check_password_policy(password: str) -> None:
+    """Raise 400 if `password` is shorter than the admin-configured minimum."""
+    min_len = await site_settings.get_int("password_min_length")
+    if len(password) < min_len:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Password must be at least {min_len} characters",
+        )
 
 
 async def _resolve_api_token(token: str) -> dict | None:

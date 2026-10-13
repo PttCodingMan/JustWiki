@@ -6,7 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 
-from app.auth import get_current_user, require_admin, require_real_user, hash_password_async
+from app.auth import (
+    check_password_policy,
+    get_current_user,
+    hash_password_async,
+    require_admin,
+    require_real_user,
+)
 from app.database import get_db, write_transaction
 from app.services.acl import build_id_clause, list_readable_page_ids, resolve_page_permission
 
@@ -304,6 +310,7 @@ async def create_user(body: UserCreate, user=Depends(require_admin)):
     )
     if existing:
         raise HTTPException(status_code=409, detail="Username already exists")
+    await check_password_policy(body.password)
     pw_hash = await hash_password_async(body.password)
     async with write_transaction(db):
         cursor = await db.execute(
@@ -410,6 +417,7 @@ async def update_user(user_id: int, body: UserUpdate, user=Depends(require_admin
         updates.append("role = ?")
         values.append(body.role)
     if body.password is not None:
+        await check_password_policy(body.password)
         updates.append("password_hash = ?")
         values.append(await hash_password_async(body.password))
     if body.is_active is not None:

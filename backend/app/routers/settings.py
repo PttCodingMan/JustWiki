@@ -1,12 +1,12 @@
-"""Site-wide branding and homepage settings.
+"""Site-wide branding, homepage, session and upload settings.
 
 GET is anonymous on purpose: the Login page renders before any user is
 authenticated, and it needs to know the configured title/subtitle.
 PUT is admin-only.
 
-Storage is a key/value table; missing keys fall through to DEFAULT_SETTINGS
-so the API always returns the full set and the frontend can index by key
-without null-checks.
+Storage and defaults live in services/site_settings.py; missing keys fall
+through to the defaults so the API always returns the full set and the
+frontend can index by key without null-checks.
 """
 from typing import Optional
 
@@ -16,16 +16,18 @@ from pydantic import BaseModel, Field
 from app.auth import require_admin
 from app.config import settings as app_settings
 from app.database import get_db, write_transaction
+from app.services.site_settings import (
+    BOOL_SETTINGS,
+    INT_SETTINGS,
+    read_all,
+)
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
-DEFAULT_SETTINGS: dict[str, str] = {
-    "site_name": "JustWiki",
-    "login_title": "JustWiki",
-    "login_subtitle": "Just clone, run, and write.",
-    "home_page_slug": "",
-    "footer_text": "Powered by JustWiki",
-}
+
+def _int_field(key: str):
+    _, lo, hi = INT_SETTINGS[key]
+    return Field(default=None, ge=lo, le=hi)
 
 
 class SettingsResponse(BaseModel):
@@ -34,6 +36,10 @@ class SettingsResponse(BaseModel):
     login_subtitle: str
     home_page_slug: str
     footer_text: str
+    session_days: int
+    session_auto_renew: bool
+    max_upload_mb: int
+    password_min_length: int
     # Server-side toggle, surfaced read-only so the frontend can decide
     # whether an unauthenticated visitor should be rendered as a guest
     # (Layout + read-only UI) or bounced to /login. Driven by the
@@ -47,18 +53,15 @@ class SettingsUpdate(BaseModel):
     login_subtitle: Optional[str] = Field(default=None, max_length=200)
     home_page_slug: Optional[str] = Field(default=None, max_length=200)
     footer_text: Optional[str] = Field(default=None, max_length=200)
-
-
-async def _read_all() -> dict[str, str]:
-    db = await get_db()
-    rows = await db.execute_fetchall("SELECT key, value FROM site_settings")
-    overrides = {r["key"]: r["value"] for r in rows}
-    return {k: overrides.get(k, default) for k, default in DEFAULT_SETTINGS.items()}
+    session_days: Optional[int] = _int_field("session_days")
+    session_auto_renew: Optional[bool] = None
+    max_upload_mb: Optional[int] = _int_field("max_upload_mb")
+    password_min_length: Optional[int] = _int_field("password_min_length")
 
 
 @router.get("", response_model=SettingsResponse)
 async def get_settings():
-    return {**(await _read_all()), "anonymous_read": app_settings.ANONYMOUS_READ}
+    return {**(await read_all()), "anonymous_read": app_settings.ANONYMOUS_READ}
 
 
 @router.put("", response_model=SettingsResponse)
@@ -67,7 +70,10 @@ async def update_settings(body: SettingsUpdate, _=Depends(require_admin)):
     payload = body.model_dump(exclude_none=True)
     async with write_transaction(db):
         for key, raw in payload.items():
-            value = str(raw).strip()
+            if key in BOOL_SETTINGS:
+                value = "1" if raw else "0"
+            else:
+                value = str(raw).strip()
             # Empty string clears the override so the next read returns the
             # built-in default. Without this, an admin couldn't blank the
             # branding fields back to "JustWiki" without redeploying.
@@ -82,4 +88,4 @@ async def update_settings(body: SettingsUpdate, _=Depends(require_admin)):
                        updated_at = CURRENT_TIMESTAMP""",
                 (key, value),
             )
-    return {**(await _read_all()), "anonymous_read": app_settings.ANONYMOUS_READ}
+    return {**(await read_all()), "anonymous_read": app_settings.ANONYMOUS_READ}
