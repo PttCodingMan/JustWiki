@@ -1,3 +1,6 @@
+# Recipes use `source`, which dash (/bin/sh on Debian/Ubuntu) lacks.
+SHELL := /bin/bash
+
 .PHONY: dev dev-backend dev-frontend build backup clean test test-backend test-frontend lint
 
 dev:

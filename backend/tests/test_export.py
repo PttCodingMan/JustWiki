@@ -148,3 +148,45 @@ async def test_export_site_admin(admin_client):
     response = await admin_client.get("/api/export/site")
     assert response.status_code == 200
     assert response.headers["Content-Type"] == "application/zip"
+
+
+@pytest.mark.asyncio
+async def test_export_renders_wiki_extensions(auth_client):
+    """Wikilinks point at the sibling `<slug>.html` files of a site export,
+    and callouts become styled blocks rather than literal `:::` text."""
+    await auth_client.post("/api/pages", json={
+        "title": "Extensions",
+        "content_md": (
+            "See [[other-page|the other page]] and [[中文頁]].\n\n"
+            ":::warning\nCareful **now**\n:::\n"
+        ),
+        "slug": "extensions",
+    })
+    response = await auth_client.get("/api/export/page/extensions")
+    assert response.status_code == 200
+    body = response.text
+    assert '<a href="other-page.html" class="wikilink">the other page</a>' in body
+    assert '<a href="%E4%B8%AD%E6%96%87%E9%A0%81.html" class="wikilink">中文頁</a>' in body
+    assert '<div class="callout callout-warning">' in body
+    assert "<strong>now</strong>" in body
+    assert ":::" not in body
+
+
+@pytest.mark.asyncio
+async def test_export_does_not_emit_raw_html_or_script_urls(auth_client):
+    await auth_client.post("/api/pages", json={
+        "title": "Hostile",
+        "content_md": (
+            "<script>alert(1)</script>\n\n"
+            "[click](javascript:alert(2))\n\n"
+            ':::info "><img src=x onerror=alert(3)>\nbody\n:::\n'
+        ),
+        "slug": "hostile",
+    })
+    response = await auth_client.get("/api/export/page/hostile")
+    assert response.status_code == 200
+    body = response.text
+    assert "<script>alert(1)</script>" not in body
+    assert 'href="javascript:' not in body
+    assert "<img src=x" not in body
+    assert '<div class="callout callout-info">' in body
