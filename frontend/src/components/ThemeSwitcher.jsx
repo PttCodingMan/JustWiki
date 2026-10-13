@@ -49,11 +49,12 @@ export default function ThemeSwitcher() {
     <div className="relative" ref={ref}>
       <button
         onClick={handleOpen}
-        className="p-1.5 rounded hover:bg-surface-hover text-text-secondary flex items-center gap-1"
+        className="icon-btn"
         title={t('theme.change')}
         aria-label={t('theme.change')}
+        aria-expanded={open}
       >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+        <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
           <path d="M12 2a10 10 0 1 0 0 20 2 2 0 0 0 1.4-3.4 2 2 0 0 1 1.4-3.4H18a4 4 0 0 0 4-4 10 10 0 0 0-10-9.2z" />
           <circle cx="7.5" cy="10.5" r="1" fill="currentColor" />
           <circle cx="12" cy="7" r="1" fill="currentColor" />
@@ -62,32 +63,36 @@ export default function ThemeSwitcher() {
       </button>
       {open && (
         <div
-          className="absolute right-0 top-full mt-1 bg-surface border border-border rounded-xl shadow-lg p-2 z-50 w-44"
+          className="menu-surface absolute right-0 top-full mt-2 z-50 w-52"
           onMouseLeave={handleLeave}
         >
-          <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider px-2 py-1 mb-1">{t('theme.title')}</div>
+          <div className="eyebrow px-2.5 pt-1.5 pb-2">{t('theme.title')}</div>
           {Object.entries(themes).map(([id, def]) => (
             <button
               key={id}
               onMouseEnter={() => handleHover(id)}
               onClick={() => handleSelect(id)}
-              className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-sm text-left transition-colors ${
+              className={`w-full flex items-center gap-3 px-2.5 py-1.5 rounded-[9px] text-[13px] text-left transition-colors ${
                 theme === id
                   ? 'bg-surface-hover font-medium text-text'
-                  : 'text-text-secondary hover:bg-surface-hover'
+                  : 'text-text-secondary hover:bg-surface-hover hover:text-text'
               }`}
             >
-              <span className="flex gap-0.5 shrink-0">
-                {def.preview.map((c, i) => (
+              <span className="flex shrink-0 -space-x-1.5">
+                {def.preview.slice(0, 3).map((c, i) => (
                   <span
                     key={i}
-                    className="w-3 h-3 rounded-full border border-border"
-                    style={{ background: c }}
+                    className="w-4 h-4 rounded-full ring-2 ring-surface"
+                    style={{ background: c, boxShadow: 'inset 0 0 0 1px rgb(0 0 0 / 0.08)' }}
                   />
                 ))}
               </span>
               <span>{t(`theme.${id}`, def.name)}</span>
-              {theme === id && <span className="ml-auto text-primary text-xs">&#10003;</span>}
+              {theme === id && (
+                <svg className="ml-auto w-3.5 h-3.5 text-primary" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                  <path d="M5 12l5 5L20 7" />
+                </svg>
+              )}
             </button>
           ))}
         </div>

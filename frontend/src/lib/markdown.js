@@ -352,6 +352,11 @@ export function createMarkdown() {
 
   // GFM features: tables and strikethrough are already enabled in markdown-it
   // by default. Task lists we handle below.
+  //
+  // Wrap tables so wide ones scroll horizontally inside their own frame
+  // instead of overflowing the article column.
+  md.renderer.rules.table_open = () => '<div class="table-wrap"><table>\n'
+  md.renderer.rules.table_close = () => '</table></div>\n'
 
   // Callouts
   for (const type of ['info', 'warning', 'tip', 'danger']) {

@@ -12,22 +12,22 @@ function DiffViewer({ oldText, newText, v1, v2 }) {
   const diff = computeDiff(oldLines, newLines)
 
   return (
-    <div className="grid grid-cols-2 gap-0 border border-gray-200 rounded-lg overflow-hidden text-sm font-mono">
-      <div className="bg-gray-50 px-3 py-2 border-b border-r border-gray-200 font-sans font-medium text-gray-600 text-xs">
+    <div className="grid grid-cols-2 gap-0 border border-border rounded-2xl overflow-hidden text-[13px] leading-6 font-mono bg-surface shadow-xs">
+      <div className="bg-text/[0.03] px-3 py-2 border-b border-r border-border font-sans font-medium text-text-secondary text-xs">
         {t('versions.diffOldHeader', { v: v1 })}
       </div>
-      <div className="bg-gray-50 px-3 py-2 border-b border-gray-200 font-sans font-medium text-gray-600 text-xs">
+      <div className="bg-text/[0.03] px-3 py-2 border-b border-border font-sans font-medium text-text-secondary text-xs">
         {t('versions.diffNewHeader', { v: v2 })}
       </div>
-      <div className="border-r border-gray-200 overflow-auto max-h-[600px]">
+      <div className="border-r border-border overflow-auto max-h-[600px]">
         {diff.map((d, i) => (
           <div
             key={`l-${i}`}
             className={`px-3 py-0.5 whitespace-pre-wrap break-all ${
-              d.type === 'removed' ? 'bg-red-50 text-red-800' :
-              d.type === 'modified' ? 'bg-yellow-50 text-yellow-800' :
-              d.type === 'added' ? 'bg-gray-100 text-gray-400' :
-              'text-gray-700'
+              d.type === 'removed' ? 'bg-red-500/10 text-red-800 dark:text-red-300 shadow-[inset_2px_0_0_rgb(239_68_68/0.6)]' :
+              d.type === 'modified' ? 'bg-yellow-500/10 text-yellow-800 dark:text-yellow-200 shadow-[inset_2px_0_0_rgb(234_179_8/0.6)]' :
+              d.type === 'added' ? 'bg-text/5 text-text-tertiary' :
+              'text-text-secondary'
             }`}
           >
             {d.type === 'added' ? '' : d.old}
@@ -39,10 +39,10 @@ function DiffViewer({ oldText, newText, v1, v2 }) {
           <div
             key={`r-${i}`}
             className={`px-3 py-0.5 whitespace-pre-wrap break-all ${
-              d.type === 'added' ? 'bg-green-50 text-green-800' :
-              d.type === 'modified' ? 'bg-yellow-50 text-yellow-800' :
-              d.type === 'removed' ? 'bg-gray-100 text-gray-400' :
-              'text-gray-700'
+              d.type === 'added' ? 'bg-green-500/10 text-green-800 dark:text-green-300 shadow-[inset_2px_0_0_rgb(34_197_94/0.6)]' :
+              d.type === 'modified' ? 'bg-yellow-500/10 text-yellow-800 dark:text-yellow-200 shadow-[inset_2px_0_0_rgb(234_179_8/0.6)]' :
+              d.type === 'removed' ? 'bg-text/5 text-text-tertiary' :
+              'text-text-secondary'
             }`}
           >
             {d.type === 'removed' ? '' : d.new}
@@ -164,7 +164,7 @@ export default function PageVersions() {
           >
             &larr;
           </button>
-          <h1 className="text-2xl font-bold text-text">{t('versions.title')}</h1>
+          <h1 className="page-title">{t('versions.title')}</h1>
         </div>
         <Link
           to={`/page/${slug}`}

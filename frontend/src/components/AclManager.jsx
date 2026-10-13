@@ -132,7 +132,7 @@ export default function AclManager({ slug, open, onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-surface rounded-xl shadow-lg border border-border w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="text-lg font-semibold text-text">{t('acl.title')}</h2>
+          <h2 className="section-title">{t('acl.title')}</h2>
           <button onClick={onClose} className="text-text-secondary hover:text-text text-2xl leading-none">×</button>
         </div>
 

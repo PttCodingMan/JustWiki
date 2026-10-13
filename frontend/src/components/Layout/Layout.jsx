@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import useAuth from '../../store/useAuth'
 import usePages from '../../store/usePages'
@@ -13,6 +13,80 @@ import NotificationBell from './NotificationBell'
 import ThemeSwitcher from '../ThemeSwitcher'
 import LanguageSwitcher from '../LanguageSwitcher'
 
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '')
+
+function UserMenu({ user, onLogout }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  const name = user?.display_name || user?.username || ''
+  const initial = (name.trim()[0] || '?').toUpperCase()
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={user?.username}
+        className="ml-1 w-9 h-9 rounded-full flex items-center justify-center transition-transform duration-200 hover:scale-105 active:scale-95"
+      >
+        <span
+          className="w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-semibold text-primary-text shadow-sm ring-2 ring-surface"
+          style={{ background: 'linear-gradient(135deg, var(--color-primary), color-mix(in oklab, var(--color-primary) 55%, var(--color-accent)))' }}
+          aria-hidden="true"
+        >
+          {initial}
+        </span>
+      </button>
+      {open && (
+        <div role="menu" className="menu-surface absolute right-0 top-full mt-2 z-50 w-56">
+          <div className="px-3 pt-2 pb-2.5">
+            <div className="text-sm font-semibold text-text truncate">{name}</div>
+            {user?.username && name !== user.username && (
+              <div className="text-xs text-text-secondary truncate">@{user.username}</div>
+            )}
+            {user?.role && (
+              <div className="mt-1.5 inline-flex text-[10px] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded-md bg-primary-soft text-sidebar-active-text">
+                {user.role}
+              </div>
+            )}
+          </div>
+          <div className="menu-sep" />
+          <Link role="menuitem" to="/profile" onClick={() => setOpen(false)} className="menu-item">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 21a8 8 0 0 1 16 0" />
+            </svg>
+            {t('common.profile')}
+          </Link>
+          <button role="menuitem" onClick={() => { setOpen(false); onLogout() }} className="menu-item">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
+              <path d="M10 17l5-5-5-5M15 12H3" />
+            </svg>
+            {t('common.logout')}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Layout({ children }) {
   const { t } = useTranslation()
   const { user, logout } = useAuth()
@@ -21,6 +95,7 @@ export default function Layout({ children }) {
   const { fetchNotifications } = useNotifications()
   const siteName = useSettings((s) => s.site_name)
   const navigate = useNavigate()
+  const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768)
   const [searchOpen, setSearchOpen] = useState(false)
 
@@ -52,72 +127,83 @@ export default function Layout({ children }) {
       <SearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
 
       {/* Navbar */}
-      <nav className="h-12 bg-surface border-b border-border flex items-center px-4 shrink-0 no-print">
+      <nav className="app-nav h-14 flex items-center gap-1 px-2 sm:px-3 shrink-0 relative z-40 no-print">
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="p-1.5 rounded hover:bg-surface-hover mr-2 text-text-secondary"
+          className="icon-btn"
           title={t('nav.toggleSidebar')}
+          aria-label={t('nav.toggleSidebar')}
+          aria-expanded={sidebarOpen}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M3 12h18M3 6h18M3 18h18" />
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <rect x="3" y="4" width="18" height="16" rx="3" />
+            <path d="M9 4v16" />
           </svg>
         </button>
-        <Link to="/" className="flex items-center gap-1.5 font-bold text-lg text-text mr-4">
-          <img src="/favicon.png" alt="" className="h-7 w-7" />
-          {siteName}
+        <Link to="/" aria-label={siteName} className="group flex items-center gap-2 pl-1 pr-2 min-w-0">
+          <img
+            src="/favicon.png"
+            alt=""
+            className="h-7 w-7 shrink-0 transition-transform duration-500 group-hover:-rotate-12 group-hover:scale-110"
+            style={{ transitionTimingFunction: 'var(--ease-spring)' }}
+          />
+          <span className="hidden sm:block font-display text-[1.45rem] leading-none text-text truncate translate-y-[1px]">
+            {siteName}
+          </span>
         </Link>
-        <div className="flex-1" />
 
-        {/* Search button */}
+        <div className="flex-1 flex justify-center px-2">
+          {/* Command-bar style search trigger */}
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="group hidden md:flex items-center gap-2.5 w-full max-w-md h-9 pl-3 pr-1.5 rounded-xl text-sm text-text-tertiary bg-surface/70 border border-border hover:border-text-tertiary/40 hover:text-text-secondary shadow-xs transition-all duration-200"
+            title={t('nav.search')}
+          >
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+            <span className="flex-1 text-left truncate">{t('searchModal.placeholder')}</span>
+            <kbd className="flex items-center gap-0.5 text-[11px] font-medium text-text-secondary bg-bg border border-border rounded-md px-1.5 h-6">
+              {isMac ? '⌘' : 'Ctrl'} K
+            </kbd>
+          </button>
+        </div>
+
         <button
           onClick={() => setSearchOpen(true)}
-          className="flex items-center gap-2 text-sm px-3 py-1.5 bg-surface-hover text-text-secondary rounded-lg hover:brightness-95 mr-3"
+          className="icon-btn md:hidden"
           title={t('nav.search')}
+          aria-label={t('common.search')}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
+          <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
           </svg>
-          <span className="hidden sm:inline">{t('common.search')}</span>
-          <kbd className="text-xs text-text-secondary border border-border rounded px-1">⌘K</kbd>
         </button>
 
         {!isGuest && (
           <button
             onClick={() => navigate('/new')}
-            className="text-sm px-3 py-1.5 bg-primary text-primary-text rounded-lg hover:bg-primary-hover mr-3"
+            className="btn-primary max-sm:w-9 max-sm:px-0 mx-1"
             title={t('nav.newPage')}
+            aria-label={t('nav.newPage')}
           >
-            {t('common.newPage')}
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" viewBox="0 0 24 24">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            <span className="hidden sm:inline">{t('common.newPage').replace(/^\+\s*/, '')}</span>
           </button>
         )}
         {!isGuest && <NotificationBell />}
-        <div className="mr-2">
-          <ThemeSwitcher />
-        </div>
-        <div className="mr-2">
-          <LanguageSwitcher />
-        </div>
-        {!isGuest && (
-          <Link
-            to="/profile"
-            className="text-sm text-text-secondary hover:text-text mr-3"
-            title={t('common.profile')}
-          >
-            {user?.username}
-          </Link>
-        )}
+        <ThemeSwitcher />
+        <LanguageSwitcher />
         {isGuest ? (
-          <button
-            onClick={() => navigate('/login')}
-            className="text-sm px-3 py-1.5 bg-primary text-primary-text rounded-lg hover:bg-primary-hover"
-          >
+          <button onClick={() => navigate('/login')} className="btn-primary ml-1">
             {t('common.signIn')}
           </button>
         ) : (
-          <button onClick={handleLogout} className="text-sm text-text-secondary hover:text-text">
-            {t('common.logout')}
-          </button>
+          <UserMenu user={user} onLogout={handleLogout} />
         )}
       </nav>
 
@@ -126,19 +212,24 @@ export default function Layout({ children }) {
         {/* Mobile overlay */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 bg-black/30 z-30 md:hidden"
+            className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-30 md:hidden animate-fade"
             onClick={() => setSidebarOpen(false)}
           />
         )}
         <div
-          className={`shrink-0 overflow-hidden transition-all duration-200 ease-in-out z-40 no-print
-            max-md:fixed max-md:top-12 max-md:bottom-0 max-md:left-0 max-md:shadow-lg`}
-          style={{ width: sidebarOpen ? '240px' : '0px' }}
+          className={`shrink-0 overflow-hidden transition-[width] duration-300 z-30 no-print
+            max-md:fixed max-md:top-14 max-md:bottom-0 max-md:left-0 max-md:shadow-2xl`}
+          style={{ width: sidebarOpen ? 'var(--sidebar-width)' : '0px', transitionTimingFunction: 'var(--ease-out-expo)' }}
         >
           <Sidebar />
         </div>
-        <main className="flex-1 overflow-auto bg-bg p-4 sm:p-6">
-          {children}
+        <main className="flex-1 overflow-auto bg-bg px-4 py-6 sm:px-8 sm:py-10">
+          {/* Opacity-only route transition: a transform here would turn this
+              wrapper into the containing block for position:fixed children
+              (FABs, floating bars) while the animation runs. */}
+          <div key={location.pathname} className="animate-fade [animation-duration:0.4s]">
+            {children}
+          </div>
         </main>
       </div>
     </div>

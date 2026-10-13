@@ -24,6 +24,7 @@
     "logIn": "Log in",
     "invalidCredentials": "Invalid username or password",
     "continueWith": "Continue with {{provider}}",
+    "views_one": "{{count}} view",
     "views": "{{count}} views"
   },
   "nav": {
@@ -73,6 +74,8 @@
   },
   "home": {
     "title": "All Pages",
+    "pageCount_one": "{{count}} page",
+    "pageCount": "{{count}} pages",
     "browserTitle": "Home"
   },
   "confirm": {
@@ -439,6 +442,10 @@
     "insertMedia": "Insert {{name}}",
     "insertDiagram": "Insert ::drawio[{{id}}]"
   },
+  "codeBlock": {
+    "copy": "Copy code",
+    "copied": "Copied"
+  },
   "toc": {
     "title": "On this page",
     "empty": "No headings yet.",
@@ -482,6 +489,7 @@
     "loading": "Loading...",
     "login": "Login",
     "updated": "Updated {{date}}",
+    "readingTime": "{{count}} min read",
     "notFoundTitle": "Page not found",
     "notFoundBody": "This page is not available."
   },
@@ -536,6 +544,7 @@
     "tagPlaceholder": "Tag name",
     "addTag": "+ tag",
     "updated": "Updated {{date}}",
+    "readingTime": "{{count}} min read",
     "publicLabel": "🌐 Public",
     "publicTitle": "This page is public",
     "watchingCount": "{{count}} watching",

@@ -275,7 +275,7 @@ export default function GraphView() {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h1 className="text-2xl font-bold text-text">{t('graph.title')}</h1>
+        <h1 className="page-title">{t('graph.title')}</h1>
         <div className="flex items-center gap-3">
           <div className="text-sm text-text-secondary">
             {t('graph.stats', { pages: graphData?.nodes?.length || 0, links: graphData?.links?.length || 0 })}
@@ -317,7 +317,7 @@ export default function GraphView() {
           <p className="text-sm">{t('graph.emptyHint')}</p>
         </div>
       ) : (
-        <div className="relative bg-surface rounded-xl shadow-sm border border-border overflow-hidden">
+        <div className="relative bg-surface rounded-2xl shadow-sm border border-hairline overflow-hidden">
           <div ref={containerRef} className="w-full" style={{ height: 600 }}>
             <Suspense
               fallback={

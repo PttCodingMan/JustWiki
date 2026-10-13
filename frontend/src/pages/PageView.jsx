@@ -17,11 +17,63 @@ import AclManager from '../components/AclManager'
 import { stripBrTags } from '../lib/markdown'
 import api from '../api/client'
 
+// Walk the sidebar tree to find the chain of ancestors for a slug so the
+// header can render breadcrumbs without an extra request.
+function findAncestors(nodes, slug, trail = []) {
+  for (const n of nodes || []) {
+    if (n.slug === slug) return trail
+    const hit = findAncestors(n.children, slug, [...trail, n])
+    if (hit) return hit
+  }
+  return null
+}
+
+// Rough reading-time estimate: ~230 wpm for space-delimited scripts and
+// ~450 chars/min for CJK, which has no word separators.
+function readingMinutes(md) {
+  if (!md) return 1
+  const text = md.replace(/```[\s\S]*?```/g, ' ').replace(/[#>*_`[\]()|:-]/g, ' ')
+  const cjk = (text.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g) || []).length
+  const words = text.replace(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g, ' ').split(/\s+/).filter(Boolean).length
+  return Math.max(1, Math.round(words / 230 + cjk / 450))
+}
+
+function ReadingProgress() {
+  const barRef = useRef(null)
+  useEffect(() => {
+    const scroller = barRef.current?.closest('main')
+    if (!scroller) return
+    let frame = 0
+    const update = () => {
+      frame = 0
+      const max = scroller.scrollHeight - scroller.clientHeight
+      const ratio = max > 0 ? Math.min(1, scroller.scrollTop / max) : 0
+      if (barRef.current) barRef.current.style.transform = `scaleX(${ratio})`
+    }
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(update) }
+    update()
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      scroller.removeEventListener('scroll', onScroll)
+      if (frame) cancelAnimationFrame(frame)
+    }
+  }, [])
+  return (
+    <div className="sticky -top-6 sm:-top-10 z-20 h-0 -mx-4 sm:-mx-8 no-print" aria-hidden="true">
+      <div
+        ref={barRef}
+        className="h-[2px] origin-left bg-primary"
+        style={{ transform: 'scaleX(0)', transition: 'transform 0.1s linear' }}
+      />
+    </div>
+  )
+}
+
 export default function PageView() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { slug } = useParams()
   const navigate = useNavigate()
-  const { getPage, deletePage, fetchTree } = usePages()
+  const { getPage, deletePage, fetchTree, tree } = usePages()
   const { pageTags, fetchPageTags, addTag, removeTag } = useTags()
   const { checkBookmark, addBookmark, removeBookmark, fetchBookmarks } = useBookmarks()
   const { user } = useAuth()
@@ -234,8 +286,30 @@ export default function PageView() {
     return () => { document.title = siteName }
   }, [page?.title, siteName])
 
-  if (loading) return <div className="text-text-secondary">{t('common.loading')}</div>
+  if (loading) {
+    return (
+      <div className="max-w-[72rem] mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-14 xl:gap-20" aria-busy="true" aria-label={t('common.loading')}>
+        <div className="max-w-[46rem] w-full">
+          <div className="skeleton h-3 w-40 mb-6" />
+          <div className="skeleton h-14 w-3/4 mb-5 rounded-xl" />
+          <div className="skeleton h-3.5 w-72 mb-12" />
+          {[100, 94, 97, 62, 0, 91, 98, 74].map((w, i) => (
+            <div key={i} className={w ? 'skeleton h-3.5 mb-4' : 'h-6'} style={{ width: `${w}%` }} />
+          ))}
+        </div>
+        <div className="hidden lg:block space-y-3 pt-2">
+          <div className="skeleton h-9 w-full rounded-[10px] mb-8" />
+          {[70, 85, 60, 75].map((w, i) => <div key={i} className="skeleton h-3" style={{ width: `${w}%` }} />)}
+        </div>
+      </div>
+    )
+  }
   if (!page) return null
+
+  const ancestors = findAncestors(tree, slug) || []
+  const minutes = readingMinutes(page.content_md)
+  const updatedDate = new Date(page.updated_at)
+  const authorInitial = (page.author_name || '?').trim().charAt(0).toUpperCase()
 
   const permission = page.effective_permission
   const writable = canEdit(permission, user?.role)
@@ -256,11 +330,35 @@ export default function PageView() {
         {t('pageView.edit')}
       </button>
       )}
+      {!isGuest && (
+        <button
+          onClick={handleToggleBookmark}
+          className={`fab-btn fab-btn-secondary !px-0 w-9 ${bookmarked ? '!text-amber-500' : ''}`}
+          title={bookmarked ? t('pageView.removeBookmark') : t('pageView.addBookmark')}
+          aria-label={bookmarked ? t('pageView.removeBookmark') : t('pageView.addBookmark')}
+          aria-pressed={bookmarked}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill={bookmarked ? 'currentColor' : 'none'}
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinejoin="round"
+            className={bookmarked ? 'animate-pop' : ''}
+          >
+            <path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z" />
+          </svg>
+        </button>
+      )}
       <div className="relative" ref={menuRef}>
         <button
           onClick={() => setMenuOpen(!menuOpen)}
-          className="fab-btn fab-btn-secondary"
+          className="fab-btn fab-btn-secondary !px-0 w-9"
           title={t('pageView.moreActions')}
+          aria-label={t('pageView.moreActions')}
+          aria-expanded={menuOpen}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="12" cy="5" r="1.5" />
@@ -411,114 +509,160 @@ export default function PageView() {
   )
 
   return (
-    <div className="max-w-6xl xl:max-w-7xl 2xl:max-w-[100rem] mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_220px] 2xl:grid-cols-[minmax(0,1fr)_260px] lg:gap-8 2xl:gap-12">
-      <article>
-        <div className="flex items-center gap-3 mb-4 flex-wrap">
-          <h1 className="text-3xl font-bold text-text">{page.title}</h1>
-          {!isGuest && (
-            <button
-              onClick={handleToggleBookmark}
-              className={`text-xl transition-colors ${bookmarked ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-400'}`}
-              title={bookmarked ? t('pageView.removeBookmark') : t('pageView.addBookmark')}
-            >
-              {bookmarked ? '\u2605' : '\u2606'}
-            </button>
-          )}
-        </div>
+    <>
+    <ReadingProgress />
+    <div className="max-w-[72rem] mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-14 xl:gap-20">
+      <article className="min-w-0 max-w-[46rem] w-full animate-enter">
+        <header className="mb-10 sm:mb-12">
+          {/* Breadcrumbs */}
+          <nav aria-label="Breadcrumb" className="flex items-center flex-wrap gap-x-1.5 gap-y-1 text-[13px] text-text-tertiary mb-5 min-h-5">
+            <Link to="/" className="hover:text-text transition-colors" aria-label={siteName}>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />
+              </svg>
+            </Link>
+            {ancestors.map((a) => (
+              <React.Fragment key={a.id}>
+                <span aria-hidden="true" className="opacity-60">/</span>
+                <Link to={`/page/${a.slug}`} className="hover:text-text transition-colors truncate max-w-[14rem]">{a.title}</Link>
+              </React.Fragment>
+            ))}
+            <span aria-hidden="true" className="opacity-60">/</span>
+            <span className="font-mono text-[12px] text-text-tertiary truncate max-w-[16rem]">{page.slug}</span>
+            {page.is_public && (
+              <span
+                title={t('pageView.publicTitle')}
+                className="ml-1.5 inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.08em] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/25"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                {t('pageView.publicLabel').replace(/^\P{L}+/u, '')}
+              </span>
+            )}
+          </nav>
 
-        {/* Mobile: inline actions under the title. Desktop uses the right-rail dock. */}
-        <div className="mb-4 lg:hidden no-print">
-          {renderActions('inline')}
-        </div>
+          <h1 className="font-display text-[2.6rem] sm:text-[3.6rem] leading-[1.02] tracking-[-0.025em] text-text text-balance break-words">
+            {page.title}
+          </h1>
 
-        {/* Tags */}
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          {pageTags.map((tag) => (
-            <span key={tag.id} className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-primary-soft text-primary dark:text-accent rounded-full">
-              {tag.name}
-              {!isGuest && (
-                <button
-                  onClick={() => handleRemoveTag(tag.name)}
-                  className="text-primary/60 hover:text-primary ml-0.5"
-                  title={t('pageView.removeTag')}
+          {/* Meta */}
+          <div className="mt-6 flex items-center flex-wrap gap-x-3 gap-y-2 text-[13px] text-text-secondary">
+            {page.author_name && (
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold text-primary-text"
+                  style={{ background: 'linear-gradient(135deg, var(--color-primary), color-mix(in oklab, var(--color-primary) 55%, var(--color-accent)))' }}
+                  aria-hidden="true"
                 >
-                  &times;
-                </button>
-              )}
-            </span>
-          ))}
-          {!isGuest && (showTagInput ? (
-            <form onSubmit={handleAddTag} className="inline-flex">
-              <input
-                autoFocus
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                onBlur={() => { if (!newTag.trim()) setShowTagInput(false) }}
-                placeholder={t('pageView.tagPlaceholder')}
-                className="text-xs px-2 py-1 border border-border rounded-full w-24 outline-none focus:border-primary bg-transparent text-text"
-              />
-            </form>
-          ) : (
-            <button
-              onClick={() => setShowTagInput(true)}
-              className="text-xs px-2 py-1 text-text-secondary hover:text-text border border-dashed border-border rounded-full hover:border-text-secondary"
-            >
-              {t('pageView.addTag')}
-            </button>
-          ))}
-        </div>
+                  {authorInitial}
+                </span>
+                {page.author_username ? (
+                  <Link to={`/u/${encodeURIComponent(page.author_username)}`} className="font-medium text-text hover:text-primary transition-colors">
+                    {page.author_name}
+                  </Link>
+                ) : (
+                  <span className="font-medium text-text">{page.author_name}</span>
+                )}
+              </span>
+            )}
+            <span className="text-text-tertiary" aria-hidden="true">·</span>
+            <time dateTime={page.updated_at} title={updatedDate.toLocaleString()}>
+              {t('pageView.updated', { date: updatedDate.toLocaleDateString(i18n.resolvedLanguage || undefined, { year: 'numeric', month: 'short', day: 'numeric' }) })}
+            </time>
+            <span className="text-text-tertiary" aria-hidden="true">·</span>
+            <span>{t('pageView.readingTime', { count: minutes })}</span>
+            <span className="text-text-tertiary max-sm:hidden" aria-hidden="true">·</span>
+            <span className="max-sm:hidden">{t('common.views', { count: page.view_count })}</span>
+            {watcherCount > 0 && (
+              <>
+                <span className="text-text-tertiary" aria-hidden="true">·</span>
+                <span>{t('pageView.watchingCount', { count: watcherCount })}</span>
+              </>
+            )}
+          </div>
 
-        <div className="text-sm text-text-secondary mb-6">
-          {page.author_name && (
-            <>
-              {page.author_username ? (
-                <Link to={`/u/${encodeURIComponent(page.author_username)}`} className="hover:text-text hover:underline">
-                  {page.author_name}
-                </Link>
+          {/* Tags */}
+          {(pageTags.length > 0 || !isGuest) && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-5">
+              {pageTags.map((tag) => (
+                <span key={tag.id} className="group/tag inline-flex items-center gap-1 h-7 pl-2.5 pr-2 text-xs font-medium bg-primary-soft text-sidebar-active-text rounded-full ring-1 ring-inset ring-primary/15">
+                  <span className="opacity-50">#</span>{tag.name}
+                  {!isGuest && (
+                    <button
+                      onClick={() => handleRemoveTag(tag.name)}
+                      className="w-4 h-4 -mr-0.5 flex items-center justify-center rounded-full opacity-40 group-hover/tag:opacity-100 hover:bg-primary/15 transition-opacity"
+                      title={t('pageView.removeTag')}
+                      aria-label={t('pageView.removeTag')}
+                    >
+                      <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                    </button>
+                  )}
+                </span>
+              ))}
+              {!isGuest && (showTagInput ? (
+                <form onSubmit={handleAddTag} className="inline-flex">
+                  <input
+                    autoFocus
+                    value={newTag}
+                    onChange={(e) => setNewTag(e.target.value)}
+                    onBlur={() => { if (!newTag.trim()) setShowTagInput(false) }}
+                    placeholder={t('pageView.tagPlaceholder')}
+                    className="h-7 text-xs px-3 border border-primary/50 rounded-full w-28 outline-none ring-2 ring-primary/15 bg-surface text-text"
+                  />
+                </form>
               ) : (
-                page.author_name
-              )}
-              {' '}&middot;{' '}
-            </>
+                <button
+                  onClick={() => setShowTagInput(true)}
+                  className="h-7 text-xs px-2.5 text-text-tertiary hover:text-text border border-dashed border-border rounded-full hover:border-text-tertiary transition-colors"
+                >
+                  {t('pageView.addTag')}
+                </button>
+              ))}
+            </div>
           )}
-          /{page.slug} &middot; {t('common.views', { count: page.view_count })} &middot; {t('pageView.updated', { date: new Date(page.updated_at).toLocaleString() })}
-          {page.is_public && <> &middot; <span title={t('pageView.publicTitle')}>{t('pageView.publicLabel')}</span></>}
-          {watcherCount > 0 && <> &middot; {t('pageView.watchingCount', { count: watcherCount })}</>}
-        </div>
-        <div className="bg-surface rounded-xl shadow-sm border border-border p-8">
-          {page.page_type === 'mindmap' ? (
+
+          {/* Mobile: inline actions under the title. Desktop uses the right-rail dock. */}
+          <div className="mt-6 lg:hidden no-print">
+            {renderActions('inline')}
+          </div>
+        </header>
+
+        {page.page_type === 'mindmap' ? (
+          <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-4 sm:p-6">
             <MindmapView
               content={page.content_md}
               title={page.title}
               layout={page.mindmap_layout || 'lr'}
             />
-          ) : (
-            <MarkdownViewer content={page.content_md} onHeadings={handleHeadings} />
-          )}
-        </div>
+          </div>
+        ) : (
+          <MarkdownViewer content={page.content_md} onHeadings={handleHeadings} />
+        )}
 
         {/* Backlinks */}
         {backlinks.length > 0 && (
-          <div className="mt-6 p-4 bg-surface rounded-xl shadow-sm border border-border no-print">
-            <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3">
+          <section className="mt-16 pt-8 border-t border-hairline no-print">
+            <h3 className="eyebrow mb-4">
               {t('pageView.linkedFrom', { count: backlinks.length })}
             </h3>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid sm:grid-cols-2 gap-2">
               {backlinks.map((bl) => (
                 <Link
                   key={bl.id}
                   to={`/page/${bl.slug}`}
-                  className="text-sm px-3 py-1.5 bg-surface-hover text-primary rounded-lg hover:bg-primary-soft border border-border"
+                  className="group flex items-center justify-between gap-3 px-4 py-3 bg-surface rounded-xl border border-hairline shadow-xs hover:border-primary/40 hover:shadow-md transition-all duration-200"
                 >
-                  {bl.title}
+                  <span className="text-sm font-medium text-text truncate">{bl.title}</span>
+                  <svg className="w-4 h-4 shrink-0 text-text-tertiary group-hover:text-primary group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <path d="M5 12h14M13 6l6 6-6 6" />
+                  </svg>
                 </Link>
               ))}
             </div>
-          </div>
+          </section>
         )}
 
         {/* Discussion */}
-        <div className="no-print">
+        <div className="no-print mt-16">
           <Comments slug={slug} />
         </div>
       </article>
@@ -579,10 +723,11 @@ export default function PageView() {
       />
 
       {toast && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-surface border border-border text-text text-sm px-4 py-2 rounded-lg shadow-lg z-[110]">
+        <div role="status" className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-text text-bg text-sm font-medium px-4 py-2.5 rounded-xl shadow-xl z-[110] animate-enter flex items-center gap-2">
           {toast}
         </div>
       )}
     </div>
+    </>
   )
 }

@@ -73,6 +73,7 @@
   },
   "home": {
     "title": "所有頁面",
+    "pageCount": "共 {{count}} 頁",
     "browserTitle": "首頁"
   },
   "confirm": {
@@ -439,6 +440,10 @@
     "insertMedia": "插入 {{name}}",
     "insertDiagram": "插入 ::drawio[{{id}}]"
   },
+  "codeBlock": {
+    "copy": "複製程式碼",
+    "copied": "已複製"
+  },
   "toc": {
     "title": "本頁目錄",
     "empty": "尚無標題。",
@@ -482,6 +487,7 @@
     "loading": "載入中…",
     "login": "登入",
     "updated": "更新於 {{date}}",
+    "readingTime": "閱讀約 {{count}} 分鐘",
     "notFoundTitle": "找不到頁面",
     "notFoundBody": "此頁面目前無法存取。"
   },
@@ -536,6 +542,7 @@
     "tagPlaceholder": "標籤名稱",
     "addTag": "+ 標籤",
     "updated": "更新於 {{date}}",
+    "readingTime": "閱讀約 {{count}} 分鐘",
     "publicLabel": "🌐 公開",
     "publicTitle": "此頁面為公開頁面",
     "watchingCount": "{{count}} 人追蹤",

@@ -176,7 +176,7 @@ export default function NewPage() {
 
   const parentHint = parentId ? (
     parentMissing ? (
-      <div className="flex items-center gap-2 text-xs mb-3 px-3 py-2 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800">
+      <div className="flex items-center gap-2 text-xs mb-3 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/25 text-yellow-800 dark:text-yellow-300">
         <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M4.93 19h14.14a2 2 0 001.74-3l-7.07-12a2 2 0 00-3.48 0l-7.07 12a2 2 0 001.74 3z" />
         </svg>
@@ -184,7 +184,7 @@ export default function NewPage() {
         <button
           type="button"
           onClick={() => navigate('/new', { replace: true })}
-          className="ml-auto text-yellow-800 hover:text-yellow-900 underline"
+          className="ml-auto text-yellow-800 dark:text-yellow-300 hover:text-yellow-900 underline"
         >
           {t('newPage.parent.dismiss')}
         </button>
@@ -213,18 +213,19 @@ export default function NewPage() {
 
   if (showTemplates) {
     return (
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-text mb-6">{t('newPage.title')}</h1>
+      <div className="max-w-3xl mx-auto animate-enter">
+        <h1 className="font-display text-[2.6rem] sm:text-[3.6rem] leading-[1.02] tracking-[-0.025em] text-text mb-8">{t('newPage.title')}</h1>
         {parentHint}
 
-        <div className="flex gap-2 mb-4">
+        <div className="inline-flex p-1 mb-6 rounded-xl bg-surface-hover/70 ring-1 ring-inset ring-hairline">
           <button
             type="button"
             onClick={() => setPageType('document')}
-            className={`px-3 py-2 rounded-lg text-sm ${
+            aria-pressed={pageType === 'document'}
+            className={`h-8 px-4 rounded-[9px] text-[13px] font-medium transition-all duration-200 ${
               pageType === 'document'
-                ? 'bg-primary text-primary-text'
-                : 'bg-surface border border-border text-text-secondary hover:border-primary'
+                ? 'bg-surface text-text shadow-sm'
+                : 'text-text-secondary hover:text-text'
             }`}
           >
             {t('newPage.type.document')}
@@ -232,25 +233,29 @@ export default function NewPage() {
           <button
             type="button"
             onClick={() => setPageType('mindmap')}
-            className={`px-3 py-2 rounded-lg text-sm ${
+            aria-pressed={pageType === 'mindmap'}
+            className={`h-8 px-4 rounded-[9px] text-[13px] font-medium transition-all duration-200 ${
               pageType === 'mindmap'
-                ? 'bg-primary text-primary-text'
-                : 'bg-surface border border-border text-text-secondary hover:border-primary'
+                ? 'bg-surface text-text shadow-sm'
+                : 'text-text-secondary hover:text-text'
             }`}
           >
             {t('newPage.type.mindmap')}
           </button>
         </div>
 
-        <p className="text-text-secondary mb-4">
+        <p className="text-text-secondary mb-6">
           {pageType === 'mindmap' ? t('newPage.intro.mindmap') : t('newPage.intro.document')}
         </p>
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="grid sm:grid-cols-2 gap-3 mb-4">
           <button
             onClick={skipTemplates}
-            className="p-4 bg-surface rounded-xl border-2 border-dashed border-border hover:border-primary text-left transition-colors"
+            className="group relative p-5 rounded-2xl border-[1.5px] border-dashed border-border hover:border-primary hover:bg-surface text-left transition-all duration-300 hover:-translate-y-0.5"
           >
-            <div className="font-medium text-text">
+            <span className="mb-4 w-10 h-10 rounded-xl flex items-center justify-center bg-primary text-primary-text shadow-sm transition-transform duration-300 group-hover:rotate-90" style={{ transitionTimingFunction: 'var(--ease-spring)' }}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+            </span>
+            <div className="font-semibold text-text">
               {pageType === 'mindmap' ? t('newPage.starter.mindmap') : t('newPage.starter.blank')}
             </div>
             <div className="text-sm text-text-secondary mt-1">
@@ -261,9 +266,14 @@ export default function NewPage() {
             <button
               key={tmpl.id}
               onClick={() => selectTemplate(tmpl)}
-              className="p-4 bg-surface rounded-xl border border-border hover:border-primary text-left transition-colors"
+              className="group p-5 bg-surface rounded-2xl border border-hairline shadow-xs hover:shadow-lg hover:border-primary/40 text-left transition-all duration-300 hover:-translate-y-0.5"
             >
-              <div className="font-medium text-text">{tmpl.name}</div>
+              <span className="mb-4 w-10 h-10 rounded-xl flex items-center justify-center bg-primary-soft text-sidebar-active-text ring-1 ring-inset ring-primary/15">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                  <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h4" />
+                </svg>
+              </span>
+              <div className="font-semibold text-text">{tmpl.name}</div>
               <div className="text-sm text-text-secondary mt-1">{tmpl.description}</div>
             </button>
           ))}
@@ -273,9 +283,9 @@ export default function NewPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-[52rem] mx-auto animate-enter">
       {parentHint}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between gap-4 mb-2">
         <input
           type="text"
           value={title}
@@ -286,14 +296,14 @@ export default function NewPage() {
               editorRef.current?.focus()
             }
           }}
-          className="text-2xl font-bold text-text bg-transparent border-none outline-none flex-1 mr-4"
+          className="font-display text-[2.4rem] sm:text-[3.2rem] leading-[1.05] tracking-[-0.025em] text-text bg-transparent border-none outline-none flex-1 mr-4 min-w-0 placeholder:text-text-tertiary/70"
           placeholder={t('newPage.titlePlaceholder')}
           autoFocus
         />
         <div className="flex gap-2">
           <button
             onClick={handleCancel}
-            className="px-3 py-1.5 text-sm text-text-secondary rounded-lg hover:bg-surface-hover"
+            className="h-9 px-3.5 text-[13px] font-medium text-text-secondary rounded-[10px] hover:bg-surface-hover hover:text-text transition-colors"
           >
             {t('newPage.cancel')}
           </button>
@@ -301,19 +311,19 @@ export default function NewPage() {
             ref={createBtnRef}
             onClick={handleSave}
             disabled={saving || !title.trim()}
-            className="px-3 py-1.5 text-sm bg-primary text-primary-text rounded-lg hover:bg-primary-hover disabled:opacity-50"
+            className="btn-primary"
           >
             {saving ? t('newPage.creating') : t('newPage.create')}
           </button>
         </div>
       </div>
       {error && (
-        <div className="mb-3 px-3 py-2 bg-red-50 text-red-600 text-sm rounded-lg border border-red-200">
+        <div className="mb-3 px-3 py-2 bg-red-500/10 text-red-600 text-sm rounded-lg border border-red-500/25">
           {error}
         </div>
       )}
       {selectedTemplate && (
-        <div className="flex items-center gap-2 text-xs text-text-secondary mb-3">
+        <div className="flex items-center gap-2 text-xs text-text-tertiary mb-5">
           <span>{t('newPage.templateLabel', { name: selectedTemplate.name })}</span>
           <button
             onClick={changeTemplate}
@@ -324,7 +334,7 @@ export default function NewPage() {
         </div>
       )}
       {!selectedTemplate && (
-        <div className="flex items-center gap-2 text-xs text-text-secondary mb-3">
+        <div className="flex items-center gap-2 text-xs text-text-tertiary mb-5">
           <span>{t('newPage.blankPage')}</span>
           <button
             onClick={changeTemplate}
@@ -334,7 +344,7 @@ export default function NewPage() {
           </button>
         </div>
       )}
-      <div className="bg-surface rounded-xl shadow-sm border border-border min-h-[500px]">
+      <div className="editor-paper bg-surface rounded-2xl shadow-sm border border-hairline min-h-[500px]">
         <Editor
           key={editorKey}
           ref={editorRef}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import usePages from '../../store/usePages'
 import useBookmarks from '../../store/useBookmarks'
@@ -112,9 +112,9 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
   }
 
   const dropIndicatorClass =
-    dropPosition === 'before' ? 'border-t-2 border-blue-400' :
-    dropPosition === 'after' ? 'border-b-2 border-blue-400' :
-    dropPosition === 'inside' ? 'bg-blue-50 ring-1 ring-blue-300' : ''
+    dropPosition === 'before' ? 'shadow-[inset_0_2px_0_var(--color-primary)]' :
+    dropPosition === 'after' ? 'shadow-[inset_0_-2px_0_var(--color-primary)]' :
+    dropPosition === 'inside' ? 'bg-primary-soft ring-1 ring-primary/50' : ''
 
   return (
     <div>
@@ -125,13 +125,13 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
         onDragOver={canAuthor ? handleDragOver : undefined}
         onDragLeave={canAuthor ? handleDragLeave : undefined}
         onDrop={canAuthor ? handleDrop : undefined}
-        className={`flex items-center group rounded-lg transition-colors cursor-grab active:cursor-grabbing ${dropIndicatorClass} ${
+        className={`relative flex items-center group rounded-[9px] transition-colors duration-150 cursor-grab active:cursor-grabbing ${dropIndicatorClass} ${
           isActive
-            ? 'text-text font-medium'
-            : 'text-text-secondary hover:bg-surface-hover'
+            ? 'font-medium'
+            : 'text-text-secondary hover:bg-sidebar-hover hover:text-text'
         }`}
         style={{
-          paddingLeft: `${8 + depth * 16}px`,
+          paddingLeft: `${4 + depth * 14}px`,
           ...(isActive ? { backgroundColor: 'var(--color-sidebar-active)', color: 'var(--color-sidebar-active-text)' } : {}),
         }}
       >
@@ -141,22 +141,31 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
               e.stopPropagation()
               setExpanded(!expanded)
             }}
-            className="w-5 h-5 flex items-center justify-center shrink-0 text-text-secondary hover:text-text"
+            aria-label={node.title}
+            aria-expanded={expanded}
+            className="w-5 h-5 flex items-center justify-center shrink-0 rounded-md text-text-tertiary hover:text-text hover:bg-surface-hover"
           >
             <svg
-              className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
-              fill="currentColor"
-              viewBox="0 0 20 20"
+              className={`w-3 h-3 transition-transform duration-300 ${expanded ? 'rotate-90' : ''}`}
+              style={{ transitionTimingFunction: 'var(--ease-out-expo)' }}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              viewBox="0 0 24 24"
             >
-              <path d="M6 4l8 6-8 6V4z" />
+              <path d="M9 6l6 6-6 6" />
             </svg>
           </button>
         ) : (
-          <span className="w-5 shrink-0" />
+          <span className="w-5 h-5 shrink-0 flex items-center justify-center" aria-hidden="true">
+            <span className={`w-1 h-1 rounded-full ${isActive ? 'bg-current' : 'bg-text-tertiary/60'}`} />
+          </span>
         )}
         <Link
           to={`/page/${node.slug}`}
-          className={`flex-1 py-1.5 pr-2 text-sm truncate ${isActive ? 'font-medium' : ''}`}
+          className="flex-1 py-[5px] pl-1 pr-2 text-[13.5px] leading-6 truncate"
           title={node.title}
           draggable={false}
         >
@@ -176,7 +185,7 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
               aria-expanded={menuOpen}
               aria-label={t('sidebar.pageActionsFor', { title: node.title })}
               title={t('sidebar.pageActions')}
-              className={`w-6 h-6 flex items-center justify-center rounded group-hover:opacity-100 focus:opacity-100 text-text-secondary hover:text-text hover:bg-surface-hover ${menuOpen ? 'opacity-100' : 'opacity-0'}`}
+              className={`w-6 h-6 flex items-center justify-center rounded-md group-hover:opacity-100 focus:opacity-100 text-text-secondary hover:text-text hover:bg-surface-hover transition-opacity ${menuOpen ? 'opacity-100' : 'opacity-0'}`}
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                 <circle cx="4" cy="10" r="1.5" />
@@ -185,7 +194,7 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
               </svg>
             </button>
             {menuOpen && (
-              <div role="menu" className="absolute right-0 top-full mt-1 bg-surface border border-border rounded-xl shadow-lg p-1 z-50 w-40">
+              <div role="menu" className="menu-surface absolute right-0 top-full mt-1 z-50 w-44">
                 <MenuItem onClick={() => { setMenuOpen(false); navigate(`/new?parent=${node.id}`) }}>
                   {t('sidebar.newSubpage')}
                 </MenuItem>
@@ -201,7 +210,12 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
         )}
       </div>
       {hasChildren && expanded && (
-        <div>
+        <div className="relative animate-[enter_0.35s_var(--ease-out-expo)_backwards]">
+          <span
+            aria-hidden="true"
+            className="absolute top-0.5 bottom-0.5 w-px bg-border"
+            style={{ left: `${4 + depth * 14 + 10}px` }}
+          />
           {node.children.map((child, i) => (
             <TreeNode key={child.id} node={child} depth={depth + 1} parentId={node.id} index={i} />
           ))}
@@ -236,9 +250,7 @@ function MenuItem({ onClick, danger = false, children }) {
         e.stopPropagation()
         onClick()
       }}
-      className={`w-full text-left px-3 py-1.5 text-sm rounded-lg hover:bg-surface-hover ${
-        danger ? 'text-red-600' : 'text-text'
-      }`}
+      className={`menu-item ${danger ? 'menu-item-danger' : ''}`}
     >
       {children}
     </button>
@@ -248,6 +260,39 @@ function MenuItem({ onClick, danger = false, children }) {
 function isChildActive(node, pathname) {
   if (pathname === `/page/${node.slug}`) return true
   return node.children?.some((c) => isChildActive(c, pathname)) || false
+}
+
+function NavItem({ to, icon, children }) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        `group flex items-center gap-2.5 px-2.5 h-8 text-[13.5px] rounded-[9px] transition-colors duration-150 ${
+          isActive
+            ? 'bg-sidebar-active text-sidebar-active-text font-medium'
+            : 'text-text-secondary hover:bg-sidebar-hover hover:text-text'
+        }`
+      }
+    >
+      <svg
+        className="w-[17px] h-[17px] shrink-0 opacity-80 group-hover:opacity-100 transition-opacity"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        {icon}
+      </svg>
+      <span className="truncate">{children}</span>
+    </NavLink>
+  )
+}
+
+function SectionLabel({ children }) {
+  return <div className="eyebrow px-2.5 mb-1.5">{children}</div>
 }
 
 export default function Sidebar() {
@@ -262,113 +307,93 @@ export default function Sidebar() {
   }, [aiStatus, checkAiStatus])
 
   return (
-    <aside className="w-60 min-w-60 h-full bg-sidebar dark:bg-sidebar-dark border-r border-border flex flex-col">
-      <div className="flex-1 overflow-y-auto p-3">
+    <aside className="w-[var(--sidebar-width)] min-w-[var(--sidebar-width)] h-full bg-sidebar dark:bg-sidebar-dark border-r border-hairline flex flex-col">
+      <div className="flex-1 overflow-y-auto px-3 pt-4 pb-3">
         {/* Quick links */}
-        <div className="mb-4">
-          <Link
-            to="/activity"
-            className="flex items-center gap-2 px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover rounded-lg"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-            </svg>
+        <nav className="mb-6 space-y-px">
+          <NavItem to="/activity" icon={<path d="M3 12h4l3-8 4 16 3-8h4" />}>
             {t('sidebar.recentChanges')}
-          </Link>
-          <Link
+          </NavItem>
+          <NavItem
             to="/graph"
-            className="flex items-center gap-2 px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover rounded-lg"
+            icon={<><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="8" r="2.5" /><circle cx="10" cy="18" r="2.5" /><path d="M8.2 7.1l7.4.6M7 8.3l2.3 7.3M16.6 10l-4.8 6.2" /></>}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <circle cx="6" cy="6" r="3" />
-              <circle cx="18" cy="18" r="3" />
-              <circle cx="18" cy="6" r="3" />
-              <path d="M8.5 8.5l7 7M8.5 6h7" />
-            </svg>
             {t('sidebar.graphView')}
-          </Link>
+          </NavItem>
           {aiStatus?.enabled && (
-            <Link
+            <NavItem
               to="/chat"
-              className="flex items-center gap-2 px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover rounded-lg"
+              icon={<><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" /><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" /></>}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.84L3 20l1.16-3.68A7.94 7.94 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
               {t('sidebar.aiChat')}
-            </Link>
+            </NavItem>
           )}
           {!user?.anonymous && (
-            <Link
+            <NavItem
               to="/trash"
-              className="flex items-center gap-2 px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover rounded-lg"
+              icon={<><path d="M4 7h16M10 11v6M14 11v6" /><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" /></>}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" />
-              </svg>
               {t('sidebar.trash')}
-            </Link>
+            </NavItem>
           )}
           {user?.role === 'admin' && (
             <>
-              <Link
+              <NavItem
                 to="/dashboard"
-                className="flex items-center gap-2 px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover rounded-lg"
+                icon={<><rect x="3" y="3" width="7" height="9" rx="1.5" /><rect x="14" y="3" width="7" height="5" rx="1.5" /><rect x="14" y="12" width="7" height="9" rx="1.5" /><rect x="3" y="16" width="7" height="5" rx="1.5" /></>}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <rect x="3" y="3" width="7" height="9" rx="1" />
-                  <rect x="14" y="3" width="7" height="5" rx="1" />
-                  <rect x="14" y="12" width="7" height="9" rx="1" />
-                  <rect x="3" y="16" width="7" height="5" rx="1" />
-                </svg>
                 {t('sidebar.dashboard')}
-              </Link>
-              <Link
+              </NavItem>
+              <NavItem
                 to="/admin"
-                className="flex items-center gap-2 px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover rounded-lg"
+                icon={<><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></>}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
                 {t('sidebar.admin')}
-              </Link>
+              </NavItem>
             </>
           )}
-        </div>
+        </nav>
 
         {/* Bookmarks */}
         {bookmarks.length > 0 && (
-          <div className="mb-4">
-            <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2 px-3">
-              {t('sidebar.bookmarks')}
+          <div className="mb-6">
+            <SectionLabel>{t('sidebar.bookmarks')}</SectionLabel>
+            <div className="space-y-px">
+              {bookmarks.map((b) => (
+                <NavLink
+                  key={`bm-${b.id}`}
+                  to={`/page/${b.slug}`}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2.5 px-2.5 h-8 text-[13.5px] rounded-[9px] transition-colors ${
+                      isActive
+                        ? 'bg-sidebar-active text-sidebar-active-text font-medium'
+                        : 'text-text-secondary hover:bg-sidebar-hover hover:text-text'
+                    }`
+                  }
+                  title={b.title}
+                >
+                  <svg className="w-[15px] h-[15px] shrink-0 text-amber-500" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z" />
+                  </svg>
+                  <span className="truncate">{b.title}</span>
+                </NavLink>
+              ))}
             </div>
-            {bookmarks.map((b) => (
-              <Link
-                key={`bm-${b.id}`}
-                to={`/page/${b.slug}`}
-                className="flex items-center gap-1 px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover rounded-lg truncate"
-                title={b.title}
-              >
-                <span className="text-yellow-500 shrink-0">&#9733;</span>
-                {b.title}
-              </Link>
-            ))}
           </div>
         )}
 
         {/* Pages tree */}
-        <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2 px-3">
-          {t('sidebar.pages')}
-        </div>
+        <SectionLabel>{t('sidebar.pages')}</SectionLabel>
         {tree.length === 0 && (
-          <p className="text-sm text-text-secondary px-3">{t('sidebar.noPages')}</p>
+          <p className="text-sm text-text-tertiary px-2.5">{t('sidebar.noPages')}</p>
         )}
-        {tree.map((node, i) => (
-          <TreeNode key={node.id} node={node} parentId={null} index={i} />
-        ))}
+        <div className="space-y-px">
+          {tree.map((node, i) => (
+            <TreeNode key={node.id} node={node} parentId={null} index={i} />
+          ))}
+        </div>
       </div>
-      <div className="shrink-0 border-t border-border px-3 py-2">
+      <div className="shrink-0 border-t border-hairline px-3 py-2.5">
         <AppFooter />
       </div>
     </aside>

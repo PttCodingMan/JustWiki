@@ -73,6 +73,7 @@
   },
   "home": {
     "title": "すべてのページ",
+    "pageCount": "{{count}} ページ",
     "browserTitle": "ホーム"
   },
   "confirm": {
@@ -439,6 +440,10 @@
     "insertMedia": "{{name}} を挿入",
     "insertDiagram": "::drawio[{{id}}] を挿入"
   },
+  "codeBlock": {
+    "copy": "コードをコピー",
+    "copied": "コピーしました"
+  },
   "toc": {
     "title": "このページの目次",
     "empty": "見出しはまだありません。",
@@ -482,6 +487,7 @@
     "loading": "読み込み中…",
     "login": "ログイン",
     "updated": "更新: {{date}}",
+    "readingTime": "{{count}} 分で読めます",
     "notFoundTitle": "ページが見つかりません",
     "notFoundBody": "このページは利用できません。"
   },
@@ -536,6 +542,7 @@
     "tagPlaceholder": "タグ名",
     "addTag": "+ タグ",
     "updated": "更新: {{date}}",
+    "readingTime": "{{count}} 分で読めます",
     "publicLabel": "🌐 公開",
     "publicTitle": "このページは公開されています",
     "watchingCount": "{{count}} 人が購読中",

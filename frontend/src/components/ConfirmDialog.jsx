@@ -40,35 +40,35 @@ export default function ConfirmDialog({
 
   const confirmCls =
     variant === 'danger'
-      ? 'bg-red-600 hover:bg-red-700 text-white'
-      : 'bg-primary hover:bg-primary-hover text-primary-text'
+      ? 'bg-red-600 hover:bg-red-700 text-white shadow-sm'
+      : 'btn-primary'
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-[color-mix(in_oklab,var(--color-text)_25%,transparent)] backdrop-blur-[3px] z-[100] flex items-center justify-center p-4 animate-fade"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCancel?.()
       }}
       role="dialog"
       aria-modal="true"
     >
-      <div className="bg-surface rounded-xl shadow-lg border border-border w-full max-w-sm">
-        <div className="p-5">
-          <h2 className="text-lg font-semibold text-text mb-2">{title}</h2>
+      <div className="bg-surface rounded-2xl shadow-2xl ring-1 ring-hairline w-full max-w-sm overflow-hidden animate-pop">
+        <div className="p-6">
+          <h2 className="text-[17px] font-semibold tracking-tight text-text mb-2">{title}</h2>
           {description && (
             <div className="text-sm text-text-secondary">{description}</div>
           )}
         </div>
-        <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
+        <div className="flex justify-end gap-2 px-6 py-4 bg-bg/60 border-t border-hairline">
           <button
             onClick={onCancel}
-            className="px-4 py-1.5 rounded-lg text-sm text-text border border-border hover:bg-surface-hover"
+            className="h-9 px-4 rounded-[10px] text-[13px] font-medium text-text bg-surface border border-border shadow-xs hover:bg-surface-hover transition-colors"
           >
             {finalCancelLabel}
           </button>
           <button
             onClick={onConfirm}
-            className={`px-4 py-1.5 rounded-lg text-sm ${confirmCls}`}
+            className={`h-9 px-4 rounded-[10px] text-[13px] font-medium transition-colors ${confirmCls}`}
           >
             {finalConfirmLabel}
           </button>
