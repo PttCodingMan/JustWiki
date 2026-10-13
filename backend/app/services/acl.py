@@ -214,31 +214,6 @@ async def list_readable_page_ids(db, user: dict) -> set[int]:
     return result
 
 
-async def require_page_read(db, user: dict, page_id: int) -> str:
-    """Raise 404 if `user` cannot read `page_id`, else return the permission.
-
-    Collapsing denied and not-found into the same 404 keeps the app's
-    standard policy: a user with no read access must not be able to prove
-    a page exists. Shared helper so routers don't reinvent the same 5 lines.
-    """
-    perm = await resolve_page_permission(db, user, page_id)
-    if perm == "none":
-        raise HTTPException(status_code=404, detail="Page not found")
-    return perm
-
-
-async def require_page_write(db, user: dict, page_id: int) -> str:
-    """Raise 403/404 if the user cannot write to this page."""
-    perm = await resolve_page_permission(db, user, page_id)
-    if perm == "none":
-        raise HTTPException(status_code=404, detail="Page not found")
-    if perm == "read":
-        raise HTTPException(
-            status_code=403, detail="You do not have write permission on this page"
-        )
-    return perm
-
-
 PermLevel = Literal["read", "write", "manage"]
 
 
@@ -289,17 +264,13 @@ def page_dep(level: PermLevel):
     # are needed until a request actually fires the dependency, so the cost
     # of this lookup happens once per process.
     from app.auth import get_current_user
-    from app.database import get_db
+    from app.database import fetch_one_or_404, get_db
 
     async def _dep(slug: str, user=Depends(get_current_user)) -> PageAccess:
         db = await get_db()
-        rows = await db.execute_fetchall(
-            "SELECT * FROM pages WHERE slug = ? AND deleted_at IS NULL",
-            (slug,),
-        )
-        if not rows:
-            raise HTTPException(status_code=404, detail="Page not found")
-        page = dict(rows[0])
+        page = dict(await fetch_one_or_404(
+            db, "SELECT * FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,), "Page not found"
+        ))
 
         perm = await resolve_page_permission(db, user, page["id"])
         if perm == "none":

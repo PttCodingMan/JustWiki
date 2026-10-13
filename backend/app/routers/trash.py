@@ -7,7 +7,7 @@ can purge them forever.
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import get_current_user, require_admin
-from app.database import get_db, write_transaction
+from app.database import fetch_one_or_404, get_db, write_transaction
 from app.routers.activity import log_activity
 from app.services.acl import invalidate_readable_cache, resolve_page_permission
 from app.services.search import rebuild_search_index
@@ -48,17 +48,17 @@ async def restore_page(slug: str, user=Depends(get_current_user)):
     if user.get("role") == "viewer":
         raise HTTPException(status_code=403, detail="Viewers cannot restore pages")
     db = await get_db()
-    rows = await db.execute_fetchall(
+    row = await fetch_one_or_404(
+        db,
         """SELECT id, slug, title, content_md, parent_id, sort_order, page_type,
                   version, view_count, is_public, created_by, deleted_at,
                   created_at, updated_at
            FROM pages WHERE slug = ? AND deleted_at IS NOT NULL""",
         (slug,),
+        "Page not found in trash",
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found in trash")
 
-    page = dict(rows[0])
+    page = dict(row)
     if user["role"] != "admin" and page["created_by"] != user["id"]:
         raise HTTPException(
             status_code=403,
@@ -120,15 +120,13 @@ async def restore_page(slug: str, user=Depends(get_current_user)):
 async def purge_page(slug: str, user=Depends(require_admin)):
     """Permanently delete a trashed page. Admin only."""
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id, title FROM pages WHERE slug = ? AND deleted_at IS NOT NULL",
-        (slug,),
+    row = await fetch_one_or_404(
+        db, "SELECT id, title FROM pages WHERE slug = ? AND deleted_at IS NOT NULL",
+        (slug,), "Page not found in trash"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found in trash")
 
-    page_id = rows[0]["id"]
-    page_title = rows[0]["title"]
+    page_id = row["id"]
+    page_title = row["title"]
 
     # Explicitly remove from search index (in case it was re-added)
     from app.services.search import remove_from_search_index

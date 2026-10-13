@@ -8,12 +8,12 @@ from typing import Optional
 
 from app.auth import (
     check_password_policy,
-    get_current_user,
     hash_password_async,
     require_admin,
     require_real_user,
 )
-from app.database import get_db, write_transaction
+from app.database import fetch_one_or_404, get_db, write_transaction
+from app.services.accounts import DISABLED_PASSWORD_HASH, derive_username, pick_unique_username
 from app.services.acl import build_id_clause, list_readable_page_ids, resolve_page_permission
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -23,22 +23,11 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 # references (pages.created_by, page_versions.edited_by, comments.user_id, ...).
 TOMBSTONE_PREFIX = "__deleted_"
 
-# Invited-but-not-yet-logged-in users have this sentinel hash so bcrypt can't
-# match any password. Same convention used by SSO-only accounts.
-DISABLED_PASSWORD_HASH = "!"
-
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-_USERNAME_CLEAN = re.compile(r"[^a-zA-Z0-9._-]")
 
 
 def _is_reserved(name: str) -> bool:
     return name.startswith(TOMBSTONE_PREFIX)
-
-
-def _derive_username_from_email(email: str) -> str:
-    local = email.split("@", 1)[0]
-    cleaned = _USERNAME_CLEAN.sub("-", local).strip("-")
-    return cleaned or "user"
 
 
 class UserCreate(BaseModel):
@@ -165,15 +154,15 @@ async def user_profile(username: str, user=Depends(require_real_user)):
     been soft-deleted are dropped via the ``pages`` join.
     """
     db = await get_db()
-    rows = await db.execute_fetchall(
+    row = await fetch_one_or_404(
+        db,
         """SELECT id, username, display_name, role, bio, created_at
            FROM users
            WHERE username = ? AND deleted_at IS NULL""",
         (username,),
+        "User not found",
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="User not found")
-    profiled = dict(rows[0])
+    profiled = dict(row)
 
     readable = await list_readable_page_ids(db, user)
     if not readable:
@@ -339,7 +328,7 @@ async def invite_user(body: UserInvite, user=Depends(require_admin)):
     if body.role not in ALLOWED_ROLES:
         raise HTTPException(status_code=400, detail="Role must be admin, editor, or viewer")
 
-    candidate = (body.username or "").strip() or _derive_username_from_email(email)
+    candidate = (body.username or "").strip() or derive_username(email)
     if _is_reserved(candidate):
         raise HTTPException(status_code=400, detail="Username prefix is reserved")
 
@@ -363,15 +352,8 @@ async def invite_user(body: UserInvite, user=Depends(require_admin)):
         if clash:
             raise HTTPException(status_code=409, detail="Username already exists")
     else:
-        for suffix in [""] + [f"-{i}" for i in range(2, 100)]:
-            cand = f"{candidate}{suffix}"
-            clash = await db.execute_fetchall(
-                "SELECT id FROM users WHERE username = ?", (cand,)
-            )
-            if not clash:
-                username = cand
-                break
-        else:
+        username = await pick_unique_username(db, candidate)
+        if username is None:
             raise HTTPException(status_code=500, detail="Could not find an available username")
 
     display_name = (body.display_name or "").strip()
@@ -392,12 +374,10 @@ async def invite_user(body: UserInvite, user=Depends(require_admin)):
 @router.put("/{user_id}")
 async def update_user(user_id: int, body: UserUpdate, user=Depends(require_admin)):
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id, username, role FROM users WHERE id = ? AND deleted_at IS NULL",
-        (user_id,),
+    await fetch_one_or_404(
+        db, "SELECT id, username, role FROM users WHERE id = ? AND deleted_at IS NULL",
+        (user_id,), "User not found"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="User not found")
 
     updates = []
     values = []
@@ -464,12 +444,10 @@ async def delete_user(user_id: int, user=Depends(require_admin)):
     if user_id == user["id"]:
         raise HTTPException(status_code=400, detail="Cannot delete yourself")
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id FROM users WHERE id = ? AND deleted_at IS NULL",
-        (user_id,),
+    await fetch_one_or_404(
+        db, "SELECT id FROM users WHERE id = ? AND deleted_at IS NULL",
+        (user_id,), "User not found"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="User not found")
     # No "last admin" guard here: `require_admin` means the caller is an
     # admin, the self-check above ensures they differ from the target, so at
     # least two admins exist whenever this point is reached.
@@ -497,14 +475,12 @@ async def delete_user(user_id: int, user=Depends(require_admin)):
 @router.post("/{user_id}/restore")
 async def restore_user(user_id: int, body: UserRestore, user=Depends(require_admin)):
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id, original_username FROM users WHERE id = ? AND deleted_at IS NOT NULL",
-        (user_id,),
+    row = await fetch_one_or_404(
+        db, "SELECT id, original_username FROM users WHERE id = ? AND deleted_at IS NOT NULL",
+        (user_id,), "Deleted user not found"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Deleted user not found")
 
-    target = (body.username or rows[0]["original_username"] or "").strip()
+    target = (body.username or row["original_username"] or "").strip()
     if not target:
         raise HTTPException(status_code=400, detail="Username required for restore")
     if _is_reserved(target):

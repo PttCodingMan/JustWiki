@@ -18,7 +18,6 @@ All three run after the gates, which are evaluated by
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -27,6 +26,7 @@ from fastapi import Request
 
 from app.config import settings
 from app.database import get_db, write_transaction
+from app.services.accounts import create_sso_user, derive_username, link_identity, pick_unique_username
 
 logger = logging.getLogger(__name__)
 
@@ -147,12 +147,6 @@ def get_oauth() -> OAuth:
     return oauth
 
 
-def reset_oauth_registry() -> None:
-    """Clear the cached registry (used by tests that mutate settings)."""
-    global _oauth
-    _oauth = None
-
-
 # ── Userinfo fetchers ─────────────────────────────────────────────────────
 
 
@@ -234,33 +228,6 @@ def check_access_gates(info: UserInfo) -> None:
 # ── Provisioning ──────────────────────────────────────────────────────────
 
 
-_USERNAME_RE = re.compile(r"[^a-zA-Z0-9._-]")
-
-
-def _derive_username(email: str) -> str:
-    local = email.split("@", 1)[0]
-    cleaned = _USERNAME_RE.sub("-", local).strip("-")
-    return cleaned or "user"
-
-
-async def _username_available(db, candidate: str) -> bool:
-    rows = await db.execute_fetchall(
-        "SELECT 1 FROM users WHERE username = ? LIMIT 1", (candidate,)
-    )
-    return not rows
-
-
-async def _pick_unique_username(db, email: str) -> str:
-    base = _derive_username(email)
-    if await _username_available(db, base):
-        return base
-    for i in range(2, 100):
-        cand = f"{base}-{i}"
-        if await _username_available(db, cand):
-            return cand
-    raise OAuthAccessError("username_collision", "Could not generate a unique username.")
-
-
 async def _load_user_by_id(db, user_id: int) -> dict:
     rows = await db.execute_fetchall(
         "SELECT id, username, role, display_name, email FROM users "
@@ -313,11 +280,7 @@ async def authenticate_and_provision(info: UserInfo) -> dict:
         if rows:
             user_id = rows[0]["id"]
             async with write_transaction(db):
-                await db.execute(
-                    """INSERT INTO auth_identities (user_id, provider, subject, email, last_login_at)
-                       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)""",
-                    (user_id, info.provider, info.subject, info.email),
-                )
+                await link_identity(db, user_id, info.provider, info.subject, info.email)
             user = await _load_user_by_id(db, user_id)
             logger.info("Linked SSO identity %s:%s to user_id=%d", info.provider, info.subject, user_id)
             return user
@@ -329,19 +292,13 @@ async def authenticate_and_provision(info: UserInfo) -> dict:
             "This wiki is invitation-only. Ask an admin to add your email.",
         )
 
-    username = await _pick_unique_username(db, info.email)
-    role = settings.OIDC_DEFAULT_ROLE
+    username = await pick_unique_username(db, derive_username(info.email))
+    if username is None:
+        raise OAuthAccessError("username_collision", "Could not generate a unique username.")
     async with write_transaction(db):
-        cursor = await db.execute(
-            """INSERT INTO users (username, password_hash, role, display_name, email)
-               VALUES (?, '!', ?, ?, ?)""",
-            (username, role, info.display_name, info.email),
-        )
-        user_id = cursor.lastrowid
-        await db.execute(
-            """INSERT INTO auth_identities (user_id, provider, subject, email, last_login_at)
-               VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)""",
-            (user_id, info.provider, info.subject, info.email),
+        user_id = await create_sso_user(
+            db, username, settings.OIDC_DEFAULT_ROLE, info.display_name, info.email,
+            info.provider, info.subject,
         )
     logger.info("Provisioned new SSO user %s (id=%d) via %s", username, user_id, info.provider)
     return await _load_user_by_id(db, user_id)

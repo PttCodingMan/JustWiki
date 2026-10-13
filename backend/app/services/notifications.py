@@ -8,7 +8,6 @@ import ipaddress
 import json
 import logging
 import socket
-from typing import Any
 from urllib.parse import urlsplit
 
 import httpx

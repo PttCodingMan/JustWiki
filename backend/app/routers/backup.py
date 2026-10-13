@@ -1,5 +1,4 @@
 import io
-import os
 import shutil
 import sqlite3
 import zipfile

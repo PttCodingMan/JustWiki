@@ -127,19 +127,6 @@
     "failedSave": "ACL の保存に失敗しました",
     "failedClear": "ACL のクリアに失敗しました"
   },
-  "changePassword": {
-    "title": "パスワード変更",
-    "current": "現在のパスワード",
-    "new": "新しいパスワード",
-    "confirm": "新しいパスワード（確認）",
-    "tooShort": "新しいパスワードは {{min}} 文字以上で入力してください",
-    "mismatch": "新しいパスワードが一致しません",
-    "failed": "パスワード変更に失敗しました",
-    "success": "パスワードを変更しました！",
-    "cancel": "キャンセル",
-    "saving": "保存中…",
-    "submit": "パスワードを変更"
-  },
   "mindmap": {
     "themeLabel": "マインドマップのテーマ",
     "layout": {

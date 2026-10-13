@@ -8,13 +8,13 @@ import urllib.parse
 import zipfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse, HTMLResponse
 
-from app.auth import get_current_user, require_admin
+from app.auth import require_admin
 from app.config import settings
 from app.database import get_db
-from app.services.acl import resolve_page_permission
+from app.services.acl import PageAccess, page_dep
 
 
 def _sanitize_url(url: str) -> str:
@@ -241,21 +241,8 @@ def md_to_simple_html(text):
 
 
 @router.get("/page/{slug}")
-async def export_page(
-    slug: str,
-    user=Depends(get_current_user),
-):
-    db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id, slug, title, content_md FROM pages WHERE slug = ? AND deleted_at IS NULL",
-        (slug,),
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-
-    page = dict(rows[0])
-    if await resolve_page_permission(db, user, page["id"]) == "none":
-        raise HTTPException(status_code=404, detail="Page not found")
+async def export_page(slug: str, ctx: PageAccess = Depends(page_dep("read"))):
+    page = ctx.page
     # Render + inline media in a thread: _inline_media_srcs reads files
     # synchronously and md_to_simple_html does CPU work. Pages with many
     # embedded images would otherwise stall the event loop.

@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from typing import Optional
 
 from app.auth import require_real_user
-from app.database import get_db, write_transaction
+from app.database import fetch_one_or_404, get_db, write_transaction
 from app.services.acl import PageAccess, page_dep
 from app.services.mention import notify_mentions
 from app.routers.activity import log_activity
@@ -115,17 +114,16 @@ async def update_comment(
     user = ctx.user
     page_id = ctx.page["id"]
     # Verify the comment exists AND belongs to the page in the URL.
-    rows = await db.execute_fetchall(
-        "SELECT id, user_id, page_id, content FROM comments WHERE id = ?", (comment_id,)
+    row = await fetch_one_or_404(
+        db, "SELECT id, user_id, page_id, content FROM comments WHERE id = ?", (comment_id,),
+        "Comment not found"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Comment not found")
-    if rows[0]["page_id"] != page_id:
+    if row["page_id"] != page_id:
         raise HTTPException(status_code=404, detail="Comment not found on this page")
-    if rows[0]["user_id"] != user["id"] and user["role"] != "admin":
+    if row["user_id"] != user["id"] and user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Not allowed")
 
-    old_content = rows[0]["content"]
+    old_content = row["content"]
     new_content = body.content.strip()
     async with write_transaction(db):
         await db.execute(
@@ -164,14 +162,13 @@ async def delete_comment(
     user = ctx.user
     page_id = ctx.page["id"]
     # Verify the comment exists AND belongs to the page in the URL.
-    rows = await db.execute_fetchall(
-        "SELECT id, user_id, page_id FROM comments WHERE id = ?", (comment_id,)
+    row = await fetch_one_or_404(
+        db, "SELECT id, user_id, page_id FROM comments WHERE id = ?", (comment_id,),
+        "Comment not found"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Comment not found")
-    if rows[0]["page_id"] != page_id:
+    if row["page_id"] != page_id:
         raise HTTPException(status_code=404, detail="Comment not found on this page")
-    if rows[0]["user_id"] != user["id"] and user["role"] != "admin":
+    if row["user_id"] != user["id"] and user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Not allowed")
 
     async with write_transaction(db):

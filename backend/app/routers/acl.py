@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.auth import get_current_user
-from app.database import get_db, write_transaction
+from app.database import fetch_one_or_404, get_db, write_transaction
 from app.routers.activity import log_activity
 from app.services.acl import invalidate_readable_cache, resolve_page_permission
 
@@ -60,13 +60,11 @@ class AclResponse(BaseModel):
 
 
 async def _get_page_row(db, slug: str) -> dict:
-    rows = await db.execute_fetchall(
-        "SELECT id, slug, title, parent_id FROM pages WHERE slug = ? AND deleted_at IS NULL",
-        (slug,),
+    row = await fetch_one_or_404(
+        db, "SELECT id, slug, title, parent_id FROM pages WHERE slug = ? AND deleted_at IS NULL",
+        (slug,), "Page not found"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-    return dict(rows[0])
+    return dict(row)
 
 
 async def _principal_labels(

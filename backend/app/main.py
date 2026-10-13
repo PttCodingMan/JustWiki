@@ -11,7 +11,6 @@ from app.config import settings
 from app.database import (
     boot_db_context,
     close_db,
-    get_db,
     init_db,
     request_db_context,
     seed_welcome_page,

@@ -44,9 +44,9 @@ cd frontend && npm test -- src/path/to/file.test.jsx
   - **CSRF**: origin/referer check in `main.py` for mutating cookie-auth requests; Bearer-token and login/logout paths are exempt
 - **Config**: `config.py` — Pydantic Settings reading from `.env`
 - **Schemas**: `schemas.py` — shared Pydantic request/response models
-- **Database**: `database.py` — schema DDL and FTS5 search index setup; startup-time migrations live in `migrations.py` and record applied versions in the `schema_migrations` ledger so each migration runs once per DB
+- **Database**: `database.py` — schema DDL and FTS5 search index setup; first-launch welcome pages and default templates are markdown files in `app/seed/`; startup-time migrations live in `migrations.py` and record applied versions in the `schema_migrations` ledger so each migration runs once per DB
 - **Routers**: One file per domain — `pages.py`, `search.py`, `media.py`, `versions.py`, `tags.py`, `templates.py`, `users.py`, `diagrams.py`, `comments.py`, `bookmarks.py`, `activity.py`, `backup.py`, `export.py`, `auth_router.py`, `oauth_router.py`, `tokens.py`, `trash.py`, `notifications.py`, `watch.py`, `public.py`, `dashboard.py`, `acl.py`, `groups.py`, `ai.py`
-- **Services**: `search.py` (FTS5 indexing, CJK segmentation), `wikilink.py` (backlink tracking), `acl.py` (permission resolution — single source of truth, routers must use these helpers), `media_ref.py` (tracks which pages reference each media file), `diagram_ref.py`, `notifications.py` (fan-out to watchers on page events), `oidc.py` (OIDC client + provider config), `ldap_auth.py` (LDAP bind + attribute mapping)
+- **Services**: `search.py` (FTS5 indexing, CJK segmentation), `wikilink.py` (backlink tracking), `acl.py` (permission resolution — single source of truth, routers must use these helpers), `media_ref.py` (tracks which pages reference each media file), `diagram_ref.py`, `notifications.py` (fan-out to watchers on page events), `oidc.py` (OIDC client + provider config), `ldap_auth.py` (LDAP bind + attribute mapping), `accounts.py` (username derivation + SSO/LDAP user provisioning shared with invites)
 - **Deps**: Python 3.11+, managed with `uv`
 
 ### Frontend (`frontend/src/`)

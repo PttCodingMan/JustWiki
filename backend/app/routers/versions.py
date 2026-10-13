@@ -1,7 +1,6 @@
 import difflib
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
-from app.auth import get_current_user
 from app.database import get_db, write_transaction
 from app.services.acl import PageAccess, page_dep
 from app.services.search import rebuild_search_index

@@ -48,17 +48,3 @@ async def parse_and_update_backlinks(db, source_page_id: int, content_md: str):
                 (source_page_id, target_id),
             )
 
-
-async def resolve_transclusion(db, slug: str) -> str | None:
-    """Resolve a transclusion by fetching the target page content.
-
-    Callers expand nested transclusions on the frontend, so there is no
-    server-side recursion to guard here.
-    """
-    rows = await db.execute_fetchall(
-        "SELECT content_md FROM pages WHERE slug = ? AND deleted_at IS NULL",
-        (slug,),
-    )
-    if not rows:
-        return None
-    return rows[0]["content_md"]

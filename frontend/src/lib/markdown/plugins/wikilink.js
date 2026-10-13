@@ -1,13 +1,9 @@
 /**
- * Wikilink remark plugin — single source of truth for `[[slug]]`,
- * `[[slug|display]]`, and `![[slug]]` (transclusion) parsing.
+ * Wikilink remark plugin — parses `[[slug]]`,
+ * `[[slug|display]]`, and `![[slug]]` (transclusion).
  *
- * Used both by the Milkdown editor (wrapped via `$remark` so it
- * participates in the editor's parse/serialize pipeline) and by the
- * v2 viewer renderer (used directly as a unified processor plugin).
- * Extracting the bare regex + plugin keeps the two paths from
- * diverging on edge cases the way the previous hand-rolled regex
- * parser did before the markdown-it migration.
+ * Used by the Milkdown editor (wrapped via `$remark` so it participates
+ * in the editor's parse/serialize pipeline).
  *
  * mdast node shape produced:
  *   { type: 'wikilink', slug, display, transclusion, data: { hName: 'span' } }
