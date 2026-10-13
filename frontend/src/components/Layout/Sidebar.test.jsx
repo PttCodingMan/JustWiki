@@ -1,7 +1,7 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import usePages from '../../store/usePages'
 import useBookmarks from '../../store/useBookmarks'
@@ -18,12 +18,16 @@ vi.mock('../../store/useAuth', () => ({
   default: vi.fn(),
 }))
 
+// The components read stores through selectors (`useX((s) => s.field)`),
+// so the mocks must apply the selector to the fake state.
+const mockStore = (hook, state) => hook.mockImplementation((sel) => (sel ? sel(state) : state))
+
 describe('Sidebar Component', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     
     // Default mock implementation
-    usePages.mockReturnValue({
+    mockStore(usePages, {
       tree: [
         { id: 1, title: 'Root Page', slug: 'root', children: [] },
         { id: 2, title: 'Parent Page', slug: 'parent', children: [
@@ -35,13 +39,13 @@ describe('Sidebar Component', () => {
       fetchTree: vi.fn(),
     })
     
-    useBookmarks.mockReturnValue({
+    mockStore(useBookmarks, {
       bookmarks: [
         { id: 1, title: 'Bookmarked Page', slug: 'bookmarked' }
       ],
     })
     
-    useAuth.mockReturnValue({
+    mockStore(useAuth, {
       user: { role: 'admin' },
     })
   })
@@ -59,7 +63,7 @@ describe('Sidebar Component', () => {
   })
 
   it('does not render admin link for non-admin user', () => {
-    useAuth.mockReturnValue({
+    mockStore(useAuth, {
       user: { role: 'editor' },
     })
     
@@ -113,7 +117,7 @@ describe('Sidebar Component', () => {
   })
 
   it('hides page action menus for viewers', () => {
-    useAuth.mockReturnValue({ user: { role: 'viewer' } })
+    mockStore(useAuth, { user: { role: 'viewer' } })
 
     render(
       <MemoryRouter>
@@ -127,7 +131,7 @@ describe('Sidebar Component', () => {
   })
 
   it('shows a page action menu with new/edit/delete for editors', () => {
-    useAuth.mockReturnValue({ user: { role: 'editor' } })
+    mockStore(useAuth, { user: { role: 'editor' } })
 
     render(
       <MemoryRouter>
@@ -142,5 +146,84 @@ describe('Sidebar Component', () => {
     expect(screen.getByRole('menuitem', { name: 'New subpage' })).toBeDefined()
     expect(screen.getByRole('menuitem', { name: 'Edit' })).toBeDefined()
     expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeDefined()
+  })
+
+  it('expands the ancestors of a deeply nested active page', () => {
+    mockStore(usePages, {
+      tree: [
+        { id: 10, title: 'Top', slug: 'top', children: [
+          { id: 11, title: 'Middle', slug: 'middle', children: [
+            { id: 12, title: 'Deep', slug: 'deep', children: [] },
+          ] },
+        ] },
+        { id: 20, title: 'Other', slug: 'other', children: [
+          { id: 21, title: 'Other Child', slug: 'other-child', children: [
+            { id: 22, title: 'Hidden Grandchild', slug: 'hidden', children: [] },
+          ] },
+        ] },
+      ],
+      movePage: vi.fn(),
+      deletePage: vi.fn(),
+      fetchTree: vi.fn(),
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/page/deep']}>
+        <Sidebar />
+      </MemoryRouter>
+    )
+
+    // Middle (depth 1) is only expanded because it's on the active path.
+    expect(screen.getByText('Deep')).toBeDefined()
+    // Off-path depth-1 rows stay collapsed.
+    expect(screen.getByText('Other Child')).toBeDefined()
+    expect(screen.queryByText('Hidden Grandchild')).toBeNull()
+  })
+
+  it('closes the page action menu on an outside click', () => {
+    mockStore(useAuth, { user: { role: 'editor' } })
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>
+    )
+    fireEvent.click(screen.getAllByRole('button', { name: /Page actions for/i })[0])
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeDefined()
+    fireEvent.mouseDown(document.body)
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull()
+  })
+
+  it('opens the delete confirmation from the page action menu', () => {
+    mockStore(useAuth, { user: { role: 'editor' } })
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>
+    )
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(screen.getAllByRole('button', { name: /Page actions for/i })[0])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }))
+    expect(screen.getByText('"Root Page"')).toBeDefined()
+  })
+
+  it('navigates on a plain click of a tree link, but leaves modified clicks to the browser', () => {
+    const LocationProbe = () => <div data-testid="loc">{useLocation().pathname}</div>
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar />
+        <LocationProbe />
+      </MemoryRouter>
+    )
+    const link = screen.getByText('Child Page').closest('a')
+    expect(link.getAttribute('href')).toBe('/page/child')
+
+    // Ctrl/Cmd-click: not intercepted (browser opens a new tab).
+    const ctrlClick = new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true })
+    link.dispatchEvent(ctrlClick)
+    expect(ctrlClick.defaultPrevented).toBe(false)
+    expect(screen.getByTestId('loc').textContent).toBe('/')
+
+    fireEvent.click(link)
+    expect(screen.getByTestId('loc').textContent).toBe('/page/child')
   })
 })

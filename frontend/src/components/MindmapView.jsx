@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { renderMindmap, MindmapParseError } from '../lib/mindmap'
 import { layoutMindmap, LAYOUT } from '../lib/mindmapLayout'
@@ -116,7 +116,7 @@ function ThemeDropdown({ value, onChange }) {
   )
 }
 
-export default function MindmapView({ content, title, layout: layoutStrategy }) {
+function MindmapView({ content, title, layout: layoutStrategy }) {
   const mindmapTheme = useMindmapTheme((s) => s.theme)
   const setMindmapTheme = useMindmapTheme((s) => s.setTheme)
   const [zoomed, setZoomed] = useState(null)
@@ -269,3 +269,8 @@ export default function MindmapView({ content, title, layout: layoutStrategy }) 
     </div>
   )
 }
+
+// Memoized: PageEdit re-renders on unrelated state (saving flag, dirty
+// tracking, dialogs), and redrawing a few hundred SVG nodes each time is
+// wasted work when content/title/layout haven't changed.
+export default memo(MindmapView)

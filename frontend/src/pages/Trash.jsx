@@ -12,7 +12,7 @@ export default function Trash() {
   const [error, setError] = useState('')
   const [busySlug, setBusySlug] = useState(null)
   const { user } = useAuth()
-  const { fetchTree } = usePages()
+  const fetchTree = usePages((s) => s.fetchTree)
   const navigate = useNavigate()
 
   const load = useCallback(async () => {

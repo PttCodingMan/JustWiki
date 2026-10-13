@@ -26,7 +26,9 @@ export default function NewPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { createPage, fetchTree, tree } = usePages()
+  const createPage = usePages((s) => s.createPage)
+  const fetchTree = usePages((s) => s.fetchTree)
+  const tree = usePages((s) => s.tree)
   const { user } = useAuth()
 
   useEffect(() => {
@@ -152,7 +154,9 @@ export default function NewPage() {
         parent_id: parentMissing ? null : parentId,
         page_type: pageType,
       })
-      await fetchTree()
+      // Refresh the sidebar in the background; the new row shows up (and its
+      // ancestors expand) as soon as the tree arrives.
+      fetchTree().catch(() => {})
       setSaved(true)
       navigate(`/page/${page.slug}`)
     } catch (err) {

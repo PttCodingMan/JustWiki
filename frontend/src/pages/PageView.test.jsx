@@ -29,7 +29,7 @@ const bookmarksStore = {
 }
 const authStore = { user: { id: 1, role: 'admin' } }
 
-vi.mock('../store/usePages', () => ({ default: () => pagesStore }))
+vi.mock('../store/usePages', () => ({ default: (sel) => (sel ? sel(pagesStore) : pagesStore) }))
 vi.mock('../store/useTags', () => ({ default: () => tagsStore }))
 vi.mock('../store/useBookmarks', () => ({ default: () => bookmarksStore }))
 vi.mock('../store/useAuth', () => ({ default: () => authStore }))

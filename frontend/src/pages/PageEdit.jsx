@@ -24,7 +24,9 @@ export default function PageEdit() {
   const { t } = useTranslation()
   const { slug } = useParams()
   const navigate = useNavigate()
-  const { getPage, updatePage, fetchTree } = usePages()
+  const getPage = usePages((s) => s.getPage)
+  const updatePage = usePages((s) => s.updatePage)
+  const fetchTree = usePages((s) => s.fetchTree)
   const { user } = useAuth()
   const [page, setPage] = useState(null)
   const [title, setTitle] = useState('')
@@ -204,7 +206,9 @@ export default function PageEdit() {
       }
       const updated = await updatePage(slug, payload)
       baseVersionRef.current = updated.version
-      await fetchTree()
+      // Refresh the sidebar in the background instead of making the user wait
+      // an extra round trip before seeing the saved page.
+      fetchTree().catch(() => {})
       setOriginal({ title, content: cleanContent, mindmapLayout })
       setSaving(false)
       navigate(`/page/${slug}`)
