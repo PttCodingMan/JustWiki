@@ -6,13 +6,7 @@ import useGroups from '../store/useGroups'
 import useSettings from '../store/useSettings'
 import api from '../api/client'
 import Editor from '../components/Editor/Editor'
-
-function formatBytes(bytes) {
-  if (!bytes && bytes !== 0) return '-'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
+import { formatBytes } from '../lib/format'
 
 function SiteSettingsSection() {
   const { t } = useTranslation()

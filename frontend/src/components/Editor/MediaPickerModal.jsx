@@ -1,13 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../../api/client'
-
-function formatBytes(bytes) {
-  if (!bytes && bytes !== 0) return '-'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
+import { formatBytes } from '../../lib/format'
 
 export default function MediaPickerModal({ open, onClose, onInsert }) {
   const { t } = useTranslation()

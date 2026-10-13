@@ -32,10 +32,7 @@ function renderKatex(tex, displayMode) {
   try {
     return katex.renderToString(tex, { displayMode, throwOnError: false })
   } catch {
-    const escaped = tex.replace(/[&<>"]/g, (c) => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;',
-    }[c]))
-    return `<code class="katex-error">${escaped}</code>`
+    return `<code class="katex-error">${escapeHtml(tex)}</code>`
   }
 }
 
@@ -488,8 +485,8 @@ export function renderMarkdown(source) {
 // and `/` (URL paths) to stay in lockstep with the inline rule above.
 const _MENTION_SCAN_RE = /(^|[^A-Za-z0-9_@/])(@@?)([A-Za-z0-9][A-Za-z0-9_-]*)/g
 
-function _escapeHtml(text) {
-  return text.replace(/[&<>"']/g, (c) => ({
+export function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (c) => ({
     '&': '&amp;',
     '<': '&lt;',
     '>': '&gt;',
@@ -500,7 +497,7 @@ function _escapeHtml(text) {
 
 export function renderMentionsOnly(text) {
   if (!text) return ''
-  const escaped = _escapeHtml(text)
+  const escaped = escapeHtml(text)
   // The escaped text has no `<` or `>` of its own, so the scan is unambiguous.
   const withMentions = escaped.replace(_MENTION_SCAN_RE, (_full, lead, sigil, name) => {
     if (sigil === '@@') {

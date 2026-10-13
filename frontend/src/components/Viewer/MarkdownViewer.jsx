@@ -3,17 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import DOMPurify from 'dompurify'
 import 'katex/dist/katex.min.css'
-import { renderMarkdown } from '../../lib/markdown'
+import { escapeHtml, renderMarkdown } from '../../lib/markdown'
 import { ensureMermaid } from '../../lib/mermaidBootstrap'
 import api from '../../api/client'
-
-function escapeHtml(text) {
-  return String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
 
 // Single DOMPurify config shared between the top-level sanitize and the
 // transclusion sanitize. Previously the transclusion path used the default

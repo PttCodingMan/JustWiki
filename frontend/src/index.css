@@ -1928,8 +1928,6 @@ mark {
 /* Milkdown editor */
 .dark .milkdown .editor { color: var(--color-text); }
 .dark .milkdown .editor a { color: var(--color-accent); }
-.dark .milkdown .editor th, .dark .milkdown .editor td { border-color: var(--color-border); }
-.dark .milkdown .editor hr { border-color: var(--color-border); }
 
 /* Markdown viewer */
 .dark .markdown-viewer h3, .dark .markdown-viewer h4, .dark .markdown-viewer h5, .dark .markdown-viewer h6 { color: var(--color-text); }
@@ -1942,16 +1940,13 @@ mark {
 /* Menus */
 .dark .slash-menu { background: var(--color-surface); border-color: var(--color-border); }
 .dark .slash-menu-item:hover, .dark .slash-menu-item.active { background: var(--color-surface-hover); }
-.dark .slash-menu-label { color: var(--color-text); }
 .dark .wikilink-menu { background: var(--color-surface); border-color: var(--color-border); }
 .dark .wikilink-menu-item:hover, .dark .wikilink-menu-item.active { background: var(--color-surface-hover); }
-.dark .wikilink-menu-title { color: var(--color-text); }
 
 /* Search highlight */
 .dark mark { background: color-mix(in oklab, #f5c518 30%, transparent); color: inherit; }
 
 /* Draw.io */
-.dark .drawio-embed { border-color: var(--color-border); }
 .dark .drawio-placeholder { background: var(--color-surface); color: var(--color-text-secondary); }
 .dark .drawio-svg { background: transparent; }
 .dark .drawio-svg svg { filter: invert(1) hue-rotate(180deg); }
@@ -1969,7 +1964,6 @@ mark {
 .dark .mermaid-error { background: #450a0a; border-color: #991b1b; color: #fca5a5; }
 
 /* Transclusion */
-.dark .transclusion { border-color: var(--color-border); }
 .dark .transclusion-header { background: var(--color-surface); border-color: var(--color-border); }
 .dark .transclusion-content { color: var(--color-text); }
 
@@ -1977,7 +1971,6 @@ mark {
 .dark .fab-btn-active { background: var(--color-primary-soft); color: var(--color-accent); box-shadow: inset 0 0 0 1px var(--color-primary); }
 
 /* TOC dark */
-.dark .toc-drawer-sheet { background: var(--color-surface); }
 .dark .toc-drawer-handle { background: var(--color-border); }
 
 /* Print — strip chrome so Ctrl+P / "Save as PDF" produces a clean article */
