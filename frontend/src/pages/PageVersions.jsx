@@ -164,7 +164,7 @@ export default function PageVersions() {
           >
             &larr;
           </button>
-          <h1 className="text-2xl font-bold text-text">{t('versions.title')}</h1>
+          <h1 className="page-title">{t('versions.title')}</h1>
         </div>
         <Link
           to={`/page/${slug}`}

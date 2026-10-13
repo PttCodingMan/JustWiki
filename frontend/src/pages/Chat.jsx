@@ -47,7 +47,7 @@ export default function Chat() {
   if (aiStatus && !aiStatus.enabled) {
     return (
       <div className="max-w-3xl mx-auto py-16 text-center">
-        <h1 className="text-2xl font-bold text-text mb-2">{t('chat.disabledTitle')}</h1>
+        <h1 className="page-title mb-2">{t('chat.disabledTitle')}</h1>
         <p className="text-text-secondary">
           {t('chat.disabledIntro')}{' '}
           <code className="px-1.5 py-0.5 bg-surface rounded text-xs">AI_ENABLED=true</code>{' '}
@@ -62,7 +62,7 @@ export default function Chat() {
     <div className="max-w-3xl mx-auto h-[calc(100vh-4rem)] flex flex-col">
       <div className="flex items-center justify-between py-4">
         <div>
-          <h1 className="text-2xl font-bold text-text">{t('chat.title')}</h1>
+          <h1 className="page-title">{t('chat.title')}</h1>
           {aiStatus?.model && (
             <p className="text-xs text-text-secondary mt-0.5">
               {t('chat.modelLabel', { model: aiStatus.model })}

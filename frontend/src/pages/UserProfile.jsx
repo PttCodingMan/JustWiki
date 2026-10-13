@@ -106,9 +106,9 @@ function BioCard({ initialBio, isOwner, onSaved }) {
   if (editing) {
     const tooLong = draft.length > BIO_MAX_LEN
     return (
-      <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+      <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6">
         <div className="flex items-baseline justify-between mb-2">
-          <h2 className="text-lg font-semibold text-text">{t('userProfile.about')}</h2>
+          <h2 className="section-title">{t('userProfile.about')}</h2>
           <span className={`text-xs ${tooLong ? 'text-red-600' : 'text-text-secondary'}`}>
             {draft.length}/{BIO_MAX_LEN}
           </span>
@@ -147,9 +147,9 @@ function BioCard({ initialBio, isOwner, onSaved }) {
   }
 
   return (
-    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+    <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold text-text">{t('userProfile.about')}</h2>
+        <h2 className="section-title">{t('userProfile.about')}</h2>
         {isOwner && hasBio && (
           <button
             type="button"
@@ -220,7 +220,7 @@ function UserProfileFor({ username }) {
   if (error === 'not_found') {
     return (
       <div className="max-w-2xl mx-auto mt-12 text-center">
-        <h1 className="text-xl font-semibold text-text mb-2">{t('userProfile.notFound.title')}</h1>
+        <h1 className="page-title mb-2">{t('userProfile.notFound.title')}</h1>
         <p className="text-text-secondary">{t('userProfile.notFound.body', { username })}</p>
       </div>
     )
@@ -245,12 +245,12 @@ function UserProfileFor({ username }) {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Identity card */}
-      <div className="bg-surface rounded-xl shadow-sm border border-border p-6 flex items-center gap-5">
+      <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6 flex items-center gap-5">
         <div className="w-16 h-16 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xl font-semibold flex-shrink-0">
           {initials(profile.display_name, profile.username)}
         </div>
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-text truncate">
+          <h1 className="page-title truncate">
             {profile.display_name || profile.username}
           </h1>
           <div className="text-sm text-text-secondary mt-1 flex items-center gap-2 flex-wrap">
@@ -274,8 +274,8 @@ function UserProfileFor({ username }) {
       )}
 
       {/* Activity timeline */}
-      <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
-        <h2 className="text-lg font-semibold text-text mb-4">{t('userProfile.recentActivity')}</h2>
+      <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6">
+        <h2 className="section-title mb-4">{t('userProfile.recentActivity')}</h2>
         {profile.recent_activity.length === 0 ? (
           <p className="text-text-secondary text-sm">{t('userProfile.noActivity')}</p>
         ) : (

@@ -90,7 +90,7 @@ function LegendDot({ color, label, border }) {
 
 function StatCard({ title, value, sub }) {
   return (
-    <div className="bg-surface rounded-xl shadow-sm border border-border p-5">
+    <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-5">
       <div className="text-xs uppercase tracking-wide text-text-secondary">{title}</div>
       <div className="mt-1 text-2xl font-semibold text-text">{value}</div>
       {sub && <div className="mt-1 text-xs text-text-secondary">{sub}</div>}
@@ -157,7 +157,7 @@ export default function Dashboard() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-text">{t('dashboard.title')}</h1>
+        <h1 className="page-title">{t('dashboard.title')}</h1>
         <button
           onClick={load}
           disabled={loading}
@@ -177,7 +177,7 @@ export default function Dashboard() {
 
       {stats && (
         <>
-          <div className="bg-surface rounded-xl shadow-sm border border-border p-5">
+          <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-5">
             <div className="flex items-baseline justify-between">
               <div className="text-xs uppercase tracking-wide text-text-secondary">{t('dashboard.storage')}</div>
               {storagePct != null && (
@@ -206,7 +206,7 @@ export default function Dashboard() {
             />
           </div>
 
-          <div className="bg-surface rounded-xl shadow-sm border border-border p-5">
+          <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-5">
             <h2 className="text-sm font-semibold text-text mb-3">{t('dashboard.build.title')}</h2>
             <dl className="grid grid-cols-2 gap-y-2 text-sm">
               <dt className="text-text-secondary">{t('dashboard.build.frontend')}</dt>

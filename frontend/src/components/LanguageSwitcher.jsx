@@ -26,28 +26,29 @@ export default function LanguageSwitcher() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className="p-1.5 rounded hover:bg-surface-hover text-text-secondary flex items-center gap-1"
+        className="icon-btn"
         title={t('nav.changeLanguage')}
         aria-label={t('nav.changeLanguage')}
+        aria-expanded={open}
       >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+        <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="10" />
           <path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20" />
         </svg>
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 bg-surface border border-border rounded-xl shadow-lg p-2 z-50 w-44">
-          <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider px-2 py-1 mb-1">
+        <div className="menu-surface absolute right-0 top-full mt-2 z-50 w-48">
+          <div className="eyebrow px-2.5 pt-1.5 pb-2">
             {t('nav.language')}
           </div>
           {SUPPORTED_LANGUAGES.map((lang) => (
             <button
               key={lang.code}
               onClick={() => handleSelect(lang.code)}
-              className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-sm text-left transition-colors ${
+              className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-[9px] text-[13px] text-left transition-colors ${
                 current === lang.code
                   ? 'bg-surface-hover font-medium text-text'
-                  : 'text-text-secondary hover:bg-surface-hover'
+                  : 'text-text-secondary hover:bg-surface-hover hover:text-text'
               }`}
             >
               <span>{lang.label}</span>

@@ -59,7 +59,7 @@ export default function Trash() {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold text-text">{t('trash.title')}</h1>
+        <h1 className="page-title">{t('trash.title')}</h1>
         <button
           onClick={() => navigate(-1)}
           className="text-sm text-text-secondary hover:text-text"
@@ -82,12 +82,12 @@ export default function Trash() {
       {loading ? (
         <div className="text-text-secondary">{t('common.loading')}</div>
       ) : items.length === 0 ? (
-        <div className="text-center py-12 text-text-secondary bg-surface rounded-xl border border-border">
+        <div className="text-center py-12 text-text-secondary bg-surface rounded-2xl border border-hairline shadow-xs">
           <div className="text-4xl mb-2">🗑</div>
           <div>{t('trash.empty')}</div>
         </div>
       ) : (
-        <div className="bg-surface rounded-xl shadow-sm border border-border overflow-hidden">
+        <div className="bg-surface rounded-2xl shadow-sm border border-hairline overflow-hidden">
           <table className="w-full">
             <thead className="border-b border-border bg-surface-hover">
               <tr className="text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">

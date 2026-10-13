@@ -55,8 +55,8 @@ function SiteSettingsSection() {
   const field = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))
 
   return (
-    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
-      <h2 className="text-lg font-semibold text-text mb-1">{t('admin.site.title')}</h2>
+    <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6">
+      <h2 className="section-title mb-1">{t('admin.site.title')}</h2>
       <p className="text-sm text-text-secondary mb-4">
         {t('admin.site.intro')}
       </p>
@@ -171,8 +171,8 @@ function BackupSection() {
   }
 
   return (
-    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
-      <h2 className="text-lg font-semibold text-text mb-4">{t('admin.backup.title')}</h2>
+    <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6">
+      <h2 className="section-title mb-4">{t('admin.backup.title')}</h2>
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1">
           <h3 className="text-sm font-medium text-text mb-2">{t('admin.backup.downloadTitle')}</h3>
@@ -204,8 +204,8 @@ function BackupSection() {
 function ExportSection() {
   const { t } = useTranslation()
   return (
-    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
-      <h2 className="text-lg font-semibold text-text mb-4">{t('admin.export.title')}</h2>
+    <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6">
+      <h2 className="section-title mb-4">{t('admin.export.title')}</h2>
       <p className="text-sm text-text-secondary mb-3">{t('admin.export.intro')}</p>
       <button
         onClick={() => window.open('/api/export/site?format=html', '_blank')}
@@ -303,9 +303,9 @@ function WebhooksSection() {
   }
 
   return (
-    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+    <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6">
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-lg font-semibold text-text">{t('admin.webhooks.title')}</h2>
+        <h2 className="section-title">{t('admin.webhooks.title')}</h2>
         <button
           onClick={() => setShowForm((s) => !s)}
           className="px-3 py-1.5 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover"
@@ -544,9 +544,9 @@ function UsersSection() {
     }`
 
   return (
-    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+    <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6">
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-        <h2 className="text-lg font-semibold text-text">{t('admin.users.title')}</h2>
+        <h2 className="section-title">{t('admin.users.title')}</h2>
         <div className="flex items-center gap-2 flex-wrap">
           <button type="button" onClick={() => setTab('active')} className={tabClass('active')}>
             {t('admin.users.tabActive')} {users.length > 0 && <span className="text-xs opacity-70">({users.length})</span>}
@@ -840,9 +840,9 @@ function GroupsSection() {
   }
 
   return (
-    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+    <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-text">{t('admin.groups.title')}</h2>
+        <h2 className="section-title">{t('admin.groups.title')}</h2>
         <button
           onClick={() => setShowCreate(!showCreate)}
           className="px-3 py-1.5 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover"
@@ -1432,9 +1432,9 @@ function TemplatesSection() {
   }
 
   return (
-    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+    <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-text">{t('admin.templates.title')}</h2>
+        <h2 className="section-title">{t('admin.templates.title')}</h2>
         <button
           onClick={() => { setShowCreate(!showCreate); resetForm() }}
           className="px-3 py-1.5 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover"
@@ -1568,9 +1568,9 @@ function LibrarySection() {
     }`
 
   return (
-    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+    <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-text">{t('admin.library.title')}</h2>
+        <h2 className="section-title">{t('admin.library.title')}</h2>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -1604,7 +1604,7 @@ export default function Admin() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-text">{t('admin.title')}</h1>
+      <h1 className="page-title">{t('admin.title')}</h1>
       <SiteSettingsSection />
       <UsersSection />
       <GroupsSection />

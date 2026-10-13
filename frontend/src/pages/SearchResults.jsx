@@ -33,20 +33,20 @@ export default function SearchResults() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold text-text mb-2">
+      <h1 className="page-title mb-2">
         {t('searchResults.title', { q })}
       </h1>
-      <p className="text-sm text-text-secondary mb-4">
+      <p className="text-sm text-text-tertiary mb-8">
         {t('searchResults.resultCount', { count: total })}
       </p>
 
       {/* Tag filter */}
       {allTags.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div className="flex flex-wrap gap-1.5 mb-8">
           <button
             onClick={() => setSelectedTag('')}
-            className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-              !selectedTag ? 'bg-primary text-primary-text border-primary' : 'bg-surface text-text-secondary border-border hover:border-primary'
+            className={`h-7 text-xs font-medium px-3 rounded-full border transition-colors ${
+              !selectedTag ? 'bg-text text-bg border-text' : 'bg-surface text-text-secondary border-border hover:border-text-tertiary hover:text-text'
             }`}
           >
             {t('searchResults.all')}
@@ -55,41 +55,41 @@ export default function SearchResults() {
             <button
               key={t.id}
               onClick={() => setSelectedTag(t.name)}
-              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                selectedTag === t.name ? 'bg-primary text-primary-text border-primary' : 'bg-surface text-text-secondary border-border hover:border-primary'
+              className={`h-7 text-xs font-medium px-3 rounded-full border transition-colors ${
+                selectedTag === t.name ? 'bg-text text-bg border-text' : 'bg-surface text-text-secondary border-border hover:border-text-tertiary hover:text-text'
               }`}
             >
-              {t.name} ({t.page_count})
+              <span className="opacity-50">#</span>{t.name} <span className="opacity-50 tabular-nums">{t.page_count}</span>
             </button>
           ))}
         </div>
       )}
 
       {loading ? (
-        <p className="text-text-secondary">{t('searchResults.searching')}</p>
+        <div className="space-y-3" aria-busy="true" aria-label={t('searchResults.searching')}>{[0, 1, 2].map((i) => <div key={i} className="skeleton h-24 rounded-2xl" />)}</div>
       ) : results.length === 0 ? (
-        <div className="text-center py-16 text-text-secondary">
+        <div className="text-center py-20 font-display text-2xl text-text-secondary">
           {t('searchResults.noResults', { q })}
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {results.map((r) => (
             <Link
               key={r.id}
               to={`/page/${r.slug}`}
-              className="block bg-surface rounded-xl shadow-sm border border-border px-5 py-4 hover:border-primary/30 transition-colors"
+              className="group block bg-surface rounded-2xl shadow-xs border border-hairline px-6 py-5 hover:border-primary/35 hover:shadow-lg hover:-translate-y-px transition-all duration-300"
             >
-              <div className="font-medium text-text">
-                <span className="mr-2" aria-hidden="true">{TYPE_ICONS[r.page_type] ?? TYPE_ICONS.document}</span>
+              <div className="flex items-center gap-2 font-semibold text-[17px] tracking-tight text-text group-hover:text-primary transition-colors">
+                <span className="text-base" aria-hidden="true">{TYPE_ICONS[r.page_type] ?? TYPE_ICONS.document}</span>
                 {r.title}
               </div>
               <div
-                className="text-sm text-text-secondary mt-1 line-clamp-2"
+                className="text-sm leading-relaxed text-text-secondary mt-1.5 line-clamp-2"
                 dangerouslySetInnerHTML={{
                   __html: DOMPurify.sanitize(r.snippet || '', SNIPPET_SANITIZE_CONFIG),
                 }}
               />
-              <div className="text-xs text-text-secondary mt-2">
+              <div className="text-xs text-text-tertiary mt-3 font-mono">
                 /{r.slug} &middot; {t('common.views', { count: r.view_count })} &middot; {new Date(r.updated_at).toLocaleDateString()}
               </div>
             </Link>

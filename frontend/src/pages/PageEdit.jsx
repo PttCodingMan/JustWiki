@@ -292,12 +292,17 @@ export default function PageEdit() {
   // never write the previous page's body onto the new one. (Editor also keys
   // on slug as a second guard.)
   if (!page || page.slug !== slug) {
-    return <div className="text-text-secondary">{t('common.loading')}</div>
+    return (
+      <div className="max-w-[52rem] mx-auto" aria-busy="true" aria-label={t('common.loading')}>
+        <div className="skeleton h-12 w-2/3 mb-6 rounded-xl" />
+        <div className="skeleton h-[500px] w-full rounded-2xl" />
+      </div>
+    )
   }
 
   return (
-    <div className={showPreview ? 'edit-split-root' : 'max-w-4xl mx-auto'}>
-      <div className="mb-4">
+    <div className={showPreview ? 'edit-split-root' : 'max-w-[52rem] mx-auto'}>
+      <div className="mb-2">
         <input
           type="text"
           value={title}
@@ -308,7 +313,7 @@ export default function PageEdit() {
               editorRef.current?.focus()
             }
           }}
-          className="text-2xl font-bold text-text bg-transparent border-none outline-none w-full"
+          className="font-display text-[2.4rem] sm:text-[3.2rem] leading-[1.05] tracking-[-0.025em] text-text bg-transparent border-none outline-none w-full placeholder:text-text-tertiary/70"
           placeholder={t('pageEdit.titlePlaceholder')}
         />
       </div>
@@ -351,12 +356,12 @@ export default function PageEdit() {
           </div>
         </div>
       )}
-      <div className="text-xs text-text-secondary mb-3">{t('pageEdit.shortcutHint')}</div>
+      <div className="text-xs text-text-tertiary mb-5">{t('pageEdit.shortcutHint')}</div>
 
       <div className={showPreview ? 'edit-split-panels' : ''}>
         {/* Editor panel */}
         <div className={showPreview ? 'edit-split-editor' : ''}>
-          <div className="bg-surface rounded-xl shadow-sm border border-border min-h-[500px]">
+          <div className="editor-paper bg-surface rounded-2xl shadow-sm border border-hairline min-h-[500px]">
             <Editor
               key={slug}
               ref={editorRef}
@@ -405,9 +410,9 @@ export default function PageEdit() {
         {/* Live preview panel */}
         {showPreview && (
           <div className="edit-split-preview">
-            <div className="bg-surface rounded-xl shadow-sm border border-border min-h-[500px] p-6 overflow-auto">
+            <div className="bg-surface rounded-2xl shadow-sm border border-hairline min-h-[500px] p-6 sm:p-8 overflow-auto">
               <div className="flex items-center justify-between mb-4 pb-2 border-b border-border">
-                <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+                <span className="eyebrow">
                   {page?.page_type === 'mindmap' ? t('pageEdit.mindmapPreview') : t('pageEdit.preview')}
                 </span>
                 {page?.page_type === 'mindmap' && (

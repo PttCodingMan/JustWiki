@@ -88,12 +88,12 @@ export default function Profile() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-text">{t('profile.title')}</h1>
+      <h1 className="page-title">{t('profile.title')}</h1>
 
       {/* Account Info */}
-      <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+      <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-text">{t('profile.account.title')}</h2>
+          <h2 className="section-title">{t('profile.account.title')}</h2>
           <Link
             to={`/u/${encodeURIComponent(profile.username)}`}
             className="text-sm text-primary hover:underline"
@@ -120,8 +120,8 @@ export default function Profile() {
       </div>
 
       {/* Edit Profile */}
-      <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
-        <h2 className="text-lg font-semibold text-text mb-4">{t('profile.edit.title')}</h2>
+      <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6">
+        <h2 className="section-title mb-4">{t('profile.edit.title')}</h2>
         <form onSubmit={handleSave} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-text mb-1">{t('profile.edit.displayName')}</label>
@@ -184,8 +184,8 @@ export default function Profile() {
       <ApiTokensCard role={profile.role} />
 
       {/* Change Password */}
-      <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
-        <h2 className="text-lg font-semibold text-text mb-4">{t('profile.password.title')}</h2>
+      <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6">
+        <h2 className="section-title mb-4">{t('profile.password.title')}</h2>
         <form onSubmit={handlePasswordChange} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-text mb-1">{t('profile.password.current')}</label>
@@ -315,9 +315,9 @@ function ApiTokensCard({ role }) {
   const fmt = (ts) => (ts ? new Date(ts.replace(' ', 'T') + 'Z').toLocaleString() : '—')
 
   return (
-    <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
+    <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6">
       <div className="flex items-start justify-between mb-1">
-        <h2 className="text-lg font-semibold text-text">{t('tokens.title')}</h2>
+        <h2 className="section-title">{t('tokens.title')}</h2>
       </div>
       <p className="text-sm text-text-secondary mb-4">
         {t('tokens.intro1')}{' '}

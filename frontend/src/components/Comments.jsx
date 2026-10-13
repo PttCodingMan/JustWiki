@@ -22,8 +22,8 @@ function CommentItem({ comment, currentUser, onDelete, onUpdate, pageSlug }) {
   }
 
   return (
-    <div className="flex gap-3 py-3">
-      <div className="w-8 h-8 rounded-full bg-primary-soft text-primary flex items-center justify-center text-sm font-medium shrink-0">
+    <div className="flex gap-3.5 py-5">
+      <div className="w-9 h-9 rounded-full bg-primary-soft text-sidebar-active-text ring-1 ring-inset ring-primary/15 flex items-center justify-center text-sm font-semibold shrink-0">
         {((comment.display_name || comment.username) || '?')[0].toUpperCase()}
       </div>
       <div className="flex-1 min-w-0">
@@ -38,7 +38,7 @@ function CommentItem({ comment, currentUser, onDelete, onUpdate, pageSlug }) {
           ) : (
             <span className="text-sm font-medium text-text">{comment.display_name || '?'}</span>
           )}
-          <span className="text-xs text-text-secondary">{new Date(comment.created_at).toLocaleString()}</span>
+          <span className="text-xs text-text-tertiary">{new Date(comment.created_at).toLocaleString()}</span>
           {comment.updated_at !== comment.created_at && (
             <span className="text-xs text-text-secondary">{t('comments.edited')}</span>
           )}
@@ -157,8 +157,8 @@ export default function Comments({ slug }) {
   }
 
   return (
-    <div className="mt-6 bg-surface rounded-xl shadow-sm border border-border p-6">
-      <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">
+    <section className="pt-10 border-t border-hairline">
+      <h3 className="font-display text-[2rem] leading-none tracking-tight text-text mb-6">
         {total > 0 ? t('comments.titleCount', { count: total }) : t('comments.title')}
       </h3>
 
@@ -167,7 +167,7 @@ export default function Comments({ slug }) {
       ) : (
         <>
           {comments.length > 0 && (
-            <div className="divide-y divide-border mb-4">
+            <div className="divide-y divide-hairline mb-6">
               {comments.map((c) => (
                 <CommentItem
                   key={c.id}
@@ -200,13 +200,13 @@ export default function Comments({ slug }) {
                 pageSlug={slug}
                 placeholder={t('comments.placeholder')}
                 rows={3}
-                className="w-full p-3 border border-border bg-surface text-text rounded-lg text-sm focus:outline-none focus:border-primary resize-none"
+                className="w-full px-4 py-3 border border-border bg-surface text-text rounded-2xl text-[15px] leading-relaxed shadow-xs placeholder:text-text-tertiary outline-none transition-[border-color,box-shadow] duration-200 focus:border-primary focus:ring-4 focus:ring-primary/15 resize-none"
               />
-              <div className="flex justify-end mt-2">
+              <div className="flex justify-end mt-3">
                 <button
                   type="submit"
                   disabled={submitting || !newComment.trim()}
-                  className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover disabled:opacity-50"
+                  className="btn-primary"
                 >
                   {submitting ? t('comments.posting') : t('comments.post')}
                 </button>
@@ -215,6 +215,6 @@ export default function Comments({ slug }) {
           )}
         </>
       )}
-    </div>
+    </section>
   )
 }

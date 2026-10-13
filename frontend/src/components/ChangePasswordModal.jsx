@@ -60,7 +60,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
         className="bg-surface rounded-xl shadow-xl w-full max-w-sm mx-4 p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold text-text mb-4">{t('changePassword.title')}</h2>
+        <h2 className="section-title mb-4">{t('changePassword.title')}</h2>
 
         {success ? (
           <div className="p-3 rounded-lg text-sm bg-green-50 text-green-700 border border-green-200">

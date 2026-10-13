@@ -73,6 +73,7 @@
   },
   "home": {
     "title": "모든 페이지",
+    "pageCount": "{{count}}개 페이지",
     "browserTitle": "홈"
   },
   "confirm": {
@@ -482,6 +483,7 @@
     "loading": "불러오는 중…",
     "login": "로그인",
     "updated": "{{date}}에 업데이트됨",
+    "readingTime": "{{count}}분 분량",
     "notFoundTitle": "페이지를 찾을 수 없습니다",
     "notFoundBody": "이 페이지는 사용할 수 없습니다."
   },
@@ -536,6 +538,7 @@
     "tagPlaceholder": "태그 이름",
     "addTag": "+ 태그",
     "updated": "{{date}}에 업데이트됨",
+    "readingTime": "{{count}}분 분량",
     "publicLabel": "🌐 공개",
     "publicTitle": "이 페이지는 공개되어 있습니다",
     "watchingCount": "{{count}}명이 구독 중",

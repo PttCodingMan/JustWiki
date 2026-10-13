@@ -109,12 +109,12 @@ export default function PublicPageView({ notFound }) {
       <main className="flex-1 w-full px-4 sm:px-8 py-8">
         <div className="max-w-6xl xl:max-w-7xl 2xl:max-w-[100rem] mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_220px] 2xl:grid-cols-[minmax(0,1fr)_260px] lg:gap-8 2xl:gap-12">
           <article>
-            <h1 className="text-3xl font-bold text-text mb-2">{page.title}</h1>
+            <h1 className="page-title !text-[clamp(2.6rem,2rem+2.5vw,3.6rem)] mb-4">{page.title}</h1>
             <div className="text-sm text-text-secondary mb-6">
               {page.author_name && <>{page.author_name} &middot; </>}
               {t('publicView.updated', { date: new Date(page.updated_at).toLocaleString() })}
             </div>
-            <div className="bg-surface rounded-xl shadow-sm border border-border p-6 sm:p-8">
+            <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6 sm:p-8">
               {page.page_type === 'mindmap' ? (
                 <MindmapView
                   content={page.content_md}
@@ -160,7 +160,7 @@ function PublicNotFound() {
   const { t } = useTranslation()
   return (
     <div className="min-h-screen bg-bg text-text flex flex-col items-center justify-center">
-      <h1 className="text-2xl font-semibold mb-2">{t('publicView.notFoundTitle')}</h1>
+      <h1 className="page-title mb-3">{t('publicView.notFoundTitle')}</h1>
       <p className="text-text-secondary">{t('publicView.notFoundBody')}</p>
     </div>
   )
