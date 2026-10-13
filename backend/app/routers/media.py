@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from app.schemas import MediaResponse, MediaListItem
 from app.auth import get_current_user, require_admin, get_optional_user
 from app.config import settings
-from app.database import get_db, write_transaction
+from app.database import fetch_one_or_404, get_db, write_transaction
 from app.services.acl import can_read_media, list_readable_page_ids
 from app.services import site_settings
 
@@ -234,11 +234,9 @@ async def list_media(user=Depends(get_current_user)):
 async def delete_media(media_id: int, user=Depends(require_admin)):
     """Delete an uploaded media file. Refuses if any live page still references it."""
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT filename, filepath FROM media WHERE id = ?", (media_id,)
+    row = await fetch_one_or_404(
+        db, "SELECT filename, filepath FROM media WHERE id = ?", (media_id,), "Media not found"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Media not found")
 
     ref_rows = await db.execute_fetchall(
         """SELECT COUNT(*) AS cnt
@@ -255,7 +253,7 @@ async def delete_media(media_id: int, user=Depends(require_admin)):
 
     # Remove the file on disk. Guard against path traversal and missing files.
     media_dir = Path(settings.MEDIA_DIR).resolve()
-    filepath = (media_dir / rows[0]["filename"]).resolve()
+    filepath = (media_dir / row["filename"]).resolve()
     if filepath.is_relative_to(media_dir) and filepath.exists():
         try:
             filepath.unlink()

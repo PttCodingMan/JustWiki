@@ -6,7 +6,7 @@ from app.schemas import (
     DiagramResponse,
 )
 from app.auth import get_current_user, require_admin
-from app.database import get_db, write_transaction
+from app.database import fetch_one_or_404, get_db, write_transaction
 from app.services.acl import list_readable_page_ids, resolve_page_permission
 from app.services.diagram_ref import extract_diagram_ids
 
@@ -157,13 +157,11 @@ async def create_diagram(
 @router.get("/{diagram_id}", response_model=DiagramResponse)
 async def get_diagram(diagram_id: int, user=Depends(get_current_user)):
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT * FROM diagrams WHERE id = ?", (diagram_id,)
+    row = await fetch_one_or_404(
+        db, "SELECT * FROM diagrams WHERE id = ?", (diagram_id,), "Diagram not found"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Diagram not found")
-    await _require_diagram_access(db, user, rows[0])
-    return dict(rows[0])
+    await _require_diagram_access(db, user, row)
+    return dict(row)
 
 
 @router.put("/{diagram_id}", response_model=DiagramResponse)
@@ -175,12 +173,10 @@ async def update_diagram(
     if user.get("role") == "viewer":
         raise HTTPException(status_code=403, detail="Viewers cannot edit diagrams")
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT * FROM diagrams WHERE id = ?", (diagram_id,)
+    row = await fetch_one_or_404(
+        db, "SELECT * FROM diagrams WHERE id = ?", (diagram_id,), "Diagram not found"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Diagram not found")
-    await _require_diagram_access(db, user, rows[0], write=True)
+    await _require_diagram_access(db, user, row, write=True)
 
     updates = []
     values = []
@@ -210,11 +206,9 @@ async def update_diagram(
 async def delete_diagram(diagram_id: int, user=Depends(require_admin)):
     """Delete a diagram. Refuses if any page (live or trashed) still references it."""
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id FROM diagrams WHERE id = ?", (diagram_id,)
+    await fetch_one_or_404(
+        db, "SELECT id FROM diagrams WHERE id = ?", (diagram_id,), "Diagram not found"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Diagram not found")
 
     page_rows = await db.execute_fetchall(
         "SELECT content_md FROM pages WHERE content_md LIKE '%::drawio%'"
@@ -233,13 +227,12 @@ async def delete_diagram(diagram_id: int, user=Depends(require_admin)):
 @router.get("/{diagram_id}/svg")
 async def get_diagram_svg(diagram_id: int, user=Depends(get_current_user)):
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT svg_cache, page_id FROM diagrams WHERE id = ?", (diagram_id,)
+    row = await fetch_one_or_404(
+        db, "SELECT svg_cache, page_id FROM diagrams WHERE id = ?", (diagram_id,),
+        "Diagram not found"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Diagram not found")
-    await _require_diagram_access(db, user, rows[0])
-    svg = rows[0]["svg_cache"]
+    await _require_diagram_access(db, user, row)
+    svg = row["svg_cache"]
     if not svg:
         raise HTTPException(status_code=404, detail="No SVG cache available")
     from fastapi.responses import Response

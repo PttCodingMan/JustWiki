@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.auth import require_admin, require_real_user
-from app.database import get_db, write_transaction
+from app.database import fetch_one_or_404, get_db, write_transaction
 from app.services.acl import resolve_page_permission
 from app.services.notifications import validate_webhook_url
 
@@ -19,12 +19,10 @@ async def _require_readable_page(db, user, slug: str) -> int:
     probe whether a slug exists via /watch, nor subscribe to notifications
     on a page they can't read.
     """
-    rows = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    row = await fetch_one_or_404(
+        db, "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,), "Page not found"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = rows[0]["id"]
+    page_id = row["id"]
     if await resolve_page_permission(db, user, page_id) == "none":
         raise HTTPException(status_code=404, detail="Page not found")
     return page_id
@@ -65,12 +63,10 @@ async def unwatch_page(slug: str, user=Depends(require_real_user)):
     db = await get_db()
     # Unwatch is always safe: even if ACL changed after subscribing, let
     # users clean up. Still require the page exists and isn't deleted.
-    rows = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,)
+    row = await fetch_one_or_404(
+        db, "SELECT id FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,), "Page not found"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Page not found")
-    page_id = rows[0]["id"]
+    page_id = row["id"]
 
     async with write_transaction(db):
         await db.execute(
@@ -127,9 +123,9 @@ async def create_webhook(body: WebhookCreate, user=Depends(require_admin)):
 @router.put("/api/webhooks/{webhook_id}")
 async def update_webhook(webhook_id: int, body: WebhookUpdate, user=Depends(require_admin)):
     db = await get_db()
-    rows = await db.execute_fetchall("SELECT id FROM webhooks WHERE id = ?", (webhook_id,))
-    if not rows:
-        raise HTTPException(status_code=404, detail="Webhook not found")
+    await fetch_one_or_404(
+        db, "SELECT id FROM webhooks WHERE id = ?", (webhook_id,), "Webhook not found"
+    )
 
     updates: list[str] = []
     params: list = []

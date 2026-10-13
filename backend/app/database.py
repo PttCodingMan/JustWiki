@@ -8,6 +8,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import aiosqlite
+from fastapi import HTTPException
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -601,6 +603,14 @@ _in_write_tx: contextvars.ContextVar[bool] = contextvars.ContextVar(
 # statements on it would mix into one transaction. The lock keeps each
 # write_transaction's statements contiguous on the writer.
 _writer_lock = asyncio.Lock()
+
+
+async def fetch_one_or_404(db, sql: str, params=(), detail: str = "Not found"):
+    """Return the first row of `sql`, or raise 404 with `detail` if there is none."""
+    rows = await db.execute_fetchall(sql, params)
+    if not rows:
+        raise HTTPException(status_code=404, detail=detail)
+    return rows[0]
 
 
 @asynccontextmanager

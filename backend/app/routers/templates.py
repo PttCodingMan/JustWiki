@@ -2,7 +2,7 @@ import aiosqlite
 from fastapi import APIRouter, HTTPException, Depends
 from app.schemas import TemplateCreate, TemplateUpdate, TemplateResponse
 from app.auth import get_current_user, require_admin
-from app.database import get_db, write_transaction
+from app.database import fetch_one_or_404, get_db, write_transaction
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
 
@@ -36,13 +36,11 @@ async def update_template(
     template_id: int, body: TemplateUpdate, user=Depends(require_admin)
 ):
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT * FROM templates WHERE id = ?", (template_id,)
+    row = await fetch_one_or_404(
+        db, "SELECT * FROM templates WHERE id = ?", (template_id,), "Template not found"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Template not found")
 
-    current = dict(rows[0])
+    current = dict(row)
     name = body.name if body.name is not None else current["name"]
     desc = body.description if body.description is not None else current["description"]
     content = body.content_md if body.content_md is not None else current["content_md"]
@@ -64,11 +62,9 @@ async def update_template(
 @router.delete("/{template_id}")
 async def delete_template(template_id: int, user=Depends(require_admin)):
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id FROM templates WHERE id = ?", (template_id,)
+    await fetch_one_or_404(
+        db, "SELECT id FROM templates WHERE id = ?", (template_id,), "Template not found"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Template not found")
 
     async with write_transaction(db):
         await db.execute("DELETE FROM templates WHERE id = ?", (template_id,))

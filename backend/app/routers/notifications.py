@@ -1,8 +1,8 @@
 """In-app notification endpoints for watchers."""
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 
 from app.auth import get_current_user, require_real_user
-from app.database import get_db, write_transaction
+from app.database import fetch_one_or_404, get_db, write_transaction
 
 # Notifications are personal — guests don't receive any, so the whole
 # router is real-user-only.
@@ -63,12 +63,10 @@ async def mark_all_read(user=Depends(get_current_user)):
 @router.post("/{notification_id}/read")
 async def mark_read(notification_id: int, user=Depends(get_current_user)):
     db = await get_db()
-    rows = await db.execute_fetchall(
-        "SELECT id FROM notifications WHERE id = ? AND user_id = ?",
-        (notification_id, user["id"]),
+    await fetch_one_or_404(
+        db, "SELECT id FROM notifications WHERE id = ? AND user_id = ?",
+        (notification_id, user["id"]), "Notification not found"
     )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Notification not found")
     async with write_transaction(db):
         await db.execute(
             "UPDATE notifications SET read_at = CURRENT_TIMESTAMP WHERE id = ?",
