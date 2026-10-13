@@ -18,6 +18,7 @@ from app.auth import (
 from app.config import settings
 from app.database import get_db, write_transaction
 from app.services import site_settings
+from app.services.accounts import DISABLED_PASSWORD_HASH
 from app.services.client_ip import client_ip
 
 logger = logging.getLogger(__name__)
@@ -78,7 +79,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
     #    this check so bcrypt can't coincidentally accept an empty / short
     #    password; they must sign in via SSO or LDAP instead.
     user = None
-    if rows and rows[0]["password_hash"] != "!":
+    if rows and rows[0]["password_hash"] != DISABLED_PASSWORD_HASH:
         if await verify_password_async(body.password, rows[0]["password_hash"]):
             user = dict(rows[0])
     else:
@@ -229,7 +230,7 @@ async def change_password(body: ChangePasswordRequest, user=Depends(require_real
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     # SSO/LDAP-only accounts carry the sentinel hash '!'; bcrypt raises on
     # that value, which would surface as a 500. Block the path cleanly.
-    if rows[0]["password_hash"] == "!":
+    if rows[0]["password_hash"] == DISABLED_PASSWORD_HASH:
         raise HTTPException(
             status_code=400,
             detail="This account is managed by SSO/LDAP; password cannot be changed here.",

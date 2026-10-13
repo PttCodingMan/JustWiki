@@ -27,6 +27,7 @@ import aiosqlite
 
 from app.config import settings
 from app.database import write_transaction
+from app.services.accounts import DISABLED_PASSWORD_HASH, create_sso_user, link_identity
 
 logger = logging.getLogger(__name__)
 
@@ -318,18 +319,11 @@ async def provision_ldap_user(db, lu: LdapUser) -> dict:
         if existing_linked_uid is not None:
             user_id = existing_linked_uid
         elif username_row is None:
-            cursor = await db.execute(
-                """INSERT INTO users (username, password_hash, role, display_name, email)
-                   VALUES (?, '!', ?, ?, ?)""",
-                (lu.username, _derive_role([cn_of(dn) for dn in lu.groups]), lu.display_name, lu.email),
+            user_id = await create_sso_user(
+                db, lu.username, _derive_role([cn_of(dn) for dn in lu.groups]),
+                lu.display_name, lu.email, "ldap", lu.dn,
             )
-            user_id = cursor.lastrowid
-            await db.execute(
-                """INSERT INTO auth_identities (user_id, provider, subject, email, last_login_at)
-                   VALUES (?, 'ldap', ?, ?, CURRENT_TIMESTAMP)""",
-                (user_id, lu.dn, lu.email),
-            )
-        elif username_row["password_hash"] != "!":
+        elif username_row["password_hash"] != DISABLED_PASSWORD_HASH:
             # Username taken by a real local account — refuse to avoid takeover.
             raise LdapError(
                 f"User '{lu.username}' exists as a local account; an admin must link it manually."
@@ -337,11 +331,7 @@ async def provision_ldap_user(db, lu: LdapUser) -> dict:
         else:
             # Username belongs to a shell account (invited for SSO). Link it.
             user_id = username_row["id"]
-            await db.execute(
-                """INSERT INTO auth_identities (user_id, provider, subject, email, last_login_at)
-                   VALUES (?, 'ldap', ?, ?, CURRENT_TIMESTAMP)""",
-                (user_id, lu.dn, lu.email),
-            )
+            await link_identity(db, user_id, "ldap", lu.dn, lu.email)
 
         # Refresh email + display_name every login (cheap and harmless).
         # Role + group sync only when we have a trustworthy group answer —

@@ -13,6 +13,7 @@ from app.auth import (
     require_real_user,
 )
 from app.database import fetch_one_or_404, get_db, write_transaction
+from app.services.accounts import DISABLED_PASSWORD_HASH, derive_username, pick_unique_username
 from app.services.acl import build_id_clause, list_readable_page_ids, resolve_page_permission
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -22,22 +23,11 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 # references (pages.created_by, page_versions.edited_by, comments.user_id, ...).
 TOMBSTONE_PREFIX = "__deleted_"
 
-# Invited-but-not-yet-logged-in users have this sentinel hash so bcrypt can't
-# match any password. Same convention used by SSO-only accounts.
-DISABLED_PASSWORD_HASH = "!"
-
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-_USERNAME_CLEAN = re.compile(r"[^a-zA-Z0-9._-]")
 
 
 def _is_reserved(name: str) -> bool:
     return name.startswith(TOMBSTONE_PREFIX)
-
-
-def _derive_username_from_email(email: str) -> str:
-    local = email.split("@", 1)[0]
-    cleaned = _USERNAME_CLEAN.sub("-", local).strip("-")
-    return cleaned or "user"
 
 
 class UserCreate(BaseModel):
@@ -338,7 +328,7 @@ async def invite_user(body: UserInvite, user=Depends(require_admin)):
     if body.role not in ALLOWED_ROLES:
         raise HTTPException(status_code=400, detail="Role must be admin, editor, or viewer")
 
-    candidate = (body.username or "").strip() or _derive_username_from_email(email)
+    candidate = (body.username or "").strip() or derive_username(email)
     if _is_reserved(candidate):
         raise HTTPException(status_code=400, detail="Username prefix is reserved")
 
@@ -362,15 +352,8 @@ async def invite_user(body: UserInvite, user=Depends(require_admin)):
         if clash:
             raise HTTPException(status_code=409, detail="Username already exists")
     else:
-        for suffix in [""] + [f"-{i}" for i in range(2, 100)]:
-            cand = f"{candidate}{suffix}"
-            clash = await db.execute_fetchall(
-                "SELECT id FROM users WHERE username = ?", (cand,)
-            )
-            if not clash:
-                username = cand
-                break
-        else:
+        username = await pick_unique_username(db, candidate)
+        if username is None:
             raise HTTPException(status_code=500, detail="Could not find an available username")
 
     display_name = (body.display_name or "").strip()
