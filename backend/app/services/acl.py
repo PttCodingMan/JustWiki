@@ -264,17 +264,13 @@ def page_dep(level: PermLevel):
     # are needed until a request actually fires the dependency, so the cost
     # of this lookup happens once per process.
     from app.auth import get_current_user
-    from app.database import get_db
+    from app.database import fetch_one_or_404, get_db
 
     async def _dep(slug: str, user=Depends(get_current_user)) -> PageAccess:
         db = await get_db()
-        rows = await db.execute_fetchall(
-            "SELECT * FROM pages WHERE slug = ? AND deleted_at IS NULL",
-            (slug,),
-        )
-        if not rows:
-            raise HTTPException(status_code=404, detail="Page not found")
-        page = dict(rows[0])
+        page = dict(await fetch_one_or_404(
+            db, "SELECT * FROM pages WHERE slug = ? AND deleted_at IS NULL", (slug,), "Page not found"
+        ))
 
         perm = await resolve_page_permission(db, user, page["id"])
         if perm == "none":
