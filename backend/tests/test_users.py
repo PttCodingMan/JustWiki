@@ -269,7 +269,7 @@ async def test_can_create_user_with_same_name_after_delete(admin_client, db):
 async def test_cannot_create_reserved_prefix(admin_client):
     response = await admin_client.post(
         "/api/users",
-        json={"username": "__deleted_hacker", "password": "pw12345", "role": "editor"},
+        json={"username": "__deleted_hacker", "password": "pw12345678", "role": "editor"},
     )
     assert response.status_code == 400
 
@@ -311,7 +311,7 @@ async def test_restore_conflict_requires_new_name(admin_client, db):
     # Someone else grabs the name in the meantime.
     await admin_client.post(
         "/api/users",
-        json={"username": "clashy", "password": "pw12345", "role": "editor"},
+        json={"username": "clashy", "password": "pw12345678", "role": "editor"},
     )
 
     conflict = await admin_client.post(

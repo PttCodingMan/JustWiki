@@ -9,14 +9,16 @@ from pydantic import BaseModel
 from app.auth import (
     hash_password,
     verify_password_async,
-    create_token,
+    check_password_policy,
     hash_password_async,
+    is_cookie_session,
     require_real_user,
     resolve_request_credentials,
+    set_session_cookie,
 )
 from app.config import settings
 from app.database import get_db, write_transaction
-from app.routers.settings import get_session_max_age
+from app.services import site_settings
 from app.services.client_ip import client_ip
 
 logger = logging.getLogger(__name__)
@@ -116,16 +118,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     logger.info("login ok user=%s role=%s", user["username"], user["role"])
-    max_age = await get_session_max_age()
-    token = create_token(user["id"], user["username"], user["role"], max_age=max_age)
-    response.set_cookie(
-        key="token",
-        value=token,
-        httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite="lax",
-        max_age=max_age,
-    )
+    await set_session_cookie(response, user)
     return {
         "user": {
             "id": user["id"],
@@ -144,7 +137,7 @@ async def logout(response: Response):
 
 
 @router.get("/me", response_model=UserResponse)
-async def me(request: Request):
+async def me(request: Request, response: Response):
     # Always 401 when there's no real session, even with ANONYMOUS_READ on.
     # The frontend uses this 401 to detect "I'm a guest" vs "I'm logged in";
     # if /me silently returned the synthetic guest, the UI couldn't tell
@@ -152,6 +145,12 @@ async def me(request: Request):
     user = await resolve_request_credentials(request)
     if user is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    # Sliding session: the SPA calls /me on every app load, so re-issuing the
+    # cookie here means an active user is only logged out after
+    # `session_days` without opening the wiki. Bearer / API-token callers are
+    # left alone — they don't use the cookie.
+    if is_cookie_session(request) and await site_settings.get_bool("session_auto_renew"):
+        await set_session_cookie(response, user)
     return user
 
 
@@ -221,8 +220,7 @@ class ChangePasswordRequest(BaseModel):
 
 @router.put("/password")
 async def change_password(body: ChangePasswordRequest, user=Depends(require_real_user)):
-    if len(body.new_password) < 8:
-        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    await check_password_policy(body.new_password)
 
     db = await get_db()
     rows = await db.execute_fetchall(

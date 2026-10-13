@@ -8,6 +8,7 @@ from app.auth import get_current_user, require_admin, get_optional_user
 from app.config import settings
 from app.database import get_db, write_transaction
 from app.services.acl import can_read_media, list_readable_page_ids
+from app.services import site_settings
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 
@@ -43,8 +44,6 @@ _INLINE_SAFE_TYPES = {
     ".webp": "image/webp",
     ".pdf": "application/pdf",
 }
-
-MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20 MB
 
 # SVG can carry embedded scripts. We keep SVG uploads in the allow-list for
 # diagrams/icons but refuse anything that contains executable markup — and we
@@ -107,10 +106,13 @@ async def upload_media(
     if file.content_type not in ALLOWED_TYPES:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type}")
 
+    # Admin-configurable (Admin → Site settings); nginx caps the request
+    # body above the setting's max so the backend check is authoritative.
+    max_mb = await site_settings.get_int("max_upload_mb")
     content = await file.read()
     size = len(content)
-    if size > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=413, detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024*1024)} MB")
+    if size > max_mb * 1024 * 1024:
+        raise HTTPException(status_code=413, detail=f"File too large. Maximum size is {max_mb} MB")
 
     # Client-declared Content-Type is untrusted — verify against magic bytes
     # for formats we can recognise. Mismatches almost always indicate a

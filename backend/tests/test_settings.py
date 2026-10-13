@@ -5,7 +5,7 @@ import pytest
 from jose import jwt
 
 from app.auth import hash_password
-from app.routers.settings import DEFAULT_SESSION_DAYS, DEFAULT_SETTINGS, MAX_SESSION_DAYS
+from app.services.site_settings import BOOL_SETTINGS, DEFAULT_SETTINGS, INT_SETTINGS
 
 
 @pytest.mark.asyncio
@@ -103,48 +103,141 @@ async def test_put_partial_update_leaves_other_keys_alone(admin_client):
 
 
 @pytest.fixture
-async def reset_session_days(db):
-    """The test DB is shared across the session; don't leak a non-default
-    session length into tests that log in later."""
+async def reset_knobs(db):
+    """The test DB is shared across the session; don't leak non-default
+    session/upload/password knobs into later tests."""
     yield
-    await db.execute("DELETE FROM site_settings WHERE key = 'session_days'")
-    await db.commit()
-
-
-@pytest.mark.asyncio
-async def test_session_days_defaults_to_one_day(client):
-    res = await client.get("/api/settings")
-    assert res.json()["session_days"] == DEFAULT_SESSION_DAYS
-
-
-@pytest.mark.asyncio
-async def test_put_session_days_validates_range(admin_client, reset_session_days):
-    assert (await admin_client.put("/api/settings", json={"session_days": 0})).status_code == 422
-    assert (
-        await admin_client.put("/api/settings", json={"session_days": MAX_SESSION_DAYS + 1})
-    ).status_code == 422
-    res = await admin_client.put("/api/settings", json={"session_days": 30})
-    assert res.status_code == 200
-    assert res.json()["session_days"] == 30
-
-
-@pytest.mark.asyncio
-async def test_login_uses_configured_session_days(admin_client, client, db, reset_session_days):
-    """Both the cookie max_age and the JWT exp follow the admin setting."""
+    keys = list(INT_SETTINGS) + list(BOOL_SETTINGS)
     await db.execute(
-        "INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'editor')",
-        ("sessionuser", hash_password("sessionpass")),
+        f"DELETE FROM site_settings WHERE key IN ({','.join('?' * len(keys))})", keys
     )
     await db.commit()
+
+
+async def _make_user(db, username: str, password: str = "sessionpass") -> None:
+    await db.execute(
+        "INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'editor')",
+        (username, hash_password(password)),
+    )
+    await db.commit()
+
+
+def _token_lifetime(token: str) -> float:
+    claims = jwt.get_unverified_claims(token)
+    return claims["exp"] - datetime.now(timezone.utc).timestamp()
+
+
+@pytest.mark.asyncio
+async def test_knob_defaults(client):
+    data = (await client.get("/api/settings")).json()
+    for key, (default, _, _) in INT_SETTINGS.items():
+        assert data[key] == default
+    for key, default in BOOL_SETTINGS.items():
+        assert data[key] is default
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("key", list(INT_SETTINGS))
+async def test_put_int_knob_validates_range(admin_client, reset_knobs, key):
+    _, lo, hi = INT_SETTINGS[key]
+    assert (await admin_client.put("/api/settings", json={key: lo - 1})).status_code == 422
+    assert (await admin_client.put("/api/settings", json={key: hi + 1})).status_code == 422
+    res = await admin_client.put("/api/settings", json={key: hi})
+    assert res.status_code == 200
+    assert res.json()[key] == hi
+
+
+@pytest.mark.asyncio
+async def test_put_session_auto_renew_roundtrip(admin_client, reset_knobs):
+    res = await admin_client.put("/api/settings", json={"session_auto_renew": True})
+    assert res.json()["session_auto_renew"] is True
+    res = await admin_client.put("/api/settings", json={"session_auto_renew": False})
+    assert res.json()["session_auto_renew"] is False
+
+
+@pytest.mark.asyncio
+async def test_login_uses_configured_session_days(admin_client, client, db, reset_knobs):
+    """Both the cookie max_age and the JWT exp follow the admin setting."""
+    await _make_user(db, "sessionuser")
     await admin_client.put("/api/settings", json={"session_days": 14})
     res = await client.post(
         "/api/auth/login", json={"username": "sessionuser", "password": "sessionpass"}
     )
     assert res.status_code == 200
-    set_cookie = res.headers["set-cookie"]
-    assert f"Max-Age={14 * 86400}" in set_cookie
+    assert f"Max-Age={14 * 86400}" in res.headers["set-cookie"]
+    assert 13 * 86400 < _token_lifetime(res.cookies["token"]) <= 14 * 86400
 
-    token = res.cookies["token"]
-    claims = jwt.get_unverified_claims(token)
-    lifetime = claims["exp"] - datetime.now(timezone.utc).timestamp()
-    assert 13 * 86400 < lifetime <= 14 * 86400
+
+@pytest.mark.asyncio
+async def test_me_renews_cookie_only_when_enabled(admin_client, client, db, reset_knobs):
+    await _make_user(db, "renewuser")
+    res = await client.post(
+        "/api/auth/login", json={"username": "renewuser", "password": "sessionpass"}
+    )
+    assert res.status_code == 200
+
+    # Off by default: /me must not touch the cookie.
+    res = await client.get("/api/auth/me")
+    assert res.status_code == 200
+    assert "set-cookie" not in res.headers
+
+    await admin_client.put(
+        "/api/settings", json={"session_auto_renew": True, "session_days": 30}
+    )
+    res = await client.get("/api/auth/me")
+    assert res.status_code == 200
+    assert f"Max-Age={30 * 86400}" in res.headers["set-cookie"]
+    assert 29 * 86400 < _token_lifetime(res.cookies["token"]) <= 30 * 86400
+
+
+@pytest.mark.asyncio
+async def test_me_does_not_renew_for_bearer(admin_client, auth_client, reset_knobs):
+    """Bearer callers don't use the cookie; don't hand them one."""
+    await admin_client.put("/api/settings", json={"session_auto_renew": True})
+    res = await auth_client.get("/api/auth/me")
+    assert res.status_code == 200
+    assert "set-cookie" not in res.headers
+
+
+@pytest.mark.asyncio
+async def test_upload_respects_max_upload_mb(admin_client, auth_client, reset_knobs):
+    await admin_client.put("/api/settings", json={"max_upload_mb": 1})
+    big = b"x" * (1024 * 1024 + 1)
+    res = await auth_client.post(
+        "/api/media/upload", files={"file": ("big.txt", big, "text/plain")}
+    )
+    assert res.status_code == 413
+    assert "1 MB" in res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_password_min_length_applies_everywhere(admin_client, client, db, reset_knobs):
+    await admin_client.put("/api/settings", json={"password_min_length": 12})
+
+    # Admin create
+    res = await admin_client.post(
+        "/api/users", json={"username": "pwshort", "password": "elevenchars", "role": "editor"}
+    )
+    assert res.status_code == 400
+    res = await admin_client.post(
+        "/api/users", json={"username": "pwlong", "password": "twelve-chars", "role": "editor"}
+    )
+    assert res.status_code == 201
+    user_id = res.json()["id"]
+
+    # Admin reset
+    res = await admin_client.put(f"/api/users/{user_id}", json={"password": "short"})
+    assert res.status_code == 400
+
+    # Self-service change
+    login = await client.post(
+        "/api/auth/login", json={"username": "pwlong", "password": "twelve-chars"}
+    )
+    assert login.status_code == 200
+    res = await client.put(
+        "/api/auth/password",
+        json={"old_password": "twelve-chars", "new_password": "elevenchars"},
+        headers={"Origin": "http://localhost:5173"},  # CSRF check on cookie auth
+    )
+    assert res.status_code == 400
+    assert "12" in res.json()["detail"]

@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
+import useSettings from '../store/useSettings'
 
 export default function ChangePasswordModal({ isOpen, onClose }) {
   const { t } = useTranslation()
+  const passwordMinLength = useSettings((s) => s.password_min_length)
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -28,8 +30,8 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
     e.preventDefault()
     setError('')
 
-    if (newPassword.length < 4) {
-      setError(t('changePassword.tooShort'))
+    if (newPassword.length < passwordMinLength) {
+      setError(t('changePassword.tooShort', { min: passwordMinLength }))
       return
     }
     if (newPassword !== confirmPassword) {

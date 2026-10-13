@@ -25,6 +25,9 @@ function SiteSettingsSection() {
     home_page_slug: '',
     footer_text: '',
     session_days: 1,
+    session_auto_renew: false,
+    max_upload_mb: 20,
+    password_min_length: 8,
   })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
@@ -37,15 +40,26 @@ function SiteSettingsSection() {
       home_page_slug: settings.home_page_slug,
       footer_text: settings.footer_text,
       session_days: settings.session_days,
+      session_auto_renew: settings.session_auto_renew,
+      max_upload_mb: settings.max_upload_mb,
+      password_min_length: settings.password_min_length,
     })
-  }, [settings.site_name, settings.login_title, settings.login_subtitle, settings.home_page_slug, settings.footer_text, settings.session_days])
+  }, [
+    settings.site_name, settings.login_title, settings.login_subtitle, settings.home_page_slug, settings.footer_text,
+    settings.session_days, settings.session_auto_renew, settings.max_upload_mb, settings.password_min_length,
+  ])
 
   const handleSave = async (e) => {
     e.preventDefault()
     setSaving(true)
     setMessage(null)
     try {
-      await updateSettings({ ...form, session_days: Number(form.session_days) })
+      await updateSettings({
+        ...form,
+        session_days: Number(form.session_days),
+        max_upload_mb: Number(form.max_upload_mb),
+        password_min_length: Number(form.password_min_length),
+      })
       setMessage({ type: 'success', text: t('admin.site.saveSuccess') })
     } catch (err) {
       setMessage({ type: 'error', text: err?.response?.data?.detail || t('admin.site.saveFailed') })
@@ -123,18 +137,58 @@ function SiteSettingsSection() {
           />
           <p className="text-xs text-text-secondary mt-1">{t('admin.site.footerHint')}</p>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-text mb-1">{t('admin.site.sessionDays')}</label>
-          <input
-            type="number"
-            value={form.session_days}
-            onChange={field('session_days')}
-            min={1}
-            max={365}
-            required
-            className="w-32 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
-          />
-          <p className="text-xs text-text-secondary mt-1">{t('admin.site.sessionDaysHint')}</p>
+        <div className="pt-4 border-t border-hairline space-y-4">
+          <h3 className="text-sm font-semibold text-text">{t('admin.site.accessHeading')}</h3>
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">{t('admin.site.sessionDays')}</label>
+            <input
+              type="number"
+              value={form.session_days}
+              onChange={field('session_days')}
+              min={1}
+              max={365}
+              required
+              className="w-32 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
+            />
+            <p className="text-xs text-text-secondary mt-1">{t('admin.site.sessionDaysHint')}</p>
+          </div>
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-text">
+              <input
+                type="checkbox"
+                checked={form.session_auto_renew}
+                onChange={(e) => setForm((prev) => ({ ...prev, session_auto_renew: e.target.checked }))}
+              />
+              {t('admin.site.sessionAutoRenew')}
+            </label>
+            <p className="text-xs text-text-secondary mt-1">{t('admin.site.sessionAutoRenewHint')}</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">{t('admin.site.maxUploadMb')}</label>
+            <input
+              type="number"
+              value={form.max_upload_mb}
+              onChange={field('max_upload_mb')}
+              min={1}
+              max={100}
+              required
+              className="w-32 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
+            />
+            <p className="text-xs text-text-secondary mt-1">{t('admin.site.maxUploadMbHint')}</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">{t('admin.site.passwordMinLength')}</label>
+            <input
+              type="number"
+              value={form.password_min_length}
+              onChange={field('password_min_length')}
+              min={8}
+              max={128}
+              required
+              className="w-32 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
+            />
+            <p className="text-xs text-text-secondary mt-1">{t('admin.site.passwordMinLengthHint')}</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button

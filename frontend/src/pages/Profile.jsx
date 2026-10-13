@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import useAuth from '../store/useAuth'
 import api from '../api/client'
+import useSettings from '../store/useSettings'
 import ConfirmDialog from '../components/ConfirmDialog'
 
 export default function Profile() {
   const { t } = useTranslation()
+  const passwordMinLength = useSettings((s) => s.password_min_length)
   const { checkAuth } = useAuth()
   const [profile, setProfile] = useState(null)
   const [form, setForm] = useState({ display_name: '', email: '', bio: '' })
@@ -58,8 +60,8 @@ export default function Profile() {
     e.preventDefault()
     setPwMessage(null)
 
-    if (pwForm.new_password.length < 4) {
-      setPwMessage({ type: 'error', text: t('profile.password.tooShort') })
+    if (pwForm.new_password.length < passwordMinLength) {
+      setPwMessage({ type: 'error', text: t('profile.password.tooShort', { min: passwordMinLength }) })
       return
     }
     if (pwForm.new_password !== pwForm.confirm_password) {
