@@ -90,7 +90,7 @@ function UserMenu({ user, onLogout }) {
 export default function Layout({ children }) {
   const { t } = useTranslation()
   const { user, logout } = useAuth()
-  const { fetchTree } = usePages()
+  const fetchTree = usePages((s) => s.fetchTree)
   const { fetchBookmarks } = useBookmarks()
   const { fetchNotifications } = useNotifications()
   const siteName = useSettings((s) => s.site_name)

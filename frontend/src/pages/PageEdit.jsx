@@ -15,11 +15,18 @@ import useUnsavedWarning, { confirmDiscard } from '../hooks/useUnsavedWarning'
 import { stripBrTags } from '../lib/markdown'
 import api from '../api/client'
 
+// Mindmap pages always show the live preview, so emit editor changes sooner
+// than the editor's 200ms default. The editor backs off automatically when
+// serializing a large doc gets expensive (see Editor/changeEmitter.js).
+const MINDMAP_CHANGE_DELAY = 60
+
 export default function PageEdit() {
   const { t } = useTranslation()
   const { slug } = useParams()
   const navigate = useNavigate()
-  const { getPage, updatePage, fetchTree } = usePages()
+  const getPage = usePages((s) => s.getPage)
+  const updatePage = usePages((s) => s.updatePage)
+  const fetchTree = usePages((s) => s.fetchTree)
   const { user } = useAuth()
   const [page, setPage] = useState(null)
   const [title, setTitle] = useState('')
@@ -199,7 +206,9 @@ export default function PageEdit() {
       }
       const updated = await updatePage(slug, payload)
       baseVersionRef.current = updated.version
-      await fetchTree()
+      // Refresh the sidebar in the background instead of making the user wait
+      // an extra round trip before seeing the saved page.
+      fetchTree().catch(() => {})
       setOriginal({ title, content: cleanContent, mindmapLayout })
       setSaving(false)
       navigate(`/page/${slug}`)
@@ -367,6 +376,7 @@ export default function PageEdit() {
               ref={editorRef}
               defaultValue={content}
               onChange={setContent}
+              changeDelay={page?.page_type === 'mindmap' ? MINDMAP_CHANGE_DELAY : undefined}
               onDrawioOpen={handleDrawioOpen}
               onMediaPickerOpen={handleMediaPickerOpen}
               onTabOut={handleEditorTabOut}

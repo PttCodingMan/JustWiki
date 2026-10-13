@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import api from '../api/client'
 import usePermissions from './usePermissions'
+import { reconcileTree } from '../lib/reconcileTree'
 
-const usePages = create((set) => ({
+const usePages = create((set, get) => ({
   pages: [],
   tree: [],
   total: 0,
@@ -17,7 +18,7 @@ const usePages = create((set) => ({
 
   fetchTree: async () => {
     const res = await api.get('/pages/tree')
-    set({ tree: res.data })
+    set({ tree: reconcileTree(get().tree, res.data) })
     return res.data
   },
 
@@ -64,7 +65,7 @@ const usePages = create((set) => ({
     usePermissions.getState().invalidate()
     // Refresh tree after move
     const res = await api.get('/pages/tree')
-    set({ tree: res.data })
+    set({ tree: reconcileTree(get().tree, res.data) })
   },
 }))
 

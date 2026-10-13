@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react'
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import React, { memo, useCallback, useEffect, useMemo, useState, useRef } from 'react'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import usePages from '../../store/usePages'
 import useBookmarks from '../../store/useBookmarks'
@@ -8,21 +8,24 @@ import useChat from '../../store/useChat'
 import AppFooter from '../AppFooter'
 import ConfirmDialog from '../ConfirmDialog'
 
-function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
+// Memoized and deliberately free of router/store subscriptions: with a few
+// hundred pages, re-rendering every row on each navigation or tree refetch
+// was the dominant cost of opening and saving pages. Rows only re-render when
+// their own `node` changes (the store keeps unchanged nodes identical, see
+// lib/reconcileTree.js) or when they are on the active page's path.
+//
+// `active` is the shared `{ ids, activeId, path }` object for rows on the
+// path from the root to the current page, and null for every other row.
+const TreeNode = memo(function TreeNode({ node, depth = 0, parentId = null, index = 0, active = null, canAuthor, go }) {
   const { t } = useTranslation()
-  const location = useLocation()
-  const navigate = useNavigate()
-  const { movePage, deletePage, fetchTree } = usePages()
-  const { user } = useAuth()
-  // viewer covers both real viewers and the synthetic guest, since both
-  // resolve to permission='read' and can't reorder pages.
-  const canAuthor = user?.role !== 'viewer' && !user?.anonymous
-  const isActive = location.pathname === `/page/${node.slug}`
+  const movePage = usePages((s) => s.movePage)
+  const deletePage = usePages((s) => s.deletePage)
+  const fetchTree = usePages((s) => s.fetchTree)
+  const isActive = active?.activeId === node.id
   const hasChildren = node.children?.length > 0
-  const [expanded, setExpanded] = useState(
-    () => isActive || depth < 1 || (hasChildren && isChildActive(node, location.pathname))
-  )
-  const [trackedPath, setTrackedPath] = useState(location.pathname)
+  const [expanded, setExpanded] = useState(() => !!active || depth < 1)
+  const activePath = active?.path ?? null
+  const [trackedPath, setTrackedPath] = useState(activePath)
   const [dropPosition, setDropPosition] = useState(null) // 'before' | 'inside' | 'after'
   const [menuOpen, setMenuOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -30,17 +33,20 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
   const menuRef = useRef(null)
 
   useEffect(() => {
+    if (!menuOpen) return
     const handler = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  }, [menuOpen])
 
-  // Auto-expand when navigation lands on a descendant (adjusting state during render).
-  if (trackedPath !== location.pathname) {
-    setTrackedPath(location.pathname)
-    if (hasChildren && isChildActive(node, location.pathname)) {
+  // Auto-expand when navigation lands on this row or a descendant (adjusting
+  // state during render). Keyed on the path, not the `active` object, so a
+  // tree refetch doesn't re-open a row the user collapsed.
+  if (trackedPath !== activePath) {
+    setTrackedPath(activePath)
+    if (activePath !== null && hasChildren) {
       setExpanded(true)
     }
   }
@@ -105,7 +111,7 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
       await deletePage(node.slug)
       await fetchTree()
       // Viewing the page (or a descendant) we just trashed -> bounce home.
-      if (isChildActive(node, location.pathname)) navigate('/')
+      if (active) go('/')
     } catch (err) {
       console.error('Delete failed:', err)
     }
@@ -163,14 +169,14 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
             <span className={`w-1 h-1 rounded-full ${isActive ? 'bg-current' : 'bg-text-tertiary/60'}`} />
           </span>
         )}
-        <Link
-          to={`/page/${node.slug}`}
+        <TreeLink
+          href={`/page/${node.slug}`}
+          go={go}
           className="flex-1 py-[5px] pl-1 pr-2 text-[13.5px] leading-6 truncate"
           title={node.title}
-          draggable={false}
         >
           {node.title}
-        </Link>
+        </TreeLink>
         {canAuthor && (
           <div className="relative shrink-0 mr-1" ref={menuRef}>
             <button
@@ -195,10 +201,10 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
             </button>
             {menuOpen && (
               <div role="menu" className="menu-surface absolute right-0 top-full mt-1 z-50 w-44">
-                <MenuItem onClick={() => { setMenuOpen(false); navigate(`/new?parent=${node.id}`) }}>
+                <MenuItem onClick={() => { setMenuOpen(false); go(`/new?parent=${node.id}`) }}>
                   {t('sidebar.newSubpage')}
                 </MenuItem>
-                <MenuItem onClick={() => { setMenuOpen(false); navigate(`/page/${node.slug}/edit`) }}>
+                <MenuItem onClick={() => { setMenuOpen(false); go(`/page/${node.slug}/edit`) }}>
                   {t('pageView.edit')}
                 </MenuItem>
                 <MenuItem danger onClick={() => { setMenuOpen(false); setDeleteConfirmOpen(true) }}>
@@ -217,25 +223,53 @@ function TreeNode({ node, depth = 0, parentId = null, index = 0 }) {
             style={{ left: `${4 + depth * 14 + 10}px` }}
           />
           {node.children.map((child, i) => (
-            <TreeNode key={child.id} node={child} depth={depth + 1} parentId={node.id} index={i} />
+            <TreeNode
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              parentId={node.id}
+              index={i}
+              active={active?.ids.has(child.id) ? active : null}
+              canAuthor={canAuthor}
+              go={go}
+            />
           ))}
         </div>
       )}
-      <ConfirmDialog
-        open={deleteConfirmOpen}
-        title={t('pageView.confirm.deleteTitle')}
-        description={
-          <>
-            <div className="font-medium text-text mb-1">&quot;{node.title}&quot;</div>
-            <div>{t('pageView.confirm.deleteBody')}</div>
-          </>
-        }
-        confirmLabel={t('pageView.confirm.deleteLabel')}
-        variant="danger"
-        onConfirm={handleDelete}
-        onCancel={() => setDeleteConfirmOpen(false)}
-      />
+      {deleteConfirmOpen && (
+        <ConfirmDialog
+          open
+          title={t('pageView.confirm.deleteTitle')}
+          description={
+            <>
+              <div className="font-medium text-text mb-1">&quot;{node.title}&quot;</div>
+              <div>{t('pageView.confirm.deleteBody')}</div>
+            </>
+          }
+          confirmLabel={t('pageView.confirm.deleteLabel')}
+          variant="danger"
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteConfirmOpen(false)}
+        />
+      )}
     </div>
+  )
+})
+
+// Plain <a> instead of react-router's <Link>: every <Link> subscribes to the
+// router location, so hundreds of tree rows re-rendered on each navigation
+// even though the rows themselves are memoized. Modified / middle clicks keep
+// the browser's default (open in new tab, etc.).
+function TreeLink({ href, go, children, ...rest }) {
+  const onClick = (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    e.preventDefault()
+    go(href)
+  }
+  return (
+    <a href={href} onClick={onClick} draggable={false} {...rest}>
+      {children}
+    </a>
   )
 }
 
@@ -257,9 +291,22 @@ function MenuItem({ onClick, danger = false, children }) {
   )
 }
 
-function isChildActive(node, pathname) {
-  if (pathname === `/page/${node.slug}`) return true
-  return node.children?.some((c) => isChildActive(c, pathname)) || false
+// Ids on the path from a root to the page at `pathname`, or null when the
+// current route isn't a page in the tree.
+function findActive(tree, pathname) {
+  const chain = []
+  const walk = (nodes) => {
+    for (const n of nodes) {
+      chain.push(n.id)
+      if (pathname === `/page/${n.slug}`) return n.id
+      const hit = n.children?.length ? walk(n.children) : null
+      if (hit !== null) return hit
+      chain.pop()
+    }
+    return null
+  }
+  const activeId = walk(tree)
+  return activeId === null ? null : { ids: new Set(chain), activeId, path: pathname }
 }
 
 function NavItem({ to, icon, children }) {
@@ -297,10 +344,22 @@ function SectionLabel({ children }) {
 
 export default function Sidebar() {
   const { t } = useTranslation()
-  const { tree } = usePages()
-  const { bookmarks } = useBookmarks()
-  const { user } = useAuth()
-  const { aiStatus, checkStatus: checkAiStatus } = useChat()
+  const tree = usePages((s) => s.tree)
+  const bookmarks = useBookmarks((s) => s.bookmarks)
+  const user = useAuth((s) => s.user)
+  const aiStatus = useChat((s) => s.aiStatus)
+  const checkAiStatus = useChat((s) => s.checkStatus)
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  // viewer covers both real viewers and the synthetic guest, since both
+  // resolve to permission='read' and can't reorder pages.
+  const canAuthor = user?.role !== 'viewer' && !user?.anonymous
+  const active = useMemo(() => findActive(tree, pathname), [tree, pathname])
+  // Stable navigate wrapper so memoized rows don't re-render when the
+  // router hands out a new navigate function after each location change.
+  const navigateRef = useRef(navigate)
+  useEffect(() => { navigateRef.current = navigate })
+  const go = useCallback((to) => navigateRef.current(to), [])
 
   useEffect(() => {
     if (aiStatus === null) checkAiStatus()
@@ -389,7 +448,15 @@ export default function Sidebar() {
         )}
         <div className="space-y-px">
           {tree.map((node, i) => (
-            <TreeNode key={node.id} node={node} parentId={null} index={i} />
+            <TreeNode
+              key={node.id}
+              node={node}
+              parentId={null}
+              index={i}
+              active={active?.ids.has(node.id) ? active : null}
+              canAuthor={canAuthor}
+              go={go}
+            />
           ))}
         </div>
       </div>

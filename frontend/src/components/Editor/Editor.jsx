@@ -4,7 +4,6 @@ import { Editor as MilkdownEditor, rootCtx, defaultValueCtx, commandsCtx, serial
 import { commonmark, headingSchema, blockquoteSchema, hrSchema, bulletListSchema, orderedListSchema, codeBlockSchema, insertImageCommand } from '@milkdown/kit/preset/commonmark'
 import { clearTextInCurrentBlockCommand, setBlockTypeCommand, wrapInBlockTypeCommand, addBlockTypeCommand } from '@milkdown/kit/preset/commonmark'
 import { gfm } from '@milkdown/kit/preset/gfm'
-import { listener, listenerCtx } from '@milkdown/kit/plugin/listener'
 import { clipboard } from '@milkdown/kit/plugin/clipboard'
 import { history } from '@milkdown/kit/plugin/history'
 import { slashFactory, SlashProvider } from '@milkdown/kit/plugin/slash'
@@ -18,6 +17,7 @@ import { math, mathBlockSchema } from './math'
 import { tableTooltip } from './tableTooltip'
 import { tablePasteExpand } from './tablePasteExpand'
 import { isStrayPostCompositionEnter, NO_COMPOSITION } from './imeGuard'
+import { createChangeEmitter } from './changeEmitter'
 
 const SLASH_ITEM_DEFS = [
   { id: 'h1', icon: 'H1' },
@@ -580,11 +580,12 @@ class MentionMenu {
 
 const mentionPluginKey = new PluginKey('mention-autocomplete')
 
-const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawioOpen, onMediaPickerOpen, onTabOut, pageSlug = null }, ref) {
+const Editor = forwardRef(function Editor({ defaultValue = '', onChange, changeDelay, onDrawioOpen, onMediaPickerOpen, onTabOut, pageSlug = null }, ref) {
   const { t } = useTranslation()
   const editorRef = useRef(null)
   const containerRef = useRef(null)
   const onChangeRef = useRef(onChange)
+  const changeDelayRef = useRef(changeDelay)
   const drawioHandlerRef = useRef(onDrawioOpen)
   const mediaHandlerRef = useRef(onMediaPickerOpen)
   const onTabOutRef = useRef(onTabOut)
@@ -615,6 +616,7 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
 
   useEffect(() => {
     onChangeRef.current = onChange
+    changeDelayRef.current = changeDelay
   })
 
   useEffect(() => {
@@ -840,20 +842,55 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
       })
     })
 
+    // Emits `onChange(markdown)` after an adaptive debounce (see
+    // changeEmitter.js). Replaces Milkdown's listener plugin, whose fixed
+    // 200ms delay made live previews lag behind typing. Mirrors its filters:
+    // only doc changes that enter history, and only when the doc differs
+    // from what was last emitted.
+    const changePlugin = $prose((ctx) => {
+      let emittedDoc = null
+      let pendingDoc = null
+      const emitter = createChangeEmitter({
+        getMinDelay: () => changeDelayRef.current,
+        flush: () => {
+          if (!pendingDoc || emittedDoc?.eq(pendingDoc)) return
+          // Skip parent state updates while IME composition is active —
+          // the React re-render they trigger can interrupt composition on
+          // Windows. Retry later so the committed text still reaches
+          // onChange even if compositionend dispatches no new transaction.
+          if (editorViewRef.current?.composing) {
+            emitter.schedule()
+            return
+          }
+          const markdown = ctx.get(serializerCtx)(pendingDoc)
+          emittedDoc = pendingDoc
+          pendingDoc = null
+          onChangeRef.current?.(markdown)
+        },
+      })
+      return new Plugin({
+        key: new PluginKey('JUSTWIKI_CHANGE_EMITTER'),
+        state: {
+          init: (_, state) => {
+            emittedDoc = state.doc
+            return null
+          },
+          apply: (tr) => {
+            if (!tr.docChanged || tr.getMeta('addToHistory') === false) return null
+            pendingDoc = tr.doc
+            emitter.schedule()
+            return null
+          },
+        },
+        view: () => ({ destroy: () => emitter.cancel() }),
+      })
+    })
+
     const init = async () => {
       const editor = await MilkdownEditor.make()
         .config((ctx) => {
           ctx.set(rootCtx, containerRef.current)
           ctx.set(defaultValueCtx, defaultValue)
-          ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
-            // Skip parent state updates while IME composition is active —
-            // the React re-render they trigger can interrupt composition on
-            // Windows. ProseMirror dispatches a final transaction at
-            // compositionend, which fires the listener again with the
-            // committed text, so no input is lost.
-            if (editorViewRef.current?.composing) return
-            onChangeRef.current?.(markdown)
-          })
           let slashMenuView = null
           ctx.set(slash.key, {
             view: (editorView) => {
@@ -871,7 +908,7 @@ const Editor = forwardRef(function Editor({ defaultValue = '', onChange, onDrawi
         .use(commonmark)
         .use(gfm)
         .use(math)
-        .use(listener)
+        .use(changePlugin)
         .use(clipboard)
         .use(history)
         .use(slash)
