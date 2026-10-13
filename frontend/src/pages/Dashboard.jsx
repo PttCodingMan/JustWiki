@@ -91,8 +91,8 @@ function LegendDot({ color, label, border }) {
 function StatCard({ title, value, sub }) {
   return (
     <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-5">
-      <div className="text-xs uppercase tracking-wide text-text-secondary">{title}</div>
-      <div className="mt-1 text-2xl font-semibold text-text">{value}</div>
+      <div className="eyebrow">{title}</div>
+      <div className="mt-3 font-display text-[2.5rem] leading-none tracking-tight text-text tabular-nums">{value}</div>
       {sub && <div className="mt-1 text-xs text-text-secondary">{sub}</div>}
     </div>
   )
@@ -179,12 +179,12 @@ export default function Dashboard() {
         <>
           <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-5">
             <div className="flex items-baseline justify-between">
-              <div className="text-xs uppercase tracking-wide text-text-secondary">{t('dashboard.storage')}</div>
+              <div className="eyebrow">{t('dashboard.storage')}</div>
               {storagePct != null && (
                 <div className="text-xs text-text-secondary">{t('dashboard.usedSuffix', { percent: formatPercent(storagePct) })}</div>
               )}
             </div>
-            <div className="mt-1 text-2xl font-semibold text-text">{storageHeadline}</div>
+            <div className="mt-3 font-display text-[2.5rem] leading-none tracking-tight text-text tabular-nums">{storageHeadline}</div>
             {storage && <StorageBar storage={storage} />}
           </div>
 

@@ -159,7 +159,9 @@ export default function MarkdownViewer({
             copyBtn.setAttribute('aria-label', t('codeBlock.copy'))
           }, 1600)
         }
-        navigator.clipboard?.writeText(code?.textContent ?? '').then(done, () => {})
+        // Clipboard API is absent on insecure (non-HTTPS, non-localhost) origins.
+        if (!navigator.clipboard?.writeText) return
+        navigator.clipboard.writeText(code?.textContent ?? '').then(done, () => {})
         return
       }
 

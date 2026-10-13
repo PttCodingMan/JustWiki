@@ -782,8 +782,11 @@ code, samp, pre,
 }
 .callout-icon svg { width: 100%; height: 100%; }
 .callout-body { font-size: 0.95em; line-height: 1.65; color: var(--color-text); }
-.callout-body p { margin: 0; }
-.callout-body p + p { margin-top: 0.6em; }
+.callout-body p,
+.markdown-viewer .callout-body p { margin: 0; }
+.callout-body p + p,
+.markdown-viewer .callout-body p + p { margin-top: 0.6em; }
+.markdown-viewer .callout-body > :last-child { margin-bottom: 0; }
 .dark .callout {
   background: color-mix(in oklab, var(--callout-hue) 10%, var(--color-surface));
   border-color: color-mix(in oklab, var(--callout-hue) 30%, var(--color-border));
