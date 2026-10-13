@@ -140,7 +140,7 @@ export default function Layout({ children }) {
             <path d="M9 4v16" />
           </svg>
         </button>
-        <Link to="/" className="group flex items-center gap-2 pl-1 pr-2 min-w-0">
+        <Link to="/" aria-label={siteName} className="group flex items-center gap-2 pl-1 pr-2 min-w-0">
           <img
             src="/favicon.png"
             alt=""
@@ -217,7 +217,7 @@ export default function Layout({ children }) {
           />
         )}
         <div
-          className={`shrink-0 overflow-hidden transition-[width] duration-300 z-40 no-print
+          className={`shrink-0 overflow-hidden transition-[width] duration-300 z-30 no-print
             max-md:fixed max-md:top-14 max-md:bottom-0 max-md:left-0 max-md:shadow-2xl`}
           style={{ width: sidebarOpen ? 'var(--sidebar-width)' : '0px', transitionTimingFunction: 'var(--ease-out-expo)' }}
         >

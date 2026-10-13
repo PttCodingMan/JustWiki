@@ -59,7 +59,7 @@ export default function Chat() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto h-[calc(100vh-4rem)] flex flex-col">
+    <div className="max-w-3xl mx-auto h-[calc(100vh-var(--nav-height)-3rem)] sm:h-[calc(100vh-var(--nav-height)-5rem)] flex flex-col">
       <div className="flex items-center justify-between py-4">
         <div>
           <h1 className="page-title">{t('chat.title')}</h1>

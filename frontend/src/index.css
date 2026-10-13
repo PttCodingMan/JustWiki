@@ -1672,7 +1672,9 @@ mark {
   margin: 0.3rem 0.4rem;
 }
 .page-actions-menu-inline {
-  right: 0;
+  left: 0;
+  right: auto;
+  transform-origin: top left;
   top: calc(100% + 0.5rem);
 }
 .page-actions-menu-dock {
@@ -1845,12 +1847,14 @@ mark {
 }
 
 /* Inside the drawer the rail has no border/bg — let the sheet be the container */
+}
+
+/* Unlayered so it beats the unlayered base .toc-rail rule */
 .toc-drawer-body .toc-rail {
   background: transparent;
   border: none;
   border-radius: 0;
   padding: 0;
-}
 }
 
 /* Headings should clear the navbar when scrolled-to via TOC */
@@ -1970,7 +1974,6 @@ mark {
 .dark .transclusion-content { color: var(--color-text); }
 
 /* Floating action bar */
-.dark .fab-btn-primary { background: var(--color-primary); color: var(--color-primary-text); }
 .dark .fab-btn-active { background: var(--color-primary-soft); color: var(--color-accent); box-shadow: inset 0 0 0 1px var(--color-primary); }
 
 /* TOC dark */

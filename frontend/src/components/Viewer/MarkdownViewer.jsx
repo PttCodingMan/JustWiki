@@ -130,7 +130,15 @@ export default function MarkdownViewer({
     if (!root) return
     root.querySelectorAll('pre:not(.mermaid-error) > code').forEach((code) => {
       const pre = code.parentElement
-      if (pre.parentElement?.classList.contains('code-block')) return
+      const existing = pre.parentElement?.classList.contains('code-block') && pre.parentElement.querySelector('.code-copy')
+      if (existing) {
+        // Language switched: refresh labels on already-decorated blocks.
+        if (!existing.dataset.copied) {
+          existing.setAttribute('aria-label', t('codeBlock.copy'))
+          existing.title = t('codeBlock.copy')
+        }
+        return
+      }
       const wrap = document.createElement('div')
       wrap.className = 'code-block'
       const lang = (code.className.match(/language-([\w+#-]+)/) || [])[1]
@@ -159,9 +167,27 @@ export default function MarkdownViewer({
             copyBtn.setAttribute('aria-label', t('codeBlock.copy'))
           }, 1600)
         }
-        // Clipboard API is absent on insecure (non-HTTPS, non-localhost) origins.
-        if (!navigator.clipboard?.writeText) return
-        navigator.clipboard.writeText(code?.textContent ?? '').then(done, () => {})
+        const text = code?.textContent ?? ''
+        // Clipboard API is absent on insecure (plain-HTTP) origins, which is
+        // common for self-hosted installs — fall back to execCommand there.
+        const legacyCopy = () => {
+          const ta = document.createElement('textarea')
+          ta.value = text
+          ta.setAttribute('readonly', '')
+          ta.style.position = 'fixed'
+          ta.style.opacity = '0'
+          document.body.appendChild(ta)
+          ta.select()
+          let ok = false
+          try { ok = document.execCommand('copy') } catch { ok = false }
+          document.body.removeChild(ta)
+          if (ok) done()
+        }
+        if (navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(text).then(done, legacyCopy)
+        } else {
+          legacyCopy()
+        }
         return
       }
 
