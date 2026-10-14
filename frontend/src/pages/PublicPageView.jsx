@@ -110,8 +110,8 @@ export default function PublicPageView({ notFound }) {
         </div>
       </header>
       <main className="flex-1 w-full px-4 sm:px-8 py-10 sm:py-14">
-        <div className="max-w-[72rem] mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-14 xl:gap-20">
-          <article className="min-w-0 max-w-[46rem] w-full animate-enter">
+        <div className="max-w-[90rem] mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-14 xl:gap-20">
+          <article className="min-w-0 w-full animate-enter">
             <header className="mb-10 sm:mb-12">
               <h1 className="font-display text-[2.6rem] sm:text-[3.6rem] leading-[1.02] tracking-[-0.025em] text-text text-balance break-words">{page.title}</h1>
               <div className="mt-6 flex items-center flex-wrap gap-x-3 gap-y-2 text-[13px] text-text-secondary">

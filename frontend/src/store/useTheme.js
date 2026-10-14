@@ -48,6 +48,21 @@ export const themes = {
   },
 }
 
+// Reading font. `sans` keeps the default Inter/Instrument Serif pairing; the
+// mono options swap both the body and display stacks (see index.css,
+// `:root[data-font=…]`). Code blocks keep JetBrains Mono either way.
+export const fonts = {
+  sans: { name: 'Inter', mono: false },
+  jetbrains: { name: 'JetBrains Mono', mono: true },
+  plex: { name: 'IBM Plex Mono', mono: true },
+}
+
+const DEFAULT_FONT = 'sans'
+
+function applyFont(fontId) {
+  document.documentElement.setAttribute('data-font', fontId)
+}
+
 function applyTheme(themeId) {
   const theme = themes[themeId] || themes.sand
   const root = document.documentElement
@@ -78,6 +93,7 @@ function safeSet(key, value) {
 const useTheme = create((set) => ({
   theme: safeGet('theme') || 'sand',
   dark: false,
+  font: safeGet('font') || DEFAULT_FONT,
 
   setTheme: (themeId) => {
     safeSet('theme', themeId)
@@ -85,11 +101,21 @@ const useTheme = create((set) => ({
     set({ theme: themeId, dark: themes[themeId]?.dark ?? false })
   },
 
+  setFont: (fontId) => {
+    if (!fonts[fontId]) return
+    safeSet('font', fontId)
+    applyFont(fontId)
+    set({ font: fontId })
+  },
+
   init: () => {
     const saved = safeGet('theme')
     const themeId = saved && themes[saved] ? saved : 'sand'
+    const savedFont = safeGet('font')
+    const fontId = savedFont && fonts[savedFont] ? savedFont : DEFAULT_FONT
     applyTheme(themeId)
-    set({ theme: themeId, dark: themes[themeId]?.dark ?? false })
+    applyFont(fontId)
+    set({ theme: themeId, dark: themes[themeId]?.dark ?? false, font: fontId })
   },
 }))
 

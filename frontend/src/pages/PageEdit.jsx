@@ -285,7 +285,7 @@ export default function PageEdit() {
   // on slug as a second guard.)
   if (!page || page.slug !== slug) {
     return (
-      <div className="max-w-[52rem] mx-auto" aria-busy="true" aria-label={t('common.loading')}>
+      <div className="max-w-[72rem] mx-auto" aria-busy="true" aria-label={t('common.loading')}>
         <div className="skeleton h-12 w-2/3 mb-6 rounded-xl" />
         <div className="skeleton h-[500px] w-full rounded-2xl" />
       </div>
@@ -293,7 +293,7 @@ export default function PageEdit() {
   }
 
   return (
-    <div className={showPreview ? 'edit-split-root' : 'max-w-[52rem] mx-auto'}>
+    <div className={showPreview ? 'edit-split-root' : 'max-w-[72rem] mx-auto'}>
       <div className="mb-2">
         <input
           type="text"

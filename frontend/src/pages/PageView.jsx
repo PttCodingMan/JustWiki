@@ -291,8 +291,8 @@ export default function PageView() {
 
   if (loading) {
     return (
-      <div className="max-w-[72rem] mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-14 xl:gap-20" aria-busy="true" aria-label={t('common.loading')}>
-        <div className="max-w-[46rem] w-full">
+      <div className="max-w-[90rem] mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-14 xl:gap-20" aria-busy="true" aria-label={t('common.loading')}>
+        <div className="w-full">
           <div className="skeleton h-3 w-40 mb-6" />
           <div className="skeleton h-14 w-3/4 mb-5 rounded-xl" />
           <div className="skeleton h-3.5 w-72 mb-12" />
@@ -514,8 +514,8 @@ export default function PageView() {
   return (
     <>
     <ReadingProgress />
-    <div className="max-w-[72rem] mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-14 xl:gap-20">
-      <article className="min-w-0 max-w-[46rem] w-full animate-enter">
+    <div className="max-w-[90rem] mx-auto lg:grid lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-14 xl:gap-20">
+      <article className="min-w-0 w-full animate-enter">
         <header className="mb-10 sm:mb-12">
           {/* Breadcrumbs */}
           <nav aria-label="Breadcrumb" className="flex items-center flex-wrap gap-x-1.5 gap-y-1 text-[13px] text-text-tertiary mb-5 min-h-5">

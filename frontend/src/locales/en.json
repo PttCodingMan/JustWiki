@@ -70,7 +70,10 @@
     "ocean": "Ocean",
     "sand": "Sand",
     "sunset": "Sunset",
-    "nord": "Nord"
+    "nord": "Nord",
+    "font": "Font",
+    "fontMono": "Monospace",
+    "fontDefault": "Default"
   },
   "home": {
     "title": "All Pages",

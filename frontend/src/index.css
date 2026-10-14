@@ -267,6 +267,32 @@ body {
   color: var(--color-text);
 }
 
+/* Reading-font preference (useTheme `font`, set as <html data-font>). The
+   mono options replace both the body and display stacks so headings and prose
+   share one face. Latin glyphs come from the mono font; CJK falls through to
+   the same system CJK fonts as the default stack. Inter-specific stylistic
+   sets are switched off since they map to unrelated glyphs in these fonts. */
+:root[data-font="jetbrains"],
+:root[data-font="plex"] {
+  --font-cjk-fallback: "PingFang TC", "Noto Sans TC", "Hiragino Sans",
+    "Microsoft JhengHei", "Noto Sans CJK TC", "Apple SD Gothic Neo",
+    "Noto Sans KR";
+}
+:root[data-font="jetbrains"] {
+  --font-sans: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    var(--font-cjk-fallback), monospace;
+  --font-display: var(--font-sans);
+}
+:root[data-font="plex"] {
+  --font-sans: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    var(--font-cjk-fallback), monospace;
+  --font-display: var(--font-sans);
+}
+:root[data-font="jetbrains"] body,
+:root[data-font="plex"] body {
+  font-feature-settings: normal;
+}
+
 ::selection {
   background: color-mix(in oklab, var(--color-primary) 28%, transparent);
   color: inherit;
