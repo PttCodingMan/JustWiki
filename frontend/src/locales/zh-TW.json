@@ -69,7 +69,10 @@
     "ocean": "海洋",
     "sand": "沙地",
     "sunset": "日落",
-    "nord": "北歐"
+    "nord": "北歐",
+    "font": "字體",
+    "fontMono": "等寬",
+    "fontDefault": "預設"
   },
   "home": {
     "title": "所有頁面",

@@ -270,7 +270,7 @@ export default function NewPage() {
   }
 
   return (
-    <div className="max-w-[52rem] mx-auto animate-enter">
+    <div className="max-w-[72rem] mx-auto animate-enter">
       {parentHint}
       <div className="flex items-center justify-between gap-4 mb-2">
         <input

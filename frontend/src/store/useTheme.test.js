@@ -9,6 +9,7 @@ describe('useTheme Store', () => {
     
     // Reset document element
     document.documentElement.removeAttribute('data-theme')
+    document.documentElement.removeAttribute('data-font')
     document.documentElement.classList.remove('dark')
   })
 
@@ -67,5 +68,40 @@ describe('useTheme Store', () => {
 
     expect(result.current.theme).toBe('sand')
     expect(document.documentElement.getAttribute('data-theme')).toBe('sand')
+  })
+
+  it('should default to the sans font on init', () => {
+    const { result } = renderHook(() => useTheme())
+    act(() => {
+      result.current.init()
+    })
+    expect(result.current.font).toBe('sans')
+    expect(document.documentElement.getAttribute('data-font')).toBe('sans')
+  })
+
+  it('should set font and update localStorage and DOM', () => {
+    const { result } = renderHook(() => useTheme())
+    act(() => {
+      result.current.setFont('jetbrains')
+    })
+    expect(result.current.font).toBe('jetbrains')
+    expect(localStorage.getItem('font')).toBe('jetbrains')
+    expect(document.documentElement.getAttribute('data-font')).toBe('jetbrains')
+  })
+
+  it('should ignore unknown fonts and fall back to sans on init', () => {
+    const { result } = renderHook(() => useTheme())
+    act(() => {
+      result.current.setFont('plex')
+      result.current.setFont('comic-sans')
+    })
+    expect(result.current.font).toBe('plex')
+
+    localStorage.setItem('font', 'comic-sans')
+    act(() => {
+      result.current.init()
+    })
+    expect(result.current.font).toBe('sans')
+    expect(document.documentElement.getAttribute('data-font')).toBe('sans')
   })
 })

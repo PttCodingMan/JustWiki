@@ -69,7 +69,10 @@
     "ocean": "오션",
     "sand": "샌드",
     "sunset": "선셋",
-    "nord": "노르드"
+    "nord": "노르드",
+    "font": "글꼴",
+    "fontMono": "고정폭",
+    "fontDefault": "기본"
   },
   "home": {
     "title": "모든 페이지",

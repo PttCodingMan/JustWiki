@@ -69,7 +69,10 @@
     "ocean": "オーシャン",
     "sand": "サンド",
     "sunset": "サンセット",
-    "nord": "ノルド"
+    "nord": "ノルド",
+    "font": "フォント",
+    "fontMono": "等幅",
+    "fontDefault": "デフォルト"
   },
   "home": {
     "title": "すべてのページ",
