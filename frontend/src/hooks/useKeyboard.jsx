@@ -1,9 +1,10 @@
 import React, { useEffect } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
+import { useGuardedNavigate } from './useUnsavedWarning'
 import useAuth from '../store/useAuth'
 
 export default function KeyboardShortcuts({ onOpenSearch }) {
-  const navigate = useNavigate()
+  const navigate = useGuardedNavigate()
   const location = useLocation()
   const { user } = useAuth()
 

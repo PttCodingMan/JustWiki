@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useGuardedNavigate } from '../../hooks/useUnsavedWarning'
 import { useTranslation } from 'react-i18next'
 import DOMPurify from 'dompurify'
 import useSearch from '../../store/useSearch'
@@ -15,7 +15,7 @@ export default function SearchModal({ isOpen, onClose }) {
   const [selectedIdx, setSelectedIdx] = useState(0)
   const [wasOpen, setWasOpen] = useState(isOpen)
   const inputRef = useRef(null)
-  const navigate = useNavigate()
+  const navigate = useGuardedNavigate()
   const { results, loading, search, clearSearch } = useSearch()
 
   // Reset form each time the modal transitions closed → open (adjusting state during render).
