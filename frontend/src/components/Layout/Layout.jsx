@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { confirmLeave, useGuardedNavigate } from '../../hooks/useUnsavedWarning'
 import { useTranslation } from 'react-i18next'
 import useAuth from '../../store/useAuth'
 import usePages from '../../store/usePages'
@@ -95,6 +96,7 @@ export default function Layout({ children }) {
   const { fetchNotifications } = useNotifications()
   const siteName = useSettings((s) => s.site_name)
   const navigate = useNavigate()
+  const guardedNavigate = useGuardedNavigate()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -117,6 +119,7 @@ export default function Layout({ children }) {
   }, [isGuest])
 
   const handleLogout = async () => {
+    if (!confirmLeave()) return
     await logout()
     navigate('/login')
   }
@@ -184,7 +187,7 @@ export default function Layout({ children }) {
 
         {!isGuest && (
           <button
-            onClick={() => navigate('/new')}
+            onClick={() => guardedNavigate('/new')}
             className="btn-primary max-sm:w-9 max-sm:px-0 mx-1"
             title={t('nav.newPage')}
             aria-label={t('nav.newPage')}

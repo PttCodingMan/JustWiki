@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useGuardedNavigate } from '../../hooks/useUnsavedWarning'
 import { useTranslation } from 'react-i18next'
 import useNotifications from '../../store/useNotifications'
 
@@ -8,7 +8,7 @@ export default function NotificationBell() {
   const { items, unreadCount, fetchNotifications, markAllRead, markRead } = useNotifications()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
-  const navigate = useNavigate()
+  const navigate = useGuardedNavigate()
 
   // Close on outside click
   useEffect(() => {
