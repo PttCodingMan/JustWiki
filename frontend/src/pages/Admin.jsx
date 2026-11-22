@@ -7,6 +7,7 @@ import useSettings from '../store/useSettings'
 import api from '../api/client'
 import Editor from '../components/Editor/Editor'
 import { formatBytes } from '../lib/format'
+import PasswordInput from '../components/PasswordInput'
 
 function SiteSettingsSection() {
   const { t } = useTranslation()
@@ -686,13 +687,13 @@ function UsersSection() {
               required
               className="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
             />
-            <input
-              type="password"
+            <PasswordInput
+              wrapperClassName="flex-1"
               placeholder={t('admin.users.passwordPlaceholder')}
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
               required
-              className="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary bg-surface text-text"
             />
             <select
               value={form.role}

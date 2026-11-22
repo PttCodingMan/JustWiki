@@ -21,6 +21,8 @@
     "createFirstPage": "最初のページを作成",
     "username": "ユーザー名",
     "password": "パスワード",
+    "showPassword": "パスワードを表示",
+    "hidePassword": "パスワードを隠す",
     "logIn": "ログイン",
     "invalidCredentials": "ユーザー名またはパスワードが正しくありません",
     "continueWith": "{{provider}} で続ける",

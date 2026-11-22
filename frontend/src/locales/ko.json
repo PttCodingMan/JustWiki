@@ -21,6 +21,8 @@
     "createFirstPage": "첫 페이지 만들기",
     "username": "사용자명",
     "password": "비밀번호",
+    "showPassword": "비밀번호 표시",
+    "hidePassword": "비밀번호 숨기기",
     "logIn": "로그인",
     "invalidCredentials": "사용자명 또는 비밀번호가 올바르지 않습니다",
     "continueWith": "{{provider}}(으)로 계속",

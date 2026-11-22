@@ -21,6 +21,8 @@
     "createFirstPage": "Create your first page",
     "username": "Username",
     "password": "Password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "logIn": "Log in",
     "invalidCredentials": "Invalid username or password",
     "continueWith": "Continue with {{provider}}",
