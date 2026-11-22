@@ -5,6 +5,7 @@ import useAuth from '../store/useAuth'
 import useSettings from '../store/useSettings'
 import api from '../api/client'
 import AppFooter from '../components/AppFooter'
+import PasswordInput from '../components/PasswordInput'
 
 // Only same-origin paths are allowed as a post-login destination. Refuse
 // protocol-relative ("//evil.com") or absolute URLs so a crafted link can't
@@ -173,9 +174,8 @@ export default function Login() {
             </div>
             <div>
               <label htmlFor="login-password" className="block text-[13px] font-medium text-text-secondary mb-1.5">{t('common.password')}</label>
-              <input
+              <PasswordInput
                 id="login-password"
-                type="password"
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

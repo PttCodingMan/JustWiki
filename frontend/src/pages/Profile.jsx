@@ -5,6 +5,7 @@ import useAuth from '../store/useAuth'
 import api from '../api/client'
 import useSettings from '../store/useSettings'
 import ConfirmDialog from '../components/ConfirmDialog'
+import PasswordInput from '../components/PasswordInput'
 
 export default function Profile() {
   const { t } = useTranslation()
@@ -191,8 +192,7 @@ export default function Profile() {
         <form onSubmit={handlePasswordChange} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-text mb-1">{t('profile.password.current')}</label>
-            <input
-              type="password"
+            <PasswordInput
               value={pwForm.old_password}
               onChange={(e) => setPwForm({ ...pwForm, old_password: e.target.value })}
               required
@@ -201,8 +201,7 @@ export default function Profile() {
           </div>
           <div>
             <label className="block text-sm font-medium text-text mb-1">{t('profile.password.new')}</label>
-            <input
-              type="password"
+            <PasswordInput
               value={pwForm.new_password}
               onChange={(e) => setPwForm({ ...pwForm, new_password: e.target.value })}
               required
@@ -211,8 +210,7 @@ export default function Profile() {
           </div>
           <div>
             <label className="block text-sm font-medium text-text mb-1">{t('profile.password.confirm')}</label>
-            <input
-              type="password"
+            <PasswordInput
               value={pwForm.confirm_password}
               onChange={(e) => setPwForm({ ...pwForm, confirm_password: e.target.value })}
               required
