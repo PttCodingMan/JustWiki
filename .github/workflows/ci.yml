@@ -67,22 +67,14 @@ jobs:
         run: |
           cd backend
           uv venv
-          uv pip install -r requirements.txt -r requirements-dev.txt pytest-cov
+          uv pip install -r requirements.txt -r requirements-dev.txt
           
-      - name: Run tests with coverage
+      - name: Run tests
         run: |
           cd backend
           source .venv/bin/activate
           export PYTHONPATH=$PYTHONPATH:.
-          pytest --cov=app --cov-report=xml
-          
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7
-        with:
-          files: ./backend/coverage.xml
-          flags: backend
-          token: ${{ secrets.CODECOV_TOKEN }}
-        continue-on-error: true
+          pytest
 
   frontend-tests:
     needs: changes
@@ -108,18 +100,10 @@ jobs:
           cd frontend
           npm run lint
           
-      - name: Run tests with coverage
+      - name: Run tests
         run: |
           cd frontend
-          npm test -- --coverage
-          
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7
-        with:
-          files: ./frontend/coverage/clover.xml
-          flags: frontend
-          token: ${{ secrets.CODECOV_TOKEN }}
-        continue-on-error: true
+          npm test
 
   build-and-push:
     needs: [changes, backend-tests, frontend-tests]
