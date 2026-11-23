@@ -31,18 +31,19 @@ def anon_off(monkeypatch):
     yield
 
 
-async def _make_acl_restricted_page(auth_client, slug: str, owner_user_id: int):
+async def _make_acl_restricted_page(auth_client, title: str, owner_user_id: int):
     """Create a page and pin a user-only ACL row so other users see 404.
 
-    Returns the page id. The ACL anchor lives on the page itself, with one
+    Returns the page slug. The ACL anchor lives on the page itself, with one
     grant to a user that nobody but `owner_user_id` is. Editors and admins
     are unaffected (admin bypasses; the test never queries as that editor).
     """
     res = await auth_client.post("/api/pages", json={
-        "title": slug, "content_md": "secret", "slug": slug,
+        "title": title, "content_md": "secret",
     })
     assert res.status_code in (200, 201)
     page_id = res.json()["id"]
+    slug = res.json()["slug"]
 
     db = await get_db()
     # Pin a single user grant — anyone not matching that principal (incl. the
@@ -59,7 +60,7 @@ async def _make_acl_restricted_page(auth_client, slug: str, owner_user_id: int):
     # Drop the readable cache so the new ACL row takes effect immediately.
     from app.services.acl import invalidate_readable_cache
     invalidate_readable_cache()
-    return page_id
+    return slug
 
 
 # ── Flag OFF: regression baseline ────────────────────────────────────
@@ -67,15 +68,16 @@ async def _make_acl_restricted_page(auth_client, slug: str, owner_user_id: int):
 
 @pytest.mark.asyncio
 async def test_flag_off_blocks_all_anonymous_reads(anon_off, auth_client, client):
-    await auth_client.post("/api/pages", json={
-        "title": "Open Page", "content_md": "hi", "slug": "anon-off-open",
+    created = await auth_client.post("/api/pages", json={
+        "title": "Open Page", "content_md": "hi",
     })
+    open_slug = created.json()["slug"]
 
     for path in (
         "/api/pages",
         "/api/pages/tree",
         "/api/pages/graph",
-        "/api/pages/anon-off-open",
+        f"/api/pages/{open_slug}",
         "/api/search?q=hi",
         "/api/auth/me",
         "/api/tags",
@@ -90,36 +92,38 @@ async def test_flag_off_blocks_all_anonymous_reads(anon_off, auth_client, client
 
 @pytest.mark.asyncio
 async def test_flag_on_lets_guest_read_open_page(anon_on, auth_client, client):
-    await auth_client.post("/api/pages", json={
-        "title": "Demo Page", "content_md": "# Hello", "slug": "anon-demo-open",
+    created = await auth_client.post("/api/pages", json={
+        "title": "Demo Page", "content_md": "# Hello",
     })
-    res = await client.get("/api/pages/anon-demo-open")
+    slug = created.json()["slug"]
+    res = await client.get(f"/api/pages/{slug}")
     assert res.status_code == 200
     body = res.json()
-    assert body["slug"] == "anon-demo-open"
+    assert body["slug"] == slug
     assert body["effective_permission"] == "read"
 
 
 @pytest.mark.asyncio
 async def test_flag_on_acl_restricted_page_404s_guest(anon_on, auth_user, auth_client, client):
-    await _make_acl_restricted_page(auth_client, "anon-demo-restricted", auth_user["user"]["id"])
+    restricted_slug = await _make_acl_restricted_page(auth_client, "anon-demo-restricted", auth_user["user"]["id"])
 
-    res = await client.get("/api/pages/anon-demo-restricted")
+    res = await client.get(f"/api/pages/{restricted_slug}")
     assert res.status_code == 404, "ACL-restricted page must look like 404 to guest, not 403"
 
 
 @pytest.mark.asyncio
 async def test_flag_on_tree_filters_restricted_pages(anon_on, auth_user, auth_client, client):
-    await auth_client.post("/api/pages", json={
-        "title": "Open A", "content_md": "x", "slug": "anon-tree-open",
+    created = await auth_client.post("/api/pages", json={
+        "title": "Open A", "content_md": "x",
     })
-    await _make_acl_restricted_page(auth_client, "anon-tree-restricted", auth_user["user"]["id"])
+    open_slug = created.json()["slug"]
+    restricted_slug = await _make_acl_restricted_page(auth_client, "anon-tree-restricted", auth_user["user"]["id"])
 
     res = await client.get("/api/pages/tree")
     assert res.status_code == 200
     slugs = _flatten_slugs(res.json())
-    assert "anon-tree-open" in slugs
-    assert "anon-tree-restricted" not in slugs
+    assert open_slug in slugs
+    assert restricted_slug not in slugs
 
 
 def _flatten_slugs(tree):
@@ -138,22 +142,22 @@ def _flatten_slugs(tree):
 
 @pytest.mark.asyncio
 async def test_flag_on_search_filters_restricted_pages(anon_on, auth_user, auth_client, client):
-    await auth_client.post("/api/pages", json={
+    created = await auth_client.post("/api/pages", json={
         "title": "AnonSearchOpen",
         "content_md": "uniquesearchtoken123",
-        "slug": "anon-search-open",
     })
-    await _make_acl_restricted_page(auth_client, "anon-search-restricted", auth_user["user"]["id"])
+    open_slug = created.json()["slug"]
+    restricted_slug = await _make_acl_restricted_page(auth_client, "anon-search-restricted", auth_user["user"]["id"])
     # Put the same token inside the restricted page so a leak would surface.
     db = await get_db()
     await db.execute(
         "UPDATE pages SET content_md = ? WHERE slug = ?",
-        ("uniquesearchtoken123 leaked", "anon-search-restricted"),
+        ("uniquesearchtoken123 leaked", restricted_slug),
     )
     await db.commit()
     from app.services.search import rebuild_search_index
     rows = await db.execute_fetchall(
-        "SELECT id, title FROM pages WHERE slug = 'anon-search-restricted'"
+        "SELECT id, title FROM pages WHERE slug = ?", (restricted_slug,)
     )
     await rebuild_search_index(db, rows[0]["id"], rows[0]["title"], "uniquesearchtoken123 leaked")
     await db.commit()
@@ -161,31 +165,33 @@ async def test_flag_on_search_filters_restricted_pages(anon_on, auth_user, auth_
     res = await client.get("/api/search?q=uniquesearchtoken123")
     assert res.status_code == 200
     found_slugs = {r["slug"] for r in res.json().get("results", [])}
-    assert "anon-search-open" in found_slugs
-    assert "anon-search-restricted" not in found_slugs
+    assert open_slug in found_slugs
+    assert restricted_slug not in found_slugs
 
 
 @pytest.mark.asyncio
 async def test_flag_on_graph_filters_restricted_pages(anon_on, auth_user, auth_client, client):
-    await auth_client.post("/api/pages", json={
-        "title": "GraphOpen", "content_md": "x", "slug": "anon-graph-open",
+    created = await auth_client.post("/api/pages", json={
+        "title": "GraphOpen", "content_md": "x",
     })
-    await _make_acl_restricted_page(auth_client, "anon-graph-restricted", auth_user["user"]["id"])
+    open_slug = created.json()["slug"]
+    restricted_slug = await _make_acl_restricted_page(auth_client, "anon-graph-restricted", auth_user["user"]["id"])
 
     res = await client.get("/api/pages/graph")
     assert res.status_code == 200
     nodes = res.json().get("nodes", [])
     slugs = {n.get("slug") for n in nodes}
-    assert "anon-graph-open" in slugs
-    assert "anon-graph-restricted" not in slugs
+    assert open_slug in slugs
+    assert restricted_slug not in slugs
 
 
 @pytest.mark.asyncio
 async def test_flag_on_comments_list_open_to_guest(anon_on, auth_client, client):
-    await auth_client.post("/api/pages", json={
-        "title": "Anon comments page", "content_md": "x", "slug": "anon-comments-page",
+    created = await auth_client.post("/api/pages", json={
+        "title": "Anon comments page", "content_md": "x",
     })
-    res = await client.get("/api/pages/anon-comments-page/comments")
+    slug = created.json()["slug"]
+    res = await client.get(f"/api/pages/{slug}/comments")
     assert res.status_code == 200
 
 
@@ -194,9 +200,10 @@ async def test_flag_on_comments_list_open_to_guest(anon_on, auth_client, client)
 
 @pytest.mark.asyncio
 async def test_flag_on_write_endpoints_still_401(anon_on, auth_client, client):
-    await auth_client.post("/api/pages", json={
-        "title": "Write target", "content_md": "x", "slug": "anon-write-target",
+    created = await auth_client.post("/api/pages", json={
+        "title": "Write target", "content_md": "x",
     })
+    slug = created.json()["slug"]
 
     # POST /api/pages → 401 because viewer cap (would be 403) but anonymous
     # hits dependency before the route — endpoint uses get_current_user only,
@@ -205,28 +212,29 @@ async def test_flag_on_write_endpoints_still_401(anon_on, auth_client, client):
     assert res.status_code in (401, 403)
 
     # ACL-gated writes → 403 via viewer cap.
-    res = await client.put("/api/pages/anon-write-target", json={
+    res = await client.put(f"/api/pages/{slug}", json={
         "content_md": "z", "base_version": 1,
     })
     assert res.status_code == 403
 
-    res = await client.delete("/api/pages/anon-write-target")
+    res = await client.delete(f"/api/pages/{slug}")
     assert res.status_code == 403
 
 
 @pytest.mark.asyncio
 async def test_flag_on_personal_endpoints_still_401(anon_on, auth_client, client):
     """Endpoints that don't go through ACL must reject the synthetic guest."""
-    await auth_client.post("/api/pages", json={
-        "title": "Personal target", "content_md": "x", "slug": "anon-personal-target",
+    created = await auth_client.post("/api/pages", json={
+        "title": "Personal target", "content_md": "x",
     })
+    slug = created.json()["slug"]
 
     cases = [
-        ("POST", "/api/bookmarks/anon-personal-target", None),
-        ("POST", "/api/pages/anon-personal-target/comments", {"content": "hi"}),
-        ("POST", "/api/pages/anon-personal-target/watch", None),
-        ("DELETE", "/api/pages/anon-personal-target/watch", None),
-        ("GET", "/api/pages/anon-personal-target/watch", None),
+        ("POST", f"/api/bookmarks/{slug}", None),
+        ("POST", f"/api/pages/{slug}/comments", {"content": "hi"}),
+        ("POST", f"/api/pages/{slug}/watch", None),
+        ("DELETE", f"/api/pages/{slug}/watch", None),
+        ("GET", f"/api/pages/{slug}/watch", None),
         ("POST", "/api/auth/tokens", {"name": "t"}),
         ("GET", "/api/auth/tokens", None),
         ("PUT", "/api/auth/profile", {"display_name": "x"}),
@@ -292,18 +300,19 @@ async def test_settings_exposes_anonymous_read_flag_off(anon_off, client):
 
 @pytest.mark.asyncio
 async def test_flag_on_guest_view_does_not_bump_count(anon_on, auth_client, client):
-    await auth_client.post("/api/pages", json={
-        "title": "View target", "content_md": "x", "slug": "anon-view-target",
+    created = await auth_client.post("/api/pages", json={
+        "title": "View target", "content_md": "x",
     })
-    initial = (await auth_client.get("/api/pages/anon-view-target")).json()["view_count"]
+    slug = created.json()["slug"]
+    initial = (await auth_client.get(f"/api/pages/{slug}")).json()["view_count"]
 
     # Two anonymous views; neither should bump the counter.
-    await client.get("/api/pages/anon-view-target")
-    await client.get("/api/pages/anon-view-target")
+    await client.get(f"/api/pages/{slug}")
+    await client.get(f"/api/pages/{slug}")
 
     db = await get_db()
     rows = await db.execute_fetchall(
-        "SELECT view_count FROM pages WHERE slug = 'anon-view-target'"
+        "SELECT view_count FROM pages WHERE slug = ?", (slug,)
     )
     # Count should equal `initial` (the auth_client read may have bumped it
     # by one already for the editor user — that's fine; we only assert that
@@ -316,12 +325,13 @@ async def test_flag_on_guest_view_does_not_bump_count(anon_on, auth_client, clie
 
 @pytest.mark.asyncio
 async def test_is_public_still_works_with_flag_off(anon_off, auth_client, client):
-    await auth_client.post("/api/pages", json={
-        "title": "Public via legacy", "content_md": "hi", "slug": "anon-legacy-public",
+    created = await auth_client.post("/api/pages", json={
+        "title": "Public via legacy", "content_md": "hi",
     })
-    await auth_client.put("/api/pages/anon-legacy-public", json={"is_public": True})
+    slug = created.json()["slug"]
+    await auth_client.put(f"/api/pages/{slug}", json={"is_public": True})
 
-    res = await client.get("/api/public/pages/anon-legacy-public")
+    res = await client.get(f"/api/public/pages/{slug}")
     assert res.status_code == 200
 
 
@@ -330,16 +340,17 @@ async def test_is_public_still_works_with_flag_off(anon_off, auth_client, client
 
 @pytest.mark.asyncio
 async def test_flag_on_guest_cannot_add_or_remove_tags(anon_on, auth_client, client):
-    await auth_client.post("/api/pages", json={
-        "title": "Tag target", "content_md": "x", "slug": "anon-tag-target",
+    created = await auth_client.post("/api/pages", json={
+        "title": "Tag target", "content_md": "x",
     })
+    slug = created.json()["slug"]
 
-    res = await client.post("/api/pages/anon-tag-target/tags", json={"name": "graffiti"})
+    res = await client.post(f"/api/pages/{slug}/tags", json={"name": "graffiti"})
     assert res.status_code == 401, "guest must not be able to add tags"
 
     # Add a tag as the editor first so the DELETE has something to chew on.
-    await auth_client.post("/api/pages/anon-tag-target/tags", json={"name": "real"})
-    res = await client.delete("/api/pages/anon-tag-target/tags/real")
+    await auth_client.post(f"/api/pages/{slug}/tags", json={"name": "real"})
+    res = await client.delete(f"/api/pages/{slug}/tags/real")
     assert res.status_code == 401, "guest must not be able to remove tags"
 
 
@@ -347,11 +358,11 @@ async def test_flag_on_guest_cannot_add_or_remove_tags(anon_on, auth_client, cli
 async def test_flag_on_guest_cannot_tag_acl_restricted_page(
     anon_on, auth_user, auth_client, client
 ):
-    await _make_acl_restricted_page(auth_client, "anon-tag-restricted", auth_user["user"]["id"])
+    restricted_slug = await _make_acl_restricted_page(auth_client, "anon-tag-restricted", auth_user["user"]["id"])
 
     # Guest gets 401 before reaching the ACL check (require_real_user fires
     # first); that's fine — the important thing is they can't write.
-    res = await client.post("/api/pages/anon-tag-restricted/tags", json={"name": "leak"})
+    res = await client.post(f"/api/pages/{restricted_slug}/tags", json={"name": "leak"})
     assert res.status_code == 401
 
 
@@ -364,10 +375,10 @@ async def test_flag_on_activity_filters_restricted_pages(
 ):
     # Open page → its create-activity row should be visible.
     await auth_client.post("/api/pages", json={
-        "title": "AnonActivityOpen", "content_md": "x", "slug": "anon-activity-open",
+        "title": "AnonActivityOpen", "content_md": "x",
     })
     # Restricted page → its create-activity row must be filtered out.
-    await _make_acl_restricted_page(
+    restricted_slug = await _make_acl_restricted_page(
         auth_client, "anon-activity-restricted", auth_user["user"]["id"],
     )
 
@@ -377,7 +388,7 @@ async def test_flag_on_activity_filters_restricted_pages(
     metas = [a.get("metadata") or {} for a in body["activities"]]
     slugs = [m.get("slug") for m in metas if isinstance(m, dict)]
     titles = [m.get("title") for m in metas if isinstance(m, dict)]
-    assert "anon-activity-restricted" not in slugs
+    assert restricted_slug not in slugs
     assert "AnonActivityRestricted" not in titles  # title is "anon-activity-restricted" actually
     assert "anon-activity-restricted" not in titles
 
@@ -387,9 +398,9 @@ async def test_flag_on_activity_stats_filters_restricted_pages(
     anon_on, auth_user, auth_client, client
 ):
     await auth_client.post("/api/pages", json={
-        "title": "StatsOpen", "content_md": "x", "slug": "anon-stats-open",
+        "title": "StatsOpen", "content_md": "x",
     })
-    await _make_acl_restricted_page(
+    restricted_slug = await _make_acl_restricted_page(
         auth_client, "anon-stats-restricted", auth_user["user"]["id"],
     )
 
@@ -398,7 +409,7 @@ async def test_flag_on_activity_stats_filters_restricted_pages(
     body = res.json()
     for bucket in ("top_viewed", "recently_updated", "orphan_pages"):
         slugs = {p["slug"] for p in body[bucket]}
-        assert "anon-stats-restricted" not in slugs, f"leaked in {bucket}"
+        assert restricted_slug not in slugs, f"leaked in {bucket}"
     # User roster size must not be exposed to the guest.
     assert body["total_users"] == 0
 
@@ -432,12 +443,13 @@ async def test_flag_on_guest_can_read_media_on_open_page(
     # MEDIA_DIR settings.
     from app.config import settings as app_settings
 
-    await auth_client.post("/api/pages", json={
-        "title": "MediaPage", "content_md": "x", "slug": "anon-media-page",
+    created = await auth_client.post("/api/pages", json={
+        "title": "MediaPage", "content_md": "x",
     })
+    slug = created.json()["slug"]
     db = await get_db()
     page = (await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = 'anon-media-page'"
+        "SELECT id FROM pages WHERE slug = ?", (slug,)
     ))[0]
 
     from pathlib import Path
@@ -466,9 +478,10 @@ async def test_flag_on_guest_can_read_media_on_open_page(
 
 @pytest.mark.asyncio
 async def test_flag_on_guest_blocked_on_misc_writes(anon_on, auth_client, client):
-    await auth_client.post("/api/pages", json={
-        "title": "Misc target", "content_md": "x", "slug": "anon-misc-target",
+    created = await auth_client.post("/api/pages", json={
+        "title": "Misc target", "content_md": "x",
     })
+    slug = created.json()["slug"]
 
     # Diagram create: viewer-cap inside the router → 403; require_real_user
     # would also work, but the existing endpoint uses get_current_user.
@@ -478,7 +491,7 @@ async def test_flag_on_guest_blocked_on_misc_writes(anon_on, auth_client, client
     assert res.status_code in (401, 403)
 
     # Page move: viewer-cap → 403.
-    res = await client.patch("/api/pages/anon-misc-target/move", json={
+    res = await client.patch(f"/api/pages/{slug}/move", json={
         "parent_id": None, "sort_order": 0,
     })
     assert res.status_code in (401, 403)

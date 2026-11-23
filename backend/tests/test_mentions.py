@@ -316,12 +316,13 @@ async def test_page_update_creates_mention_notification(auth_client, db):
 
     res = await auth_client.post(
         "/api/pages",
-        json={"title": "Mentioning Page", "slug": "mention-page", "content_md": "hi"},
+        json={"title": "Mentioning Page", "content_md": "hi"},
     )
     assert res.status_code == 201
+    slug = res.json()["slug"]
 
     res = await auth_client.put(
-        "/api/pages/mention-page",
+        f"/api/pages/{slug}",
         json={"content_md": "hello @page_mention_target", "base_version": 1},
     )
     assert res.status_code == 200
@@ -331,7 +332,7 @@ async def test_page_update_creates_mention_notification(auth_client, db):
         assert notif.status_code == 200
         items = notif.json()["items"]
         assert any(
-            i["event"] == "mention" and i["page_slug"] == "mention-page"
+            i["event"] == "mention" and i["page_slug"] == slug
             for i in items
         )
 
@@ -343,17 +344,17 @@ async def test_page_create_creates_mention_notification(auth_client, db):
         "/api/pages",
         json={
             "title": "Create Mention",
-            "slug": "create-mention",
             "content_md": "hello @create_mention_target",
         },
     )
     assert res.status_code == 201
+    slug = res.json()["slug"]
 
     async with await _client_for(target) as target_client:
         notif = await target_client.get("/api/notifications")
         items = notif.json()["items"]
         assert any(
-            i["event"] == "mention" and i["page_slug"] == "create-mention"
+            i["event"] == "mention" and i["page_slug"] == slug
             for i in items
         )
 
@@ -361,12 +362,13 @@ async def test_page_create_creates_mention_notification(auth_client, db):
 @pytest.mark.asyncio
 async def test_comment_create_creates_mention_notification(auth_client, db):
     target = await _make_user(db, "comment_mention_target")
-    await auth_client.post(
+    created = await auth_client.post(
         "/api/pages",
-        json={"title": "Comment Mention", "slug": "comment-mention", "content_md": "x"},
+        json={"title": "Comment Mention", "content_md": "x"},
     )
+    slug = created.json()["slug"]
     res = await auth_client.post(
-        "/api/pages/comment-mention/comments",
+        f"/api/pages/{slug}/comments",
         json={"content": "hi @comment_mention_target take a look"},
     )
     assert res.status_code == 201
@@ -375,7 +377,7 @@ async def test_comment_create_creates_mention_notification(auth_client, db):
     async with await _client_for(target) as target_client:
         notif = await target_client.get("/api/notifications")
         items = notif.json()["items"]
-        match = [i for i in items if i["event"] == "mention" and i["page_slug"] == "comment-mention"]
+        match = [i for i in items if i["event"] == "mention" and i["page_slug"] == slug]
         assert match
         # The comment_id is recorded in metadata so the bell can deep-link.
         import json as _json
@@ -389,13 +391,14 @@ async def test_mentionable_endpoint_returns_users_and_groups(auth_client, db):
     bob = await _make_user(db, "mentionable_bob")
     await _make_group(db, "mentionable-team", [bob["id"]])
 
-    await auth_client.post(
+    created = await auth_client.post(
         "/api/pages",
-        json={"title": "Mentionable", "slug": "mentionable", "content_md": "x"},
+        json={"title": "Mentionable", "content_md": "x"},
     )
+    slug = created.json()["slug"]
     res = await auth_client.get(
         "/api/users/mentionable",
-        params={"page_slug": "mentionable", "q": "mentionable"},
+        params={"page_slug": slug, "q": "mentionable"},
     )
     assert res.status_code == 200
     data = res.json()
@@ -412,12 +415,13 @@ async def test_mentionable_endpoint_filters_by_acl(auth_client, db, auth_user):
     await _make_user(db, "ment_visible")
     locked = await _make_user(db, "ment_locked")
 
-    await auth_client.post(
+    created = await auth_client.post(
         "/api/pages",
-        json={"title": "Mentionable ACL", "slug": "mentionable-acl", "content_md": "x"},
+        json={"title": "Mentionable ACL", "content_md": "x"},
     )
+    slug = created.json()["slug"]
     page_rows = await db.execute_fetchall(
-        "SELECT id FROM pages WHERE slug = ?", ("mentionable-acl",)
+        "SELECT id FROM pages WHERE slug = ?", (slug,)
     )
     page_id = page_rows[0]["id"]
     visible_rows = await db.execute_fetchall(
@@ -436,7 +440,7 @@ async def test_mentionable_endpoint_filters_by_acl(auth_client, db, auth_user):
 
     res = await auth_client.get(
         "/api/users/mentionable",
-        params={"page_slug": "mentionable-acl", "q": "ment_"},
+        params={"page_slug": slug, "q": "ment_"},
     )
     usernames = {u["username"] for u in res.json()["users"]}
     assert "ment_visible" in usernames
@@ -455,24 +459,24 @@ async def test_mentionable_endpoint_404_for_unknown_page(auth_client):
 @pytest.mark.asyncio
 async def test_page_update_does_not_renotify_existing_mention(auth_client, db):
     target = await _make_user(db, "renotify_target")
-    await auth_client.post(
+    created = await auth_client.post(
         "/api/pages",
         json={
             "title": "Renotify",
-            "slug": "renotify",
             "content_md": "hi @renotify_target",
         },
     )
+    slug = created.json()["slug"]
     async with await _client_for(target) as target_client:
         before = (await target_client.get("/api/notifications")).json()
         before_count = sum(
             1 for i in before["items"]
-            if i["event"] == "mention" and i["page_slug"] == "renotify"
+            if i["event"] == "mention" and i["page_slug"] == slug
         )
 
         # Update WITHOUT adding new mentions — same target stays mentioned.
         await auth_client.put(
-            "/api/pages/renotify",
+            f"/api/pages/{slug}",
             json={
                 "content_md": "hi @renotify_target — and a small edit",
                 "base_version": 1,
@@ -481,6 +485,6 @@ async def test_page_update_does_not_renotify_existing_mention(auth_client, db):
         after = (await target_client.get("/api/notifications")).json()
         after_count = sum(
             1 for i in after["items"]
-            if i["event"] == "mention" and i["page_slug"] == "renotify"
+            if i["event"] == "mention" and i["page_slug"] == slug
         )
         assert after_count == before_count, "edit must not re-notify existing mentions"

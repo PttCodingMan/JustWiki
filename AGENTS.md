@@ -189,8 +189,8 @@ curl -sS -b cookies.txt -X POST http://localhost:8000/api/pages \
   }'
 ```
 
-Returns the created page, including `slug` (auto-generated from title; CJK
-preserved) and `version: 1`. To nest under a parent, include `parent_id`; you
+Returns the created page, including `slug` (a random 8-char hex ID such as
+`3f9a1c2e`; the title does not affect it and it cannot be chosen) and `version: 1`. To nest under a parent, include `parent_id`; you
 need write permission on the parent.
 
 Templates: pass `"template_id": <int>` instead of `content_md` to seed from a
@@ -205,12 +205,12 @@ do not need it.
 
 ```bash
 # 1) Read the page to learn its current version
-curl -sS -b cookies.txt http://localhost:8000/api/pages/release-checklist \
+curl -sS -b cookies.txt http://localhost:8000/api/pages/3f9a1c2e \
   | jq '{version, slug}'
-# → {"version": 3, "slug": "release-checklist"}
+# → {"version": 3, "slug": "3f9a1c2e"}
 
 # 2) Send the edit with base_version
-curl -sS -b cookies.txt -X PUT http://localhost:8000/api/pages/release-checklist \
+curl -sS -b cookies.txt -X PUT http://localhost:8000/api/pages/3f9a1c2e \
   -H 'Content-Type: application/json' \
   -d '{
     "content_md": "# Release checklist\n\n- [x] Bump version\n- [ ] Run tests\n",
@@ -243,7 +243,7 @@ be deleted until all referencing pages are purged.
 
 ```bash
 curl -sS -b cookies.txt -X POST \
-  http://localhost:8000/api/pages/release-checklist/tags \
+  http://localhost:8000/api/pages/3f9a1c2e/tags \
   -H 'Content-Type: application/json' \
   -d '{"name":"ops"}'
 ```
@@ -256,7 +256,7 @@ removes it; orphan tags are cleaned up automatically.
 ```bash
 # Grant a group read-only, a user write. Any existing rows are replaced.
 curl -sS -b cookies.txt -X PUT \
-  http://localhost:8000/api/pages/release-checklist/acl \
+  http://localhost:8000/api/pages/3f9a1c2e/acl \
   -H 'Content-Type: application/json' \
   -d '{
     "rows": [
@@ -276,7 +276,7 @@ Clear with `DELETE /api/pages/{slug}/acl` — the page then re-inherits.
 
 ```bash
 curl -sS -b cookies.txt -X PATCH \
-  http://localhost:8000/api/pages/release-checklist/move \
+  http://localhost:8000/api/pages/3f9a1c2e/move \
   -H 'Content-Type: application/json' \
   -d '{"parent_id": 12, "sort_order": 5}'
 ```
@@ -288,10 +288,10 @@ and destination parent.
 
 ```bash
 # Soft delete (moves to trash; slug stays reserved)
-curl -sS -b cookies.txt -X DELETE http://localhost:8000/api/pages/release-checklist
+curl -sS -b cookies.txt -X DELETE http://localhost:8000/api/pages/3f9a1c2e
 
 # Restore
-curl -sS -b cookies.txt -X POST http://localhost:8000/api/trash/release-checklist/restore
+curl -sS -b cookies.txt -X POST http://localhost:8000/api/trash/3f9a1c2e/restore
 ```
 
 Admin-only hard delete: `DELETE /api/trash/{slug}`.
@@ -299,9 +299,9 @@ Admin-only hard delete: `DELETE /api/trash/{slug}`.
 ### 8. Revert to an old version
 
 ```bash
-curl -sS -b cookies.txt http://localhost:8000/api/pages/release-checklist/versions
+curl -sS -b cookies.txt http://localhost:8000/api/pages/3f9a1c2e/versions
 curl -sS -b cookies.txt -X POST \
-  http://localhost:8000/api/pages/release-checklist/revert/2
+  http://localhost:8000/api/pages/3f9a1c2e/revert/2
 ```
 
 Reverting snapshots the current content into a new version first, then writes
@@ -314,8 +314,8 @@ Use stock GFM plus these JustWiki extensions. The backend parses them on
 write to keep backlinks and media refs in sync; the viewer renders them.
 
 - **Wikilinks** — `[[slug]]` or `[[slug|display text]]`. Creates a
-  `backlinks` row and renders as a link to `/wiki/<slug>`. Auto-slug keeps
-  CJK characters (e.g. `[[專案規劃]]`).
+  `backlinks` row and renders as a link to `/wiki/<slug>`. Slugs are hex IDs,
+  so use the display form (e.g. `[[3f9a1c2e|專案規劃]]`).
 - **Transclusion** — `![[slug]]` inlines another page's rendered content.
 - **Callouts** — fenced blocks: `:::info` / `:::tip` / `:::warning` / `:::danger`
   ending with `:::`.
@@ -330,13 +330,13 @@ DOMPurify. You can assume raw HTML in markdown will be stripped.
 
 1. **Always fetch before editing.** Skipping the read to get `version` is the
    fastest way to hit `base_version_required` or `conflict`.
-2. **Slugs are case-sensitive URL keys.** They're derived from the title;
-   if you need a specific slug, pass it explicitly on `POST /api/pages`.
+2. **Slugs are opaque hex IDs.** They're random 8-char lowercase hex assigned
+   on creation; you can't choose one. Keep the `slug` from the create response.
 3. **404 may mean "no permission".** The server returns 404 instead of 403
    for pages the caller can't read, so treat 404 on known slugs as "maybe
    ACL-blocked."
-4. **Soft-delete keeps the slug reserved.** To reuse a slug, either restore
-   the trashed page or admin-purge it first.
+4. **Soft-delete keeps the slug reserved.** Restoring the trashed page brings
+   it back under the same slug.
 5. **View counts bump on GET** — reading `/api/pages/{slug}` is a write in
    disguise. Dedup'd per (user, page) over `VIEW_DEDUP_MINUTES`, but still
    something to know if you're scraping.
@@ -355,10 +355,10 @@ export JW_TOKEN="jwk_xxxxxxxxxxxx..."
 AUTH=(-H "Authorization: Bearer $JW_TOKEN")
 
 # 2. Read current state
-curl -sS "${AUTH[@]}" http://localhost:8000/api/pages/my-page | jq '{slug,version}'
+curl -sS "${AUTH[@]}" http://localhost:8000/api/pages/5b07d4e1 | jq '{slug,version}'
 
 # 3. Mutate with base_version
-curl -sS "${AUTH[@]}" -X PUT http://localhost:8000/api/pages/my-page \
+curl -sS "${AUTH[@]}" -X PUT http://localhost:8000/api/pages/5b07d4e1 \
   -H 'Content-Type: application/json' \
   -d '{"content_md":"…new content…","base_version":7}'
 ```

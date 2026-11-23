@@ -1,17 +1,10 @@
+import re
 import pytest
-from app.routers.pages import slugify
-
-def test_slugify():
-    assert slugify("Hello World") == "hello-world"
-    assert slugify("測試標題") == "測試標題"
-    assert slugify("Mixed Title 測試") == "mixed-title-測試"
-    assert slugify("!@#$%^&*()") == "untitled"
-    assert slugify("中文 標題！with 英文") == "中文-標題with-英文"
 
 @pytest.mark.asyncio
 async def test_unique_slug_collision(auth_client):
     # Create two pages with same title
-    await auth_client.post("/api/pages", json={
+    first = await auth_client.post("/api/pages", json={
         "title": "Duplicate",
         "content_md": "Content 1"
     })
@@ -20,7 +13,8 @@ async def test_unique_slug_collision(auth_client):
         "content_md": "Content 2"
     })
     assert response.status_code == 201
-    assert response.json()["slug"] == "duplicate-1"
+    assert re.fullmatch(r"[0-9a-f]{8}", response.json()["slug"])
+    assert response.json()["slug"] != first.json()["slug"]
 
 @pytest.mark.asyncio
 async def test_page_with_parent(auth_client):

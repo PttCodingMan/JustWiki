@@ -34,7 +34,6 @@ class PageCreate(BaseModel):
     parent_id: int | None = None
     sort_order: int = 0
     template_id: int | None = None
-    slug: str | None = None
     page_type: PageType = "document"
     mindmap_layout: MindmapLayout | None = None
 

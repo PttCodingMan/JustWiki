@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from app.config import settings
-from app.routers.pages import _would_create_parent_cycle, slugify
+from app.routers.pages import _would_create_parent_cycle
 from app.database import get_db
 
 
@@ -99,37 +99,36 @@ async def test_would_create_parent_cycle_helper(db):
 
 
 # ---------------------------------------------------------------------------
-# 2.2 unique_slug race: IntegrityError path is handled
+# 2.2 slug race: IntegrityError path is handled
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_create_page_handles_slug_race(auth_client, db, monkeypatch):
-    # Pre-create a page at the exact slug that unique_slug() would pick so
-    # that the very next INSERT hits a UNIQUE-constraint error. If the retry
-    # loop works, create_page should walk to the next candidate instead of
-    # 500ing.
+    # Force the first generated slug to collide with an existing page so the
+    # very next INSERT hits a UNIQUE-constraint error. If the retry loop
+    # works, create_page should draw a fresh slug instead of 500ing.
     from app.routers import pages as pages_module
 
-    real_unique_slug = pages_module.unique_slug
+    blocker = await auth_client.post("/api/pages", json={
+        "title": "blocker", "content_md": "x",
+    })
+    taken_slug = blocker.json()["slug"]
+    real_new_page_slug = pages_module.new_page_slug
     call_count = {"n": 0}
 
-    async def flaky_unique_slug(db_arg, slug):
+    def flaky_new_page_slug():
         call_count["n"] += 1
-        # First call: return an already-taken slug so INSERT fails.
         if call_count["n"] == 1:
-            return "race-slug-taken"
-        return await real_unique_slug(db_arg, slug)
+            return taken_slug
+        return real_new_page_slug()
 
-    await auth_client.post("/api/pages", json={
-        "title": "blocker", "content_md": "x", "slug": "race-slug-taken",
-    })
-    monkeypatch.setattr(pages_module, "unique_slug", flaky_unique_slug)
+    monkeypatch.setattr(pages_module, "new_page_slug", flaky_new_page_slug)
 
     res = await auth_client.post("/api/pages", json={
         "title": "Racer", "content_md": "x",
     })
     assert res.status_code == 201
-    assert res.json()["slug"] != "race-slug-taken"
+    assert res.json()["slug"] != taken_slug
 
 
 # ---------------------------------------------------------------------------
@@ -239,11 +238,10 @@ async def test_public_referenced_media_fetchable_anonymously(auth_client, client
     page = await auth_client.post("/api/pages", json={
         "title": "MediaHost",
         "content_md": f"![img](/api/media/{filename})",
-        "slug": "media-host",
     })
     assert page.status_code == 201
     flip = await auth_client.put(
-        "/api/pages/media-host", json={"is_public": True}
+        f"/api/pages/{page.json()['slug']}", json={"is_public": True}
     )
     assert flip.status_code == 200
 

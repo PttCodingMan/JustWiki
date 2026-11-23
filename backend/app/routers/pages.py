@@ -1,8 +1,6 @@
 import hashlib
 import random
-import re
 import time
-import unicodedata
 import aiosqlite
 from fastapi import APIRouter, HTTPException, Depends, Query
 from app.config import settings
@@ -20,6 +18,7 @@ from app.services.acl import (
 from app.services.search import rebuild_search_index, remove_from_search_index
 from app.services.wikilink import parse_and_update_backlinks
 from app.services.media_ref import parse_and_update_media_refs
+from app.services.page_slug import new_page_slug
 from app.routers.activity import log_activity
 from app.routers.versions import save_version
 from app.services.notifications import (
@@ -70,35 +69,6 @@ async def _should_count_view(db, user_id: int, page_id: int) -> bool:
             "DELETE FROM view_dedup WHERE last_viewed_at < ?", (cutoff,)
         )
     return True
-
-
-def slugify(title: str, existing_slug: str | None = None) -> str:
-    """Generate a URL-friendly slug from title. Preserves CJK characters so
-    Chinese/Japanese/Korean titles show up in the URL as-is rather than pinyin."""
-    if existing_slug:
-        return existing_slug
-
-    text = unicodedata.normalize("NFKC", title)
-    text = text.strip().lower()
-    # In Python 3 str regex, \w matches Unicode word characters including CJK,
-    # so this strips punctuation while keeping letters from any script.
-    text = re.sub(r"[^\w\s-]", "", text)
-    text = re.sub(r"[-\s]+", "-", text)
-    text = text.strip("-")
-    return text or "untitled"
-
-
-async def unique_slug(db, slug: str) -> str:
-    base = slug
-    counter = 1
-    while True:
-        rows = await db.execute_fetchall(
-            "SELECT id FROM pages WHERE slug = ?", (slug,)
-        )
-        if not rows:
-            return slug
-        slug = f"{base}-{counter}"
-        counter += 1
 
 
 async def _would_create_parent_cycle(db, page_id: int, new_parent_id: int | None) -> bool:
@@ -276,14 +246,11 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
                 detail="You do not have permission to create pages under this parent",
             )
 
-    # Retry on the rare race where two concurrent create_page calls resolve the
-    # same slug before either INSERT commits. unique_slug makes the collision
-    # window small, and the UNIQUE constraint backstops correctness.
     async with write_transaction(db):
         page_id = None
         slug = None
         for _attempt in range(5):
-            candidate = await unique_slug(db, slugify(body.title, body.slug))
+            candidate = new_page_slug()
             try:
                 cursor = await db.execute(
                     """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, version, page_type, mindmap_layout, created_by)
@@ -294,7 +261,6 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
                 page_id = cursor.lastrowid
                 break
             except aiosqlite.IntegrityError:
-                # Another request grabbed the slug first; try the next candidate.
                 continue
         if page_id is None:
             raise HTTPException(status_code=409, detail="Could not allocate a unique slug; please retry")

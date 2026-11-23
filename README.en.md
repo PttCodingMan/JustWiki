@@ -41,7 +41,6 @@ All your data = one `data/just-wiki.db` SQLite file + the `media/` folder. Backu
 **Views & search**
 - **Multiple views** — tree and graph (with 3D / 2D-plane toggle)
 - **Full-text search** — FTS5 powered, with native CJK support
-- **Readable CJK URLs** — page URLs keep the original Chinese/Japanese/Korean title instead of mangling it into `%E4%B8...` escapes
 
 <p align="center">
   <img src="docs/images/graph-3d.png" alt="3D knowledge graph with planet-style nodes and visible link edges" width="90%">

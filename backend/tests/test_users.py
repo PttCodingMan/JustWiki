@@ -435,14 +435,15 @@ async def test_profile_returns_identity_and_activity(admin_client, auth_client, 
     ) as alice_client:
         # Alice creates, updates, comments on a page.
         created = await alice_client.post("/api/pages", json={
-            "title": "Alice Page", "content_md": "v1", "slug": "alice-page",
+            "title": "Alice Page", "content_md": "v1",
         })
         assert created.status_code in (200, 201)
         page = created.json()
-        await alice_client.put(f"/api/pages/alice-page", json={
+        slug = page["slug"]
+        await alice_client.put(f"/api/pages/{slug}", json={
             "title": "Alice Page", "content_md": "v2", "base_version": page["version"],
         })
-        await alice_client.post(f"/api/pages/alice-page/comments", json={"content": "hi"})
+        await alice_client.post(f"/api/pages/{slug}/comments", json={"content": "hi"})
 
     response = await auth_client.get("/api/users/alice/profile")
     assert response.status_code == 200
@@ -455,7 +456,7 @@ async def test_profile_returns_identity_and_activity(admin_client, auth_client, 
     # Most-recent first; commented happened last.
     assert actions[:3] == ["commented", "updated", "created"]
     for entry in body["recent_activity"][:3]:
-        assert entry["page_slug"] == "alice-page"
+        assert entry["page_slug"] == slug
         assert entry["page_title"] == "Alice Page"
     # Comment entry exposes comment_id for deep-linking.
     assert "comment_id" in body["recent_activity"][0]

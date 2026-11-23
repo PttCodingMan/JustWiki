@@ -19,9 +19,12 @@ Ground rules:
     needed.
 """
 import logging
+import re
 from typing import Awaitable, Callable
 
 import aiosqlite
+
+from app.services.page_slug import PAGE_SLUG_BYTES, new_page_slug, rewrite_page_slugs
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +206,68 @@ async def _m013_user_is_active(db: aiosqlite.Connection) -> None:
         )
 
 
+_HEX_SLUG_RE = re.compile(rf"[0-9a-f]{{{PAGE_SLUG_BYTES * 2}}}")
+
+
+async def _rewrite_text_column(
+    db: aiosqlite.Connection, table: str, column: str, slug_map: dict[str, str]
+) -> None:
+    rows = await db.execute_fetchall(f"SELECT id, {column} AS body FROM {table}")
+    for row in rows:
+        body = row["body"] or ""
+        rewritten = rewrite_page_slugs(body, slug_map)
+        if rewritten != body:
+            await db.execute(
+                f"UPDATE {table} SET {column} = ? WHERE id = ?", (rewritten, row["id"])
+            )
+
+
+async def _m014_hex_page_slugs(db: aiosqlite.Connection) -> None:
+    pages = await db.execute_fetchall("SELECT id, slug FROM pages")
+    taken = {p["slug"] for p in pages}
+    slug_map: dict[str, str] = {}
+    for page in pages:
+        if _HEX_SLUG_RE.fullmatch(page["slug"]):
+            continue
+        new_slug = new_page_slug()
+        while new_slug in taken:
+            new_slug = new_page_slug()
+        taken.add(new_slug)
+        slug_map[page["slug"]] = new_slug
+        await db.execute("UPDATE pages SET slug = ? WHERE id = ?", (new_slug, page["id"]))
+        await db.execute(
+            "UPDATE activity_log SET metadata = json_set(metadata, '$.slug', ?) "
+            "WHERE target_type = 'page' AND target_id = ? AND json_valid(metadata) "
+            "AND json_extract(metadata, '$.slug') IS NOT NULL",
+            (new_slug, page["id"]),
+        )
+        await db.execute(
+            "UPDATE notifications SET metadata = json_set(metadata, '$.slug', ?) "
+            "WHERE page_id = ? AND json_valid(metadata) "
+            "AND json_extract(metadata, '$.slug') IS NOT NULL",
+            (new_slug, page["id"]),
+        )
+    if not slug_map:
+        return
+
+    for table, column in (
+        ("pages", "content_md"),
+        ("page_versions", "content_md"),
+        ("templates", "content_md"),
+        ("comments", "content"),
+    ):
+        await _rewrite_text_column(db, table, column, slug_map)
+
+    home = await db.execute_fetchall(
+        "SELECT value FROM site_settings WHERE key = 'home_page_slug'"
+    )
+    if home and home[0]["value"] in slug_map:
+        await db.execute(
+            "UPDATE site_settings SET value = ? WHERE key = 'home_page_slug'",
+            (slug_map[home[0]["value"]],),
+        )
+
+
 MIGRATIONS: list[Migration] = [
     (1, "user_profile_columns", _m001_user_profile_columns),
     (2, "user_soft_delete", _m002_user_soft_delete),
@@ -217,6 +282,7 @@ MIGRATIONS: list[Migration] = [
     (11, "mindmap_layout", _m011_mindmap_layout),
     (12, "user_bio", _m012_user_bio),
     (13, "user_is_active", _m013_user_is_active),
+    (14, "hex_page_slugs", _m014_hex_page_slugs),
 ]
 
 

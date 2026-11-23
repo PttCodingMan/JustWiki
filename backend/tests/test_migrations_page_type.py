@@ -61,10 +61,19 @@ async def test_m009_adds_page_type_to_legacy_db():
             await db.execute(
                 "CREATE TABLE auth_identities (id INTEGER PRIMARY KEY, user_id INTEGER)"
             )
-            await db.execute(
+            for stub in (
+                "CREATE TABLE page_versions (id INTEGER PRIMARY KEY, content_md TEXT)",
+                "CREATE TABLE templates (id INTEGER PRIMARY KEY, content_md TEXT)",
+                "CREATE TABLE comments (id INTEGER PRIMARY KEY, content TEXT)",
+                "CREATE TABLE activity_log (id INTEGER PRIMARY KEY, target_type TEXT, target_id INTEGER, metadata TEXT)",
+                "CREATE TABLE notifications (id INTEGER PRIMARY KEY, page_id INTEGER, metadata TEXT)",
+            ):
+                await db.execute(stub)
+            cursor = await db.execute(
                 "INSERT INTO pages (slug, title, content_md) VALUES (?, ?, ?)",
                 ("legacy", "Legacy page", "body"),
             )
+            legacy_id = cursor.lastrowid
             await db.commit()
 
             applied = await run_migrations(db)
@@ -75,7 +84,7 @@ async def test_m009_adds_page_type_to_legacy_db():
             # Column exists and backfills to 'document'.
             cols = {r["name"] for r in await db.execute_fetchall("PRAGMA table_info(pages)")}
             assert "page_type" in cols
-            rows = await db.execute_fetchall("SELECT page_type FROM pages WHERE slug = 'legacy'")
+            rows = await db.execute_fetchall("SELECT page_type FROM pages WHERE id = ?", (legacy_id,))
             assert rows[0]["page_type"] == "document"
 
             # Index was created by _ensure_indexes regardless of fresh/upgrade.

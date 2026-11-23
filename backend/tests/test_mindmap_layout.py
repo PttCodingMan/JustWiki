@@ -13,7 +13,6 @@ async def test_create_mindmap_page_omits_layout_returns_null(auth_client):
         "/api/pages",
         json={
             "title": "ML Default",
-            "slug": "ml-default",
             "page_type": "mindmap",
             "content_md": "# Root",
         },
@@ -31,7 +30,6 @@ async def test_create_with_explicit_layout_persists(auth_client):
         "/api/pages",
         json={
             "title": "ML Radial",
-            "slug": "ml-radial",
             "page_type": "mindmap",
             "mindmap_layout": "radial",
             "content_md": "# Root",
@@ -40,7 +38,7 @@ async def test_create_with_explicit_layout_persists(auth_client):
     assert response.status_code == 201
     assert response.json()["mindmap_layout"] == "radial"
 
-    fetched = await auth_client.get("/api/pages/ml-radial")
+    fetched = await auth_client.get(f"/api/pages/{response.json()['slug']}")
     assert fetched.status_code == 200
     assert fetched.json()["mindmap_layout"] == "radial"
 
@@ -51,7 +49,6 @@ async def test_update_layout_does_not_bump_version(auth_client):
         "/api/pages",
         json={
             "title": "ML Vbump",
-            "slug": "ml-vbump",
             "page_type": "mindmap",
             "content_md": "# Root",
         },
@@ -63,7 +60,7 @@ async def test_update_layout_does_not_bump_version(auth_client):
     # (matches is_public / page_type behavior — see pages.py optimistic-lock
     # logic: only content_md / title bump version).
     res = await auth_client.put(
-        "/api/pages/ml-vbump",
+        f"/api/pages/{create.json()['slug']}",
         json={"mindmap_layout": "rl"},
     )
     assert res.status_code == 200
@@ -74,17 +71,16 @@ async def test_update_layout_does_not_bump_version(auth_client):
 
 @pytest.mark.asyncio
 async def test_update_layout_to_invalid_value_returns_422(auth_client):
-    await auth_client.post(
+    created = await auth_client.post(
         "/api/pages",
         json={
             "title": "ML Bad",
-            "slug": "ml-bad",
             "page_type": "mindmap",
             "content_md": "# Root",
         },
     )
     res = await auth_client.put(
-        "/api/pages/ml-bad",
+        f"/api/pages/{created.json()['slug']}",
         json={"mindmap_layout": "diagonal"},
     )
     assert res.status_code == 422
@@ -92,24 +88,24 @@ async def test_update_layout_to_invalid_value_returns_422(auth_client):
 
 @pytest.mark.asyncio
 async def test_update_layout_back_to_null(auth_client):
-    await auth_client.post(
+    created = await auth_client.post(
         "/api/pages",
         json={
             "title": "ML Reset",
-            "slug": "ml-reset",
             "page_type": "mindmap",
             "mindmap_layout": "radial",
             "content_md": "# Root",
         },
     )
+    slug = created.json()["slug"]
     res = await auth_client.put(
-        "/api/pages/ml-reset",
+        f"/api/pages/{slug}",
         json={"mindmap_layout": None},
     )
     assert res.status_code == 200
     assert res.json()["mindmap_layout"] is None
 
-    fetched = await auth_client.get("/api/pages/ml-reset")
+    fetched = await auth_client.get(f"/api/pages/{slug}")
     assert fetched.json()["mindmap_layout"] is None
 
 
@@ -121,7 +117,6 @@ async def test_layout_allowed_on_document_page(auth_client):
         "/api/pages",
         json={
             "title": "Doc With Layout",
-            "slug": "doc-with-layout",
             "page_type": "document",
             "mindmap_layout": "radial",
             "content_md": "Body",
@@ -133,10 +128,10 @@ async def test_layout_allowed_on_document_page(auth_client):
 
 @pytest.mark.asyncio
 async def test_get_response_always_includes_layout_key(auth_client):
-    await auth_client.post(
+    created = await auth_client.post(
         "/api/pages",
-        json={"title": "Plain Doc", "slug": "plain-doc", "content_md": "x"},
+        json={"title": "Plain Doc", "content_md": "x"},
     )
-    res = await auth_client.get("/api/pages/plain-doc")
+    res = await auth_client.get(f"/api/pages/{created.json()['slug']}")
     assert res.status_code == 200
     assert "mindmap_layout" in res.json()

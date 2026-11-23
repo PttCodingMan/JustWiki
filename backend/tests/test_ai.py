@@ -176,14 +176,14 @@ async def test_chat_retrieves_page_for_cjk_natural_question(
     appear contiguously, so questions like '志工相關的頁面在哪' returned
     422 even when a page mentioned 志工.
     """
-    await auth_client.post(
+    created = await auth_client.post(
         "/api/pages",
         json={
             "title": "志工名單",
-            "slug": "ai-volunteer-list-zh",
             "content_md": "本頁列出本社所有志工的聯絡方式。",
         },
     )
+    slug = created.json()["slug"]
 
     fake = _mock_httpx_client()
     with patch("app.routers.ai.httpx.AsyncClient", return_value=fake):
@@ -194,7 +194,7 @@ async def test_chat_retrieves_page_for_cjk_natural_question(
     assert resp.status_code == 200
     citations = _extract_citations(resp.text)
     slugs = {c["slug"] for c in citations}
-    assert "ai-volunteer-list-zh" in slugs
+    assert slug in slugs
 
 
 @pytest.mark.asyncio
@@ -223,22 +223,22 @@ async def test_ai_acl_filter(ai_enabled):
             "/api/pages",
             json={
                 "title": "AI Secret Doc",
-                "slug": "ai-acl-secret-doc",
                 "content_md": "This page contains aiuniquekeyword123 confidential info.",
             },
         )
         assert r.status_code == 201
         secret_page_id = r.json()["id"]
+        secret_slug = r.json()["slug"]
 
         r2 = await client.post(
             "/api/pages",
             json={
                 "title": "AI Public Doc",
-                "slug": "ai-acl-public-doc",
                 "content_md": "This page also mentions aiuniquekeyword123 publicly.",
             },
         )
         assert r2.status_code == 201
+        public_slug = r2.json()["slug"]
 
     # Restrict the secret page to Alice only.
     await _add_acl(db, secret_page_id, "user", alice["id"], "read")
@@ -254,8 +254,8 @@ async def test_ai_acl_filter(ai_enabled):
         assert r_alice.status_code == 200
         citations_a = _extract_citations(r_alice.text)
         slugs_a = {c["slug"] for c in citations_a}
-        assert "ai-acl-secret-doc" in slugs_a
-        assert "ai-acl-public-doc" in slugs_a
+        assert secret_slug in slugs_a
+        assert public_slug in slugs_a
 
         # Bob only sees the public page. The secret page MUST NOT leak.
         async with _token_client(bob) as client:
@@ -266,10 +266,10 @@ async def test_ai_acl_filter(ai_enabled):
         assert r_bob.status_code == 200
         citations_b = _extract_citations(r_bob.text)
         slugs_b = {c["slug"] for c in citations_b}
-        assert "ai-acl-secret-doc" not in slugs_b, (
+        assert secret_slug not in slugs_b, (
             "ACL leak: Bob retrieved a page Alice restricted"
         )
-        assert "ai-acl-public-doc" in slugs_b
+        assert public_slug in slugs_b
 
 
 def _extract_citations(sse_body: str) -> list[dict]:
@@ -298,7 +298,6 @@ async def test_chat_streams_sse(auth_client, ai_enabled):
         "/api/pages",
         json={
             "title": "Stream Test",
-            "slug": "ai-stream-test",
             "content_md": "aistreamtestkeyword content here.",
         },
     )
@@ -331,7 +330,6 @@ async def test_chat_upstream_error_surfaces_as_sse_event(auth_client, ai_enabled
         "/api/pages",
         json={
             "title": "Err Test",
-            "slug": "ai-err-test",
             "content_md": "aierrtestkeyword content.",
         },
     )
@@ -358,7 +356,6 @@ async def test_chat_upstream_timeout(auth_client, ai_enabled):
         "/api/pages",
         json={
             "title": "Timeout Test",
-            "slug": "ai-timeout-test",
             "content_md": "aitimeouttestkeyword content.",
         },
     )
@@ -393,7 +390,6 @@ async def test_chat_rate_limit(auth_client, ai_enabled, monkeypatch):
         "/api/pages",
         json={
             "title": "RL Test",
-            "slug": "ai-rl-test",
             "content_md": "airatelimitkeyword content here.",
         },
     )

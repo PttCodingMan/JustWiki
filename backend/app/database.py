@@ -283,7 +283,7 @@ def _read_seed(name: str) -> str:
     return (_SEED_DIR / name).read_text(encoding="utf-8")
 
 
-# (slug, title, sort_order, page_type) — nested under the "getting-started" hub.
+# (seed file name, title, sort_order, page_type) — nested under the "getting-started" hub.
 WELCOME_PAGES = [
     ("welcome", "Welcome to JustWiki", 0, "document"),
     ("welcome-zh", "歡迎使用 JustWiki", 1, "document"),
@@ -820,6 +820,7 @@ async def seed_welcome_page(db):
     )
     admin_id = admin_rows[0]["id"] if admin_rows else None
 
+    from app.services.page_slug import new_page_slug, rewrite_page_slugs
     from app.services.search import rebuild_search_index
     from app.services.wikilink import parse_and_update_backlinks
 
@@ -827,17 +828,16 @@ async def seed_welcome_page(db):
     # and mindmap demos nested underneath. Parent is inserted first so the
     # children's parent_id resolves; wikilinks are parsed in a second pass so
     # cross-links between siblings are not silently dropped.
+    seed_pages = [("getting-started", "Getting Started", 0, "document"), *WELCOME_PAGES]
+    slug_map = {seed_name: new_page_slug() for seed_name, *_ in seed_pages}
     hub_id = None
     seeded = []
-    for slug, title, sort_order, page_type in [
-        ("getting-started", "Getting Started", 0, "document"),
-        *WELCOME_PAGES,
-    ]:
-        content = _read_seed(f"{slug}.md")
+    for seed_name, title, sort_order, page_type in seed_pages:
+        content = rewrite_page_slugs(_read_seed(f"{seed_name}.md"), slug_map)
         cursor = await db.execute(
             """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, created_by, page_type)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (slug, title, content, hub_id, sort_order, admin_id, page_type),
+            (slug_map[seed_name], title, content, hub_id, sort_order, admin_id, page_type),
         )
         page_id = cursor.lastrowid
         hub_id = hub_id or page_id  # the first page is the hub
@@ -864,7 +864,8 @@ async def seed_welcome_page(db):
     )
     if not existing:
         await db.execute(
-            "INSERT INTO site_settings (key, value) VALUES ('home_page_slug', 'getting-started')"
+            "INSERT INTO site_settings (key, value) VALUES ('home_page_slug', ?)",
+            (slug_map["getting-started"],),
         )
 
     await db.commit()

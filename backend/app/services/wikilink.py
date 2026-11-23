@@ -3,8 +3,8 @@ import re
 # Match [[slug]] or [[slug|display text]] — but NOT ![[slug]] (transclusion)
 WIKILINK_RE = re.compile(r'(?<!!)\[\[([^\]|]+)(?:\|[^\]]+)?\]\]')
 
-# Match ![[slug]] (transclusion)
-TRANSCLUSION_RE = re.compile(r'!\[\[([^\]|]+)\]\]')
+# Match ![[slug]] or ![[slug|heading]] (transclusion)
+TRANSCLUSION_RE = re.compile(r'!\[\[([^\]|]+)(?:\|[^\]]+)?\]\]')
 
 
 def extract_wikilink_slugs(content_md: str) -> set[str]:

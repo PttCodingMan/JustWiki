@@ -31,63 +31,63 @@ async def _client_for(user: dict):
 
 @pytest.mark.asyncio
 async def test_watch_unwatch_roundtrip(auth_client):
-    await auth_client.post("/api/pages", json={
+    created = await auth_client.post("/api/pages", json={
         "title": "Watch Me",
         "content_md": "body",
-        "slug": "watch-me",
     })
+    slug = created.json()["slug"]
 
     # Initially not watching
-    res = await auth_client.get("/api/pages/watch-me/watch")
+    res = await auth_client.get(f"/api/pages/{slug}/watch")
     assert res.status_code == 200
     assert res.json()["watching"] is False
 
     # Watch
-    res = await auth_client.post("/api/pages/watch-me/watch")
+    res = await auth_client.post(f"/api/pages/{slug}/watch")
     assert res.status_code == 200
     assert res.json()["watching"] is True
 
     # Verify
-    res = await auth_client.get("/api/pages/watch-me/watch")
+    res = await auth_client.get(f"/api/pages/{slug}/watch")
     assert res.json()["watching"] is True
     assert res.json()["watcher_count"] == 1
 
     # Unwatch
-    res = await auth_client.delete("/api/pages/watch-me/watch")
+    res = await auth_client.delete(f"/api/pages/{slug}/watch")
     assert res.status_code == 200
     assert res.json()["watching"] is False
 
 
 @pytest.mark.asyncio
 async def test_watching_twice_is_idempotent(auth_client):
-    await auth_client.post("/api/pages", json={
+    created = await auth_client.post("/api/pages", json={
         "title": "Watch Idem",
         "content_md": "body",
-        "slug": "watch-idem",
     })
+    slug = created.json()["slug"]
     for _ in range(3):
-        res = await auth_client.post("/api/pages/watch-idem/watch")
+        res = await auth_client.post(f"/api/pages/{slug}/watch")
         assert res.status_code == 200
-    res = await auth_client.get("/api/pages/watch-idem/watch")
+    res = await auth_client.get(f"/api/pages/{slug}/watch")
     assert res.json()["watcher_count"] == 1
 
 
 @pytest.mark.asyncio
 async def test_update_creates_notification_for_watcher(auth_client, db):
     # First user creates a page
-    await auth_client.post("/api/pages", json={
+    created = await auth_client.post("/api/pages", json={
         "title": "Notify Page",
         "content_md": "initial",
-        "slug": "notify-page",
     })
+    slug = created.json()["slug"]
 
     # Second user watches it
     second = await _make_second_user(db, "watcher1")
     async with await _client_for(second) as second_client:
-        await second_client.post("/api/pages/notify-page/watch")
+        await second_client.post(f"/api/pages/{slug}/watch")
 
         # First user edits — second user should get a notification
-        res = await auth_client.put("/api/pages/notify-page", json={
+        res = await auth_client.put(f"/api/pages/{slug}", json={
             "content_md": "updated body",
             "base_version": 1,
         })
@@ -99,27 +99,27 @@ async def test_update_creates_notification_for_watcher(auth_client, db):
         data = res.json()
         assert data["unread_count"] >= 1
         assert any(
-            item["event"] == "page.updated" and item["page_slug"] == "notify-page"
+            item["event"] == "page.updated" and item["page_slug"] == slug
             for item in data["items"]
         )
 
 
 @pytest.mark.asyncio
 async def test_actor_does_not_notify_self(auth_client, db):
-    await auth_client.post("/api/pages", json={
+    created = await auth_client.post("/api/pages", json={
         "title": "Self Notify",
         "content_md": "initial",
-        "slug": "self-notify",
     })
+    slug = created.json()["slug"]
     # Author watches their own page
-    await auth_client.post("/api/pages/self-notify/watch")
+    await auth_client.post(f"/api/pages/{slug}/watch")
 
     # Count notifications before update
     res = await auth_client.get("/api/notifications", params={"unread_only": True})
     before = res.json()["unread_count"]
 
     # Author edits
-    await auth_client.put("/api/pages/self-notify", json={
+    await auth_client.put(f"/api/pages/{slug}", json={
         "content_md": "new",
         "base_version": 1,
     })
@@ -133,16 +133,16 @@ async def test_actor_does_not_notify_self(auth_client, db):
 @pytest.mark.asyncio
 async def test_mark_all_read(auth_client, db):
     # Use a fresh watcher so this test is isolated
-    await auth_client.post("/api/pages", json={
+    created = await auth_client.post("/api/pages", json={
         "title": "Mark Read",
         "content_md": "body",
-        "slug": "mark-read",
     })
+    slug = created.json()["slug"]
     second = await _make_second_user(db, "watcher2")
     async with await _client_for(second) as second_client:
-        await second_client.post("/api/pages/mark-read/watch")
+        await second_client.post(f"/api/pages/{slug}/watch")
         await auth_client.put(
-            "/api/pages/mark-read",
+            f"/api/pages/{slug}",
             json={"content_md": "v2", "base_version": 1},
         )
 
@@ -197,11 +197,11 @@ async def test_webhook_crud_admin_only(admin_client, auth_client):
 
 @pytest.mark.asyncio
 async def test_watch_deleted_page_404(auth_client):
-    await auth_client.post("/api/pages", json={
+    created = await auth_client.post("/api/pages", json={
         "title": "Watch Deleted",
         "content_md": "body",
-        "slug": "watch-deleted",
     })
-    await auth_client.delete("/api/pages/watch-deleted")
-    res = await auth_client.post("/api/pages/watch-deleted/watch")
+    slug = created.json()["slug"]
+    await auth_client.delete(f"/api/pages/{slug}")
+    res = await auth_client.post(f"/api/pages/{slug}/watch")
     assert res.status_code == 404

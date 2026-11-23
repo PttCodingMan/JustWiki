@@ -8,13 +8,13 @@ from app.config import settings
 @pytest.mark.asyncio
 async def test_export_page(auth_client):
     # Create page
-    await auth_client.post("/api/pages", json={
+    created = await auth_client.post("/api/pages", json={
         "title": "Export Page",
         "content_md": "Export content",
-        "slug": "export-page"
     })
+    slug = created.json()["slug"]
 
-    response = await auth_client.get("/api/export/page/export-page")
+    response = await auth_client.get(f"/api/export/page/{slug}")
     assert response.status_code == 200
     assert response.headers["Content-Type"] == "text/html; charset=utf-8"
     assert b"Export content" in response.content
@@ -24,13 +24,13 @@ async def test_export_page_is_plain_download(auth_client):
     """Page export is a plain HTML attachment — printing is handled client-side
     via the browser's own print dialog on the live page view, so the export
     must not ship auto-print scripts or hint banners."""
-    await auth_client.post("/api/pages", json={
+    created = await auth_client.post("/api/pages", json={
         "title": "Html Only",
         "content_md": "Plain html export",
-        "slug": "html-only",
     })
+    slug = created.json()["slug"]
 
-    response = await auth_client.get("/api/export/page/html-only")
+    response = await auth_client.get(f"/api/export/page/{slug}")
     assert response.status_code == 200
     assert "attachment" in response.headers["content-disposition"]
     assert "window.print()" not in response.text
@@ -52,13 +52,13 @@ async def test_export_page_inlines_media_images(auth_client):
     filepath.write_bytes(png_bytes)
 
     try:
-        await auth_client.post("/api/pages", json={
+        created = await auth_client.post("/api/pages", json={
             "title": "With Image",
             "content_md": f"Has image: ![pixel](/api/media/{filename})",
-            "slug": "with-image",
         })
+        slug = created.json()["slug"]
 
-        response = await auth_client.get("/api/export/page/with-image")
+        response = await auth_client.get(f"/api/export/page/{slug}")
         assert response.status_code == 200
         body = response.text
         expected = "data:image/png;base64," + base64.b64encode(png_bytes).decode()
@@ -78,15 +78,15 @@ async def test_export_double_backtick_doesnt_desync_inline_code(auth_client):
     so ``| `` `x` `` | `y` |`` left stray backticks that inverted every
     subsequent `<code>` span — e.g. `.env` rendered as `</code>.env`.
     """
-    await auth_client.post("/api/pages", json={
+    created = await auth_client.post("/api/pages", json={
         "title": "Backtick Escape",
         "content_md": (
             "Escape demo: `` `inner` ``\n\n"
             "Later inline: `./data` and `.env`\n"
         ),
-        "slug": "backtick-escape",
     })
-    response = await auth_client.get("/api/export/page/backtick-escape")
+    slug = created.json()["slug"]
+    response = await auth_client.get(f"/api/export/page/{slug}")
     assert response.status_code == 200
     body = response.text
 
@@ -104,12 +104,12 @@ async def test_export_escapes_title_and_slug(auth_client):
     HTML in them must be escaped so opening the downloaded HTML doesn't run
     attacker-controlled script.
     """
-    await auth_client.post("/api/pages", json={
+    created = await auth_client.post("/api/pages", json={
         "title": "<script>alert('xss-title')</script>",
         "content_md": "body",
-        "slug": "xss-target",
     })
-    response = await auth_client.get("/api/export/page/xss-target")
+    slug = created.json()["slug"]
+    response = await auth_client.get(f"/api/export/page/{slug}")
     assert response.status_code == 200
     body = response.text
     # Escaped form should appear; raw <script> tag for the title should not.
@@ -124,7 +124,6 @@ async def test_export_site_escapes_title_in_index(admin_client):
     await admin_client.post("/api/pages", json={
         "title": "<img src=x onerror=alert(1)>",
         "content_md": "body",
-        "slug": "xss-in-index",
     })
     import zipfile, io
     response = await admin_client.get("/api/export/site")
@@ -154,15 +153,15 @@ async def test_export_site_admin(admin_client):
 async def test_export_renders_wiki_extensions(auth_client):
     """Wikilinks point at the sibling `<slug>.html` files of a site export,
     and callouts become styled blocks rather than literal `:::` text."""
-    await auth_client.post("/api/pages", json={
+    created = await auth_client.post("/api/pages", json={
         "title": "Extensions",
         "content_md": (
             "See [[other-page|the other page]] and [[中文頁]].\n\n"
             ":::warning\nCareful **now**\n:::\n"
         ),
-        "slug": "extensions",
     })
-    response = await auth_client.get("/api/export/page/extensions")
+    slug = created.json()["slug"]
+    response = await auth_client.get(f"/api/export/page/{slug}")
     assert response.status_code == 200
     body = response.text
     assert '<a href="other-page.html" class="wikilink">the other page</a>' in body
@@ -174,16 +173,16 @@ async def test_export_renders_wiki_extensions(auth_client):
 
 @pytest.mark.asyncio
 async def test_export_does_not_emit_raw_html_or_script_urls(auth_client):
-    await auth_client.post("/api/pages", json={
+    created = await auth_client.post("/api/pages", json={
         "title": "Hostile",
         "content_md": (
             "<script>alert(1)</script>\n\n"
             "[click](javascript:alert(2))\n\n"
             ':::info "><img src=x onerror=alert(3)>\nbody\n:::\n'
         ),
-        "slug": "hostile",
     })
-    response = await auth_client.get("/api/export/page/hostile")
+    slug = created.json()["slug"]
+    response = await auth_client.get(f"/api/export/page/{slug}")
     assert response.status_code == 200
     body = response.text
     assert "<script>alert(1)</script>" not in body
