@@ -13,7 +13,7 @@ async def test_unique_slug_collision(auth_client):
         "content_md": "Content 2"
     })
     assert response.status_code == 201
-    assert re.fullmatch(r"[0-9a-f]{8}", response.json()["slug"])
+    assert re.fullmatch(r"[0-9A-Za-z]{8}", response.json()["slug"])
     assert response.json()["slug"] != first.json()["slug"]
 
 @pytest.mark.asyncio

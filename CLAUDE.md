@@ -79,7 +79,7 @@ Schema auto-migrates on startup — DDL lives in `database.py`, versioned migrat
 
 ### Wikilinks
 
-Format: `[[slug]]` or `[[slug|display text]]`. Parsed on both backend (backlink tracking in `backlinks` table via `services/wikilink.py`) and frontend (navigation in viewer). Slugs are random 8-char hex IDs assigned on creation (`services/page_slug.py`); the editor's `[[` autocomplete inserts `[[slug|title]]` so links stay readable. Migration 014 converted legacy title-derived slugs and rewrote wikilinks / `/page/<slug>` links in stored content.
+Format: `[[slug]]` or `[[slug|display text]]`. Parsed on both backend (backlink tracking in `backlinks` table via `services/wikilink.py`) and frontend (navigation in viewer). Slugs are random 8-char alphanumeric IDs (`[A-Za-z0-9]`, case-sensitive; pages created before the switch keep their 8-char hex slug) assigned on creation (`services/page_slug.py`); the editor's `[[` autocomplete inserts `[[slug|title]]` so links stay readable. Migration 014 converted legacy title-derived slugs and rewrote wikilinks / `/page/<slug>` links in stored content.
 
 ## API Structure
 

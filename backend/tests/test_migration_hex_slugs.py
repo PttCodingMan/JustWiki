@@ -9,7 +9,7 @@ import pytest
 from app.database import SCHEMA_SQL
 from app.migrations import run_migrations
 
-HEX_SLUG = re.compile(r"[0-9a-f]{8}")
+OPAQUE_SLUG = re.compile(r"[0-9A-Za-z]{8}")
 
 
 @pytest.mark.asyncio
@@ -61,8 +61,8 @@ async def test_m014_rewrites_legacy_slugs_and_references():
                 for r in await db.execute_fetchall("SELECT id, slug FROM pages")
             }
             new_target = slugs[target_id]
-            assert HEX_SLUG.fullmatch(new_target)
-            assert HEX_SLUG.fullmatch(slugs[source_id])
+            assert OPAQUE_SLUG.fullmatch(new_target)
+            assert OPAQUE_SLUG.fullmatch(slugs[source_id])
             assert "0123abcd" in slugs.values()
             assert len(set(slugs.values())) == len(slugs)
 
