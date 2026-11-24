@@ -189,8 +189,8 @@ curl -sS -b cookies.txt -X POST http://localhost:8000/api/pages \
   }'
 ```
 
-Returns the created page, including `slug` (a random 8-char hex ID such as
-`3f9a1c2e`; the title does not affect it and it cannot be chosen) and `version: 1`. To nest under a parent, include `parent_id`; you
+Returns the created page, including `slug` (a random 8-char case-sensitive alphanumeric ID such as
+`aZ3kQ9xB`; the title does not affect it and it cannot be chosen) and `version: 1`. To nest under a parent, include `parent_id`; you
 need write permission on the parent.
 
 Templates: pass `"template_id": <int>` instead of `content_md` to seed from a
@@ -314,8 +314,8 @@ Use stock GFM plus these JustWiki extensions. The backend parses them on
 write to keep backlinks and media refs in sync; the viewer renders them.
 
 - **Wikilinks** — `[[slug]]` or `[[slug|display text]]`. Creates a
-  `backlinks` row and renders as a link to `/wiki/<slug>`. Slugs are hex IDs,
-  so use the display form (e.g. `[[3f9a1c2e|專案規劃]]`).
+  `backlinks` row and renders as a link to `/wiki/<slug>`. Slugs are opaque IDs,
+  so use the display form (e.g. `[[aZ3kQ9xB|專案規劃]]`).
 - **Transclusion** — `![[slug]]` inlines another page's rendered content.
 - **Callouts** — fenced blocks: `:::info` / `:::tip` / `:::warning` / `:::danger`
   ending with `:::`.
@@ -330,8 +330,9 @@ DOMPurify. You can assume raw HTML in markdown will be stripped.
 
 1. **Always fetch before editing.** Skipping the read to get `version` is the
    fastest way to hit `base_version_required` or `conflict`.
-2. **Slugs are opaque hex IDs.** They're random 8-char lowercase hex assigned
-   on creation; you can't choose one. Keep the `slug` from the create response.
+2. **Slugs are opaque, case-sensitive IDs.** They're random 8-char
+   `[A-Za-z0-9]` strings assigned on creation (older pages have 8-char hex);
+   you can't choose one. Keep the `slug` from the create response.
 3. **404 may mean "no permission".** The server returns 404 instead of 403
    for pages the caller can't read, so treat 404 on known slugs as "maybe
    ACL-blocked."

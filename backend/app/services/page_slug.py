@@ -1,15 +1,17 @@
 import re
 import secrets
+import string
 from urllib.parse import unquote
 
-PAGE_SLUG_BYTES = 4
+PAGE_SLUG_LENGTH = 8
+PAGE_SLUG_ALPHABET = string.ascii_letters + string.digits
 
 _WIKILINK_TARGET_RE = re.compile(r"(!?\[\[)([^\]|]+)((?:\|[^\]]+)?\]\])")
 _PAGE_URL_TARGET_RE = re.compile(r"(/(?:public/)?page/)([^\s/?#)\]\"'<>]+)")
 
 
 def new_page_slug() -> str:
-    return secrets.token_hex(PAGE_SLUG_BYTES)
+    return "".join(secrets.choice(PAGE_SLUG_ALPHABET) for _ in range(PAGE_SLUG_LENGTH))
 
 
 def rewrite_page_slugs(content_md: str, slug_map: dict[str, str]) -> str:

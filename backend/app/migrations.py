@@ -24,7 +24,7 @@ from typing import Awaitable, Callable
 
 import aiosqlite
 
-from app.services.page_slug import PAGE_SLUG_BYTES, new_page_slug, rewrite_page_slugs
+from app.services.page_slug import new_page_slug, rewrite_page_slugs
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +206,9 @@ async def _m013_user_is_active(db: aiosqlite.Connection) -> None:
         )
 
 
-_HEX_SLUG_RE = re.compile(rf"[0-9a-f]{{{PAGE_SLUG_BYTES * 2}}}")
+# Slugs minted before IDs switched to [A-Za-z0-9] were 8-char hex; those are
+# already opaque, so the migration leaves them alone.
+_HEX_SLUG_RE = re.compile(r"[0-9a-f]{8}")
 
 
 async def _rewrite_text_column(
