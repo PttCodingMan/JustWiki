@@ -16,6 +16,7 @@ from app.database import (
     seed_welcome_page,
 )
 from app.auth import ensure_admin_exists
+from app.spa import install_spa
 from app.routers import auth_router, oauth_router, pages, media, templates, search, tags, activity, bookmarks, versions, diagrams, users, comments, backup, export, trash, notifications, watch, public, dashboard, acl, groups, ai, tokens, settings as settings_router
 
 logger = logging.getLogger("justwiki")
@@ -153,7 +154,19 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 
-app = FastAPI(title="JustWiki", version=__version__, lifespan=lifespan)
+# Default cap on any request body, enforced while the body streams in (so an
+# oversized upload is rejected without being buffered). It sits just above the
+# largest value the admin "max upload size" setting allows (100 MB,
+# services/site_settings.py); the media router enforces the configured value.
+# Routes that legitimately take more (backup restore) raise it per-route.
+MAX_REQUEST_BODY = 105 * 1024 * 1024
+
+app = FastAPI(
+    title="JustWiki",
+    version=__version__,
+    lifespan=lifespan,
+    max_body_size=MAX_REQUEST_BODY,
+)
 
 
 @app.middleware("http")
@@ -307,3 +320,8 @@ app.include_router(settings_router.router)
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+# Serve the built frontend for every non-API path (Docker image only; a no-op
+# in dev). Installed as the router's fallback, so it never shadows an API route.
+install_spa(app, settings.FRONTEND_DIST_DIR)

@@ -121,7 +121,7 @@ Multiple built-in themes (light, dark, lavender, forest, etc.) via CSS variables
 
 ## Deployment
 
-Docker Compose: backend (uvicorn, port 8000) + frontend (nginx, port 3000). Shared `./data` volume. All config in `.env`.
+Single Docker image (root `Dockerfile`): a Node stage builds the frontend, the Python stage copies `dist/` to `/app/static` and FastAPI serves it (`app/spa.py`, installed as the router's fallback so `/api` routes always win). No nginx. Request body size caps live in the app (`max_body_size` on `FastAPI(...)` in `main.py`, raised per-route for backup restore). `docker-compose.yml` runs one service on host port 3000 → container 8000 with the `./data` volume. All config in `.env`.
 
 ## Development Workflow
 

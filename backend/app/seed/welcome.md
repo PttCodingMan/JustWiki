@@ -372,10 +372,9 @@ Admins have a dedicated **Admin** menu with:
 
 ## Deployment
 
-JustWiki runs on Docker Compose with two services:
-- **Backend** — FastAPI + uvicorn (port 8000)
-- **Frontend** — React + nginx (port 3000)
-- Both share the `./data` directory for the SQLite database and uploaded media
+JustWiki ships as a single Docker image:
+- **FastAPI + uvicorn** serves both the API and the built React frontend (exposed on port 3000 by the bundled Docker Compose file)
+- The `./data` directory holds the SQLite database and uploaded media
 
 All configuration lives in a single `.env` file.
 

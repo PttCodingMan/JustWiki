@@ -372,10 +372,9 @@ JustWiki 支援多種登入整合，讓你沿用團隊既有的帳號系統：
 
 ## 部署方式
 
-JustWiki 使用 Docker Compose 部署，包含：
-- **後端**：FastAPI + uvicorn（port 8000）
-- **前端**：React + nginx（port 3000）
-- 共用 `./data` 目錄存放 SQLite 資料庫與上傳檔案
+JustWiki 以單一 Docker image 部署：
+- **FastAPI + uvicorn** 同時提供 API 與建置好的 React 前端（內附的 Docker Compose 對外開在 port 3000）
+- `./data` 目錄存放 SQLite 資料庫與上傳檔案
 
 所有設定透過 `.env` 檔案管理。
 

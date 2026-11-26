@@ -83,6 +83,19 @@ docker-compose up -d
 
 開啟 http://localhost:3000 即可開始使用。
 
+JustWiki 是單一 image（`ghcr.io/pttcodingman/justwiki`），API 與前端由同一個容器提供，不需要 Compose 也能直接跑：
+
+```bash
+docker run -d --name justwiki -p 3000:8000 -v ./data:/app/data \
+  -e SECRET_KEY=<random-string> -e ADMIN_PASS=<strong-password> \
+  -e PUBLIC_BASE_URL=http://localhost:3000 \
+  ghcr.io/pttcodingman/justwiki:latest
+```
+
+> **放在自己的 reverse proxy 後面**（Caddy、Traefik、nginx…）：在 `.env` 設定 `TRUST_PROXY=true`，並用 `PUBLIC_BASE_URL_DOCKER` 填入對外網址（例如 `https://wiki.example.com`）。
+>
+> **從舊版（backend + frontend 兩個 image）升級**：改用新版 `docker-compose.yml` 後執行 `docker-compose up -d --remove-orphans`。資料目錄 `./data` 與對外 port 3000 都不變；舊版 compose 會強制開啟 `TRUST_PROXY`，新版不會，若前面有 proxy 請自行在 `.env` 設定。
+
 ### 設定
 
 所有設定都集中在單一 `.env` 檔案。完整選項請參考 [.env.example](.env.example)。
@@ -156,7 +169,7 @@ docker-compose up -d
    ```
    *需求環境：Python 3.11+、Node.js 20+、[uv](https://docs.astral.sh/uv/)*
 
-2. **啟動開發伺服器**: 同時啟動後端（port 8000）與前端（port 3000）
+2. **啟動開發伺服器**: 同時啟動後端（port 8000）與前端 Vite dev server（port 5173）
    ```bash
    make dev
    ```

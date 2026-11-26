@@ -1,4 +1,4 @@
-fastapi>=0.115
+fastapi>=0.164
 uvicorn[standard]>=0.30
 aiosqlite>=0.20
 pydantic>=2.7

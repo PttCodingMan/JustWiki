@@ -106,8 +106,9 @@ async def upload_media(
     if file.content_type not in ALLOWED_TYPES:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type}")
 
-    # Admin-configurable (Admin → Site settings); nginx caps the request
-    # body above the setting's max so the backend check is authoritative.
+    # Admin-configurable (Admin → Site settings); the app-wide request body
+    # cap (main.MAX_REQUEST_BODY) sits above the setting's max, so this check
+    # is the one that decides.
     max_mb = await site_settings.get_int("max_upload_mb")
     content = await file.read()
     size = len(content)

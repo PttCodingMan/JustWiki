@@ -23,7 +23,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/${{ github.repository }}
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
 
 jobs:
   changes:
@@ -40,11 +40,15 @@ jobs:
             backend:
               - 'backend/**'
               - 'VERSION'
+              - 'Dockerfile'
+              - '.dockerignore'
               - '.github/workflows/ci.yml'
               - 'docker-compose.yml'
             frontend:
               - 'frontend/**'
               - 'VERSION'
+              - 'Dockerfile'
+              - '.dockerignore'
               - '.github/workflows/ci.yml'
               - 'docker-compose.yml'
 
@@ -106,6 +110,9 @@ jobs:
           npm test
 
   build-and-push:
+    # One image (backend + built frontend). Rebuilt whenever either side
+    # changed, so the published tag always pairs a frontend with the backend
+    # from the same commit.
     needs: [changes, backend-tests, frontend-tests]
     if: |
       always() &&
@@ -120,10 +127,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    strategy:
-      matrix:
-        component: [backend, frontend]
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -140,31 +144,13 @@ jobs:
           echo "Resolved version: $VERSION"
           echo "$VERSION" > VERSION
 
-      - name: Skip if component didn't change
-        id: check
-        run: |
-          # Tag builds always publish both images so the semver tag on ghcr.io
-          # covers a full release, even if only one side actually changed.
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "skip=false" >> $GITHUB_OUTPUT
-          elif [[ "${{ matrix.component }}" == "backend" && "${{ needs.changes.outputs.backend }}" != "true" ]]; then
-            echo "skip=true" >> $GITHUB_OUTPUT
-          elif [[ "${{ matrix.component }}" == "frontend" && "${{ needs.changes.outputs.frontend }}" != "true" ]]; then
-            echo "skip=true" >> $GITHUB_OUTPUT
-          else
-            echo "skip=false" >> $GITHUB_OUTPUT
-          fi
-
       - name: Set up QEMU
-        if: steps.check.outputs.skip != 'true'
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
-        if: steps.check.outputs.skip != 'true'
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry
-        if: steps.check.outputs.skip != 'true'
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -172,11 +158,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata
-        if: steps.check.outputs.skip != 'true'
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.IMAGE_PREFIX }}/${{ matrix.component }}
+          images: ${{ env.IMAGE_NAME }}
           flavor: |
             latest=false
           tags: |
@@ -186,12 +171,11 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=
 
-      - name: Build and push ${{ matrix.component }}
-        if: steps.check.outputs.skip != 'true'
+      - name: Build and push
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./${{ matrix.component }}/Dockerfile
+          file: ./Dockerfile
           push: true
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
