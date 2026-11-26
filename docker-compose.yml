@@ -1,30 +1,36 @@
 services:
-  backend:
-    image: ghcr.io/pttcodingman/justwiki/backend:main
+  justwiki:
+    image: ghcr.io/pttcodingman/justwiki:latest
     build:
       context: .
-      dockerfile: backend/Dockerfile
+      dockerfile: Dockerfile
+    # One container serves both the API and the built frontend. Host port 3000
+    # is kept from the old two-image layout so existing URLs / OIDC callbacks
+    # keep working; the app listens on 8000 inside the container.
+    ports:
+      - "3000:8000"
     volumes:
       - ./data:/app/data
     env_file:
       - path: .env
         required: false
-    # Override the dev-oriented defaults so the container reads/writes the
-    # mounted /app/data volume and treats the frontend nginx (port 3000) as
-    # the public ingress — OIDC redirect_uri must round-trip through nginx.
-    # TRUST_PROXY=true because nginx is the only reachable peer.
+    # Override the dev-oriented defaults from .env so the container reads and
+    # writes the mounted /app/data volume.
     #
     # PUBLIC_BASE_URL: hardcode the docker-correct value rather than
     # `${PUBLIC_BASE_URL:-...}`, because the shipped .env.example sets the
     # dev value (localhost:8000) and `:-default` only fires when unset, not
     # when set-to-something. To override for prod, set PUBLIC_BASE_URL_DOCKER
     # in your .env (e.g., https://wiki.example.com).
+    #
+    # TRUST_PROXY is no longer forced on: nothing sits in front of the app in
+    # this compose file. If you put your own reverse proxy (Caddy, Traefik,
+    # nginx…) in front, set TRUST_PROXY=true in .env.
     environment:
       DATA_DIR: /app/data
       DB_PATH: /app/data/just-wiki.db
       MEDIA_DIR: /app/data/media
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL_DOCKER:-http://localhost:3000}
-      TRUST_PROXY: "true"
     # Block-style list: docker-compose's flow-sequence parser whitespace-
     # splits long quoted strings into separate argv tokens. Each arg on its
     # own line dodges that. The Python expression must stay single-statement
@@ -39,16 +45,4 @@ services:
       timeout: 5s
       start_period: 15s
       retries: 3
-    restart: unless-stopped
-
-  frontend:
-    image: ghcr.io/pttcodingman/justwiki/frontend:main
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
-    ports:
-      - "3000:3000"
-    depends_on:
-      backend:
-        condition: service_healthy
     restart: unless-stopped

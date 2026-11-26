@@ -21,7 +21,7 @@ DEFAULT_SETTINGS: dict[str, str] = {
 # affects sessions issued afterwards; existing cookies keep their exp.
 INT_SETTINGS: dict[str, tuple[int, int, int]] = {
     "session_days": (1, 1, 365),
-    # Capped well under nginx's client_max_body_size in frontend/nginx.conf.
+    # Capped under the app-wide request body limit (main.MAX_REQUEST_BODY).
     "max_upload_mb": (20, 1, 100),
     # Floor of 8 so the setting can only tighten the historical rule.
     "password_min_length": (8, 8, 128),

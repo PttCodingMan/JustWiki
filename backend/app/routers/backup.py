@@ -46,7 +46,9 @@ async def create_backup(user=Depends(require_admin)):
     )
 
 
-@router.post("/restore")
+# Raises the app-wide request body cap (main.MAX_REQUEST_BODY) for this route;
+# a little headroom over the file limit below for multipart overhead.
+@router.post("/restore", max_body_size=505 * 1024 * 1024)
 async def restore_backup(
     file: UploadFile = File(...),
     user=Depends(require_admin),

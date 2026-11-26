@@ -113,7 +113,13 @@ class Settings(BaseSettings):
     # Off by default so air-gapped installs never make an outbound call.
     CHECK_UPDATES: bool = False
     # Repo on ghcr.io for the image-tag lookup. Matches docker-compose.yml.
-    UPDATE_CHECK_IMAGE: str = "pttcodingman/justwiki/backend"
+    UPDATE_CHECK_IMAGE: str = "pttcodingman/justwiki"
+
+    # Built frontend (Vite `dist/`) to serve alongside the API. The Docker
+    # image copies it to backend/static; in `make dev` the directory doesn't
+    # exist and Vite serves the frontend instead. Point this at
+    # frontend/dist to serve a local `make build` from the backend.
+    FRONTEND_DIST_DIR: str = str(Path(__file__).resolve().parent.parent / "static")
 
     # Repeat views by the same user within this window don't re-increment
     # a page's view_count. Keeps counts meaningful across refreshes / tab

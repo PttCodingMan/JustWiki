@@ -87,6 +87,19 @@ docker-compose up -d
 
 Open http://localhost:3000 to start writing.
 
+JustWiki ships as a single image (`ghcr.io/pttcodingman/justwiki`) — the same container serves the API and the frontend, so it also runs without Compose:
+
+```bash
+docker run -d --name justwiki -p 3000:8000 -v ./data:/app/data \
+  -e SECRET_KEY=<random-string> -e ADMIN_PASS=<strong-password> \
+  -e PUBLIC_BASE_URL=http://localhost:3000 \
+  ghcr.io/pttcodingman/justwiki:latest
+```
+
+> **Behind your own reverse proxy** (Caddy, Traefik, nginx…): set `TRUST_PROXY=true` in `.env` and put your public URL (e.g. `https://wiki.example.com`) in `PUBLIC_BASE_URL_DOCKER`.
+>
+> **Upgrading from the old two-image layout** (backend + frontend): switch to the new `docker-compose.yml` and run `docker-compose up -d --remove-orphans`. The `./data` directory and host port 3000 are unchanged. The old compose file forced `TRUST_PROXY` on and the new one doesn't, so set it in `.env` if you run a proxy in front.
+
 ### Configuration
 
 All settings live in a single `.env` file. See [.env.example](.env.example) for available options.
@@ -160,7 +173,7 @@ Type `[[` in the editor to open a page search dropdown; keep typing to filter, �
    ```
    *Requires: Python 3.11+, Node.js 20+, [uv](https://docs.astral.sh/uv/)*
 
-2. **Run**: Start backend (port 8000) and frontend (port 3000)
+2. **Run**: Start backend (port 8000) and the Vite dev server for the frontend (port 5173)
    ```bash
    make dev
    ```
