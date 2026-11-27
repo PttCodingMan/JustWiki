@@ -10,8 +10,10 @@
 
 A lightweight, self-hosted wiki for small teams. Just clone, run, and write.
 
+**Try it online**: [codingman.cc/JustWiki](https://codingman.cc/JustWiki/) (read-only demo, nothing to install)
+
 <p align="center">
-  <img src="docs/images/hero.png" alt="JustWiki main UI: page tree on the left, table of contents on the right, Markdown viewer in the middle" width="100%">
+  <img src="docs/images/hero-en.png" alt="JustWiki main UI: page tree on the left, table of contents on the right, Markdown viewer in the middle" width="100%">
 </p>
 
 ## Why JustWiki
@@ -52,7 +54,7 @@ All your data = one `data/just-wiki.db` SQLite file + the `media/` folder. Backu
 - **Bring your own model** — any OpenAI-compatible endpoint works (OpenAI, Gemini, Ollama, Groq, DeepSeek…)
 
 **Collaboration & permissions**
-- **Multi-user + group ACL** — per-page permission control (inherited from parent pages)
+- **Multi-user + group ACL** — per-page permission control (inherited from parent pages) with three levels: read, write and manage. Only manage can change who sees a page (its ACL, public sharing, moving it into another space)
 - **Concurrent-edit safety** — optimistic locking (`base_version`) so simultaneous edits never silently clobber each other
 - **Version history** — page revisions with diff view; roll back when something gets broken
 - **Draft autosave** — in-progress edits are kept in the browser, so a closed tab or crash doesn't lose work
@@ -61,7 +63,16 @@ All your data = one `data/just-wiki.db` SQLite file + the `media/` folder. Backu
 - **Activity log & trash** — see recent changes; deletions are soft and recoverable
 - **SSO & API tokens** — built-in OIDC (Google, GitHub, custom), LDAP, and personal Bearer tokens for enterprise SSO and automation scripts
 
-**Export & deployment**
+<p align="center">
+  <img src="docs/images/page-review-en.png" alt="Review strip on a page: last verified date, days overdue, owner, and a Mark as verified button" width="90%">
+</p>
+
+<p align="center">
+  <img src="docs/images/reviews-en.png" alt="Reviews list sorted by urgency, marking pages as overdue, due soon or OK" width="90%">
+</p>
+
+**Import, export & deployment**
+- **Migrate from other tools** — bulk-import a Markdown folder, an Obsidian vault, HackMD / HedgeDoc notes or Wiki.js 2.x ([details](#migrating-from-other-tools))
 - **Flexible export** — per-page Markdown / HTML / PDF (browser print), full-site static zip
 - **One SQLite file** — no external database needed. Backup = copy one file
 - **Themes** — 9 built-in color palettes ([preview](#themes))
@@ -102,6 +113,21 @@ docker run -d --name justwiki -p 3000:8000 -v ./data:/app/data \
 >
 > **Upgrading from the old two-image layout** (backend + frontend): switch to the new `docker-compose.yml` and run `docker-compose up -d --remove-orphans`. The `./data` directory and host port 3000 are unchanged. The old compose file forced `TRUST_PROXY` on and the new one doesn't, so set it in `.env` if you run a proxy in front.
 
+### Before exposing it to the internet
+
+Whenever the instance doesn't look like local development (running in Docker, `PUBLIC_BASE_URL` isn't localhost, or `ALLOWED_ORIGINS` / `COOKIE_SECURE` is set), JustWiki **refuses to start** with an unsafe configuration:
+
+- `SECRET_KEY` still at its default → no start; the error message includes a random key you can use.
+- The admin password is a default such as `admin` or `password` → no start. Set a strong `ADMIN_PASS` and restart; it replaces the weak password in the database.
+
+Also recommended:
+
+- Always serve over HTTPS. With an `https://` `PUBLIC_BASE_URL`, cookies are marked Secure and HSTS is sent automatically.
+- Put your public URL in `ALLOWED_ORIGINS` so cross-site requests are rejected.
+- Only enable `TRUST_PROXY` when a reverse proxy really sits in front; otherwise anyone can spoof their IP to dodge the login rate limit.
+- `ANONYMOUS_READ` is off by default; when on, logged-out visitors can read every page that has no ACL.
+- Login is limited to 5 attempts per IP per minute, with no account lockout or two-factor auth. For a public instance, add rate limiting or access control in front (Cloudflare, your reverse proxy) or use SSO.
+
 ### Configuration
 
 All settings live in a single `.env` file. See [.env.example](.env.example) for available options.
@@ -110,9 +136,14 @@ Key variables:
 
 | Variable        | Description                        | Default              |
 | --------------- | ---------------------------------- | -------------------- |
-| `SECRET_KEY`    | Session signing key                | `change-me-...`      |
+| `SECRET_KEY`    | Session signing key (change in production) | `change-me-...`      |
 | `ADMIN_USER`    | Admin username                     | `admin`              |
-| `ADMIN_PASS`    | Admin password                     | `admin`              |
+| `ADMIN_PASS`    | First admin's password (change in production) | `admin`              |
+| `PUBLIC_BASE_URL` | Public URL; used for SSO callbacks and to detect production | `http://localhost:8000` |
+| `ALLOWED_ORIGINS` | Allowed origins for CSRF / CORS, comma-separated | —            |
+| `COOKIE_SECURE` | HTTPS-only cookies (implied by an https `PUBLIC_BASE_URL`) | `false` |
+| `TRUST_PROXY`   | Read the client IP from `X-Forwarded-For`; only behind a proxy | `false` |
+| `ANONYMOUS_READ` | Let logged-out visitors read pages that have no ACL | `false`   |
 | `DB_PATH`       | SQLite database path               | `./backend/data/just-wiki.db`|
 | `AI_ENABLED`    | Enable AI chat                     | `false`              |
 | `AI_API_KEY`    | LLM provider API key (required if enabled) | —            |
@@ -155,7 +186,13 @@ Type `[[` in the editor to open a page search dropdown; keep typing to filter, �
 
 ### Migrating from other tools
 
-Admins can upload a `.zip` (or a single `.md`) under **Admin → Import from Markdown**:
+Admins can upload a `.zip` (or a single `.md`) under **Admin → Import from Markdown** and choose which page to import it under.
+
+<p align="center">
+  <img src="docs/images/import-en.png" alt="Import from Markdown: pick a source and a destination, then see the created pages and any warnings" width="80%">
+</p>
+
+Supported sources:
 
 | Source | What gets converted |
 | --- | --- |
