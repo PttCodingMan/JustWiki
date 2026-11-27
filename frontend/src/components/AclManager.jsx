@@ -3,19 +3,25 @@ import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import useGroups from '../store/useGroups'
 import usePermissions from '../store/usePermissions'
+import useAuth from '../store/useAuth'
 
 /**
  * AclManager — modal that edits a page's explicit ACL.
  *
  * Shows explicit rows on the page and inherited rows from ancestors
  * (purely informational; edits only affect the current page). Users can
- * add/remove grants against individual users or groups and flip each
- * grant between read and write. Saving PUTs the whole set atomically.
+ * add/remove grants against individual users or groups and set each grant
+ * to read, write or manage. Saving PUTs the whole set atomically.
+ *
+ * When a page gets its first rules, the current user is pre-added with
+ * `manage`: the backend refuses a change that would take the editor's own
+ * manage permission away, so starting from an empty list would fail.
  */
 export default function AclManager({ slug, open, onClose }) {
   const { t } = useTranslation()
   const { groups, fetchGroups } = useGroups()
   const invalidatePermission = usePermissions((s) => s.invalidate)
+  const currentUser = useAuth((s) => s.user)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -38,13 +44,18 @@ export default function AclManager({ slug, open, onClose }) {
       .then(([aclRes]) => {
         if (cancelled) return
         const data = aclRes.data
-        setRows(data.explicit.map((r) => ({
+        const explicitRows = data.explicit.map((r) => ({
           principal_type: r.principal_type,
           principal_id: r.principal_id,
           permission: r.permission,
-        })))
-        setInherited(data.inherited || [])
+        }))
         const names = {}
+        if (explicitRows.length === 0 && currentUser && currentUser.role !== 'admin') {
+          explicitRows.push({ principal_type: 'user', principal_id: currentUser.id, permission: 'manage' })
+          names[`user:${currentUser.id}`] = currentUser.display_name || currentUser.username
+        }
+        setRows(explicitRows)
+        setInherited(data.inherited || [])
         for (const r of data.explicit) {
           names[`${r.principal_type}:${r.principal_id}`] = r.principal_name
         }
@@ -144,6 +155,9 @@ export default function AclManager({ slug, open, onClose }) {
               <p className="text-sm text-text-secondary">
                 {t('acl.intro')}
               </p>
+              <p className="text-xs text-text-secondary">
+                {t('acl.manageHint')}
+              </p>
 
               <div>
                 <h3 className="text-sm font-semibold text-text mb-2">{t('acl.explicitGrants')}</h3>
@@ -166,6 +180,7 @@ export default function AclManager({ slug, open, onClose }) {
                           >
                             <option value="read">{t('acl.permission.read')}</option>
                             <option value="write">{t('acl.permission.write')}</option>
+                            <option value="manage">{t('acl.permission.manage')}</option>
                           </select>
                           <button
                             onClick={() => removeRow(r.principal_type, r.principal_id)}

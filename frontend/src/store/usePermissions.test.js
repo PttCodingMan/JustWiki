@@ -81,17 +81,20 @@ describe('permission helpers', () => {
     expect(canEdit('admin', 'viewer')).toBe(false)
   })
 
-  it('canEdit: editors need write-or-admin', () => {
+  it('canEdit: editors need write, manage or admin', () => {
     expect(canEdit('write', 'editor')).toBe(true)
+    expect(canEdit('manage', 'editor')).toBe(true)
     expect(canEdit('admin', 'editor')).toBe(true)
     expect(canEdit('read', 'editor')).toBe(false)
     expect(canEdit('none', 'editor')).toBe(false)
   })
 
-  it('canManageAcl: matches canEdit in v1', () => {
-    expect(canManageAcl('write', 'editor')).toBe(true)
+  it('canManageAcl: needs manage or admin — write alone is not enough', () => {
+    expect(canManageAcl('manage', 'editor')).toBe(true)
+    expect(canManageAcl('admin', 'editor')).toBe(true)
+    expect(canManageAcl('write', 'editor')).toBe(false)
     expect(canManageAcl('read', 'editor')).toBe(false)
-    expect(canManageAcl('write', 'viewer')).toBe(false)
+    expect(canManageAcl('manage', 'viewer')).toBe(false)
   })
 
   it('canRead: anything non-none is truthy', () => {

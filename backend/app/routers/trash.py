@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.auth import get_current_user, require_admin
 from app.database import fetch_one_or_404, get_db, write_transaction
 from app.routers.activity import log_activity
-from app.services.acl import invalidate_readable_cache, resolve_page_permission
+from app.services.acl import has_permission, invalidate_readable_cache, resolve_page_permission
 from app.services.search import rebuild_search_index
 from app.services.wikilink import parse_and_update_backlinks
 
@@ -69,7 +69,7 @@ async def restore_page(slug: str, user=Depends(get_current_user)):
     # page was in the trash). Admin bypass is inside resolve_page_permission.
     if user["role"] != "admin":
         perm = await resolve_page_permission(db, user, page["id"])
-        if perm not in ("admin", "write"):
+        if not has_permission(perm, "write"):
             raise HTTPException(
                 status_code=403,
                 detail="You do not have write permission to restore this page",

@@ -16,10 +16,17 @@ Resolution model (see /docs or the original plan for the full rationale):
   `parent_id` and find the shallowest ancestor (the "anchor") that has any
   ACL row. At that anchor, collect every row matching the user (direct user
   row OR a group the user belongs to) and pick the most permissive
-  (`write` > `read`). If no row matches, return `none`.
+  (`manage` > `write` > `read`). If no row matches, return `none`.
 - If no anchor exists anywhere in the chain, the page is open by default:
   editors get `write`, viewers get `read`.
-- `viewer` role is capped at `read` even when an ACL row would grant write.
+- On an unrestricted page (no anchor), its creator is promoted from `write`
+  to `manage` on that page (not its descendants). Inside a restricted space
+  only explicit `manage` grants (or admin) count: the space's ACL decides
+  who may re-scope pages in it, not whoever happened to write them.
+- `manage` = `write` plus control over who can see the page: editing its
+  ACL, toggling `is_public`, and moves that change which ACL it inherits.
+  Open-default write only lets editors edit content, not re-scope a page.
+- `viewer` role is capped at `read` even when an ACL row would grant more.
 - Media permission = union of its referencing live pages. Orphan media
   (no live references) is accessible to its uploader and admins only.
 """
@@ -81,14 +88,36 @@ async def _user_group_ids(db, user_id: int) -> list[int]:
     return [r["group_id"] for r in rows]
 
 
+# Ordered weakest → strongest. `admin` is the site role, never an ACL row.
+PERMISSION_ORDER = ("none", "read", "write", "manage", "admin")
+_RANK = {p: i for i, p in enumerate(PERMISSION_ORDER)}
+
+
+def has_permission(permission: str | None, level: str) -> bool:
+    """True if `permission` (as returned by `resolve_page_permission`) is at
+    least `level`. Use this instead of comparing strings so that a stronger
+    level (e.g. `manage`) always satisfies a weaker check (e.g. `write`)."""
+    return _RANK.get(permission or "none", 0) >= _RANK[level]
+
+
 def _cap_for_role(role: str, permission: str) -> str:
-    if role == "viewer" and permission == "write":
+    if role == "viewer" and has_permission(permission, "write"):
         return "read"
     return permission
 
 
+async def _creator_upgrade(db, user: dict, page_id: int, permission: str) -> str:
+    """Promote the page creator from `write` to `manage` on their own page."""
+    if permission != "write" or not user.get("id"):
+        return permission
+    rows = await db.execute_fetchall("SELECT created_by FROM pages WHERE id = ?", (page_id,))
+    if rows and rows[0]["created_by"] == user["id"]:
+        return "manage"
+    return permission
+
+
 async def resolve_page_permission(db, user: dict, page_id: int) -> str:
-    """Return one of `'admin' | 'write' | 'read' | 'none'`."""
+    """Return one of `'admin' | 'manage' | 'write' | 'read' | 'none'`."""
     role = user.get("role") or "editor"
     if role == "admin":
         return "admin"
@@ -111,29 +140,48 @@ async def resolve_page_permission(db, user: dict, page_id: int) -> str:
     )
 
     if not rows:
-        # No anchor anywhere in chain → open default.
-        return _cap_for_role(role, "write")
+        # No anchor anywhere in chain → open default; the creator owns it.
+        best = "write"
+        if role != "viewer":
+            best = await _creator_upgrade(db, user, page_id, best)
+    else:
+        anchor_depth = rows[0]["depth"]
+        best = "none"
+        for r in rows:
+            if r["depth"] != anchor_depth:
+                break  # rows are ordered by depth ASC; done with anchor
+            matches = (
+                (r["principal_type"] == "user" and r["principal_id"] == user["id"])
+                or (r["principal_type"] == "group" and r["principal_id"] in group_ids)
+            )
+            if matches and _RANK[r["permission"]] > _RANK[best]:
+                best = r["permission"]
 
-    anchor_depth = rows[0]["depth"]
-    best = None  # None | 'read' | 'write'
-    for r in rows:
-        if r["depth"] != anchor_depth:
-            break  # rows are ordered by depth ASC; done with anchor
-        matches = (
-            (r["principal_type"] == "user" and r["principal_id"] == user["id"])
-            or (r["principal_type"] == "group" and r["principal_id"] in group_ids)
-        )
-        if not matches:
-            continue
-        if r["permission"] == "write":
-            best = "write"
-            break  # most permissive already found
-        if r["permission"] == "read" and best != "write":
-            best = "read"
-
-    if best is None:
+    if best == "none":
         return "none"
     return _cap_for_role(role, best)
+
+
+async def find_acl_anchor(db, page_id: int | None) -> int | None:
+    """Id of the shallowest page in `page_id`'s chain (itself included) that
+    has ACL rows — the page whose rules decide access — or None when the
+    chain is unrestricted. `page_id=None` (the top level) has no anchor."""
+    if page_id is None:
+        return None
+    rows = await db.execute_fetchall(
+        f"""WITH RECURSIVE chain(id, parent_id, depth) AS (
+               SELECT id, parent_id, 0 FROM pages WHERE id = ?
+               UNION ALL
+               SELECT p.id, p.parent_id, c.depth + 1
+               FROM pages p JOIN chain c ON p.id = c.parent_id
+               WHERE c.parent_id IS NOT NULL AND c.depth < {_MAX_CHAIN_DEPTH}
+             )
+             SELECT c.id FROM chain c
+             WHERE EXISTS (SELECT 1 FROM page_acl a WHERE a.page_id = c.id)
+             ORDER BY c.depth ASC LIMIT 1""",
+        (page_id,),
+    )
+    return rows[0]["id"] if rows else None
 
 
 async def list_readable_page_ids(db, user: dict) -> set[int]:
@@ -252,9 +300,8 @@ def page_dep(level: PermLevel):
          so a route never has to repeat those checks. This collapses
          what used to be three separate guards into one Depends.
 
-    ``manage`` is currently the same gate as ``write`` but reserved as
-    a distinct level so future ACL evolution (e.g. an explicit "owner"
-    permission separate from write) only has to change `page_dep`.
+    ``manage`` additionally requires the caller to resolve to ``manage``
+    (page creator or an explicit ACL grant) or be an admin.
     """
     if level not in ("read", "write", "manage"):
         raise ValueError(f"page_dep: invalid level {level!r}")
@@ -287,10 +334,15 @@ def page_dep(level: PermLevel):
                 )
             if user.get("anonymous"):
                 raise HTTPException(status_code=401, detail="Login required")
-            if perm == "read":
+            if not has_permission(perm, "write"):
                 raise HTTPException(
                     status_code=403,
                     detail="You do not have write permission on this page",
+                )
+            if level == "manage" and not has_permission(perm, "manage"):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only the page owner or someone with manage permission can do this",
                 )
 
         return PageAccess(page=page, permission=perm, user=user)

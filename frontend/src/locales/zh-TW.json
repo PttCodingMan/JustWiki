@@ -49,7 +49,8 @@
     "noPages": "尚未有任何頁面",
     "newSubpage": "新增子頁面",
     "pageActions": "頁面選項",
-    "pageActionsFor": "「{{title}}」的頁面選項"
+    "pageActionsFor": "「{{title}}」的頁面選項",
+    "moveFailed": "無法移動頁面。"
   },
   "notifications": {
     "title": "通知",
@@ -107,11 +108,13 @@
   "acl": {
     "title": "管理權限",
     "intro": "留空表示維持與父層相同的開放狀態。新增使用者或群組以限制存取；同一使用者若由多列授權，會以最寬鬆的為準。",
+    "manageHint": "「寫入」可以編輯頁面內容；「管理」另外還能修改這些權限、將頁面設為公開，以及把頁面移到權限不同的位置。未設限制的頁面，由建立者負責管理。",
     "explicitGrants": "明確授權",
     "noExplicit": "目前沒有明確授權 — 頁面採繼承的權限。",
     "permission": {
       "read": "讀取",
-      "write": "寫入"
+      "write": "寫入",
+      "manage": "管理"
     },
     "remove": "移除",
     "addLabel": "新增",
@@ -257,6 +260,9 @@
       "deactivate": "停用",
       "confirmDeactivate": "要停用「{{username}}」嗎？該使用者會被登出，且在重新啟用前無法登入。他們的頁面與歷史紀錄會保留。",
       "statusUpdateFailed": "更新狀態失敗",
+      "confirmEmail": "確認電子郵件",
+      "confirmEmailPrompt": "確認 {{email}} 屬於「{{username}}」？之後以此信箱進行 SSO 登入時會連結到這個帳號。",
+      "confirmEmailFailed": "確認電子郵件失敗",
       "delete": "刪除",
       "confirmDelete": "刪除使用者「{{username}}」？\n\n這是軟刪除 — 帳號會被停用，使用者名稱「{{username}}」會被釋出供日後重用，他們建立的頁面仍保留作者資訊。可從「已刪除」分頁還原。",
       "deleteFailed": "刪除使用者失敗",
@@ -470,6 +476,7 @@
     "shortcutHint": "Enter 送出 · Shift+Enter 換行",
     "thinking": "思考中…",
     "errorFallback": "發生錯誤。",
+    "externalImageBlocked": "[未載入外部圖片：{{name}}]",
     "disabledTitle": "AI 對話",
     "disabledIntro": "此伺服器尚未啟用 AI 對話，請聯絡管理員設定",
     "disabledAnd": "並提供"
@@ -822,6 +829,7 @@
       "oauth_failed": "SSO 登入失敗，請再試一次。",
       "user_disabled": "帳號已停用，請聯絡管理員。",
       "unknown_provider": "尚未設定此 SSO 提供者。",
+      "email_link_blocked": "已有使用此電子郵件的帳號，但無法自動連結。請聯絡管理員確認你的電子郵件。",
       "username_collision": "無法自動產生使用者名稱，請聯絡管理員邀請你。",
       "default": "登入失敗。"
     }

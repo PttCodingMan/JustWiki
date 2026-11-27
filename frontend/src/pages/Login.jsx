@@ -27,6 +27,7 @@ const SSO_ERROR_CODES = new Set([
   'user_disabled',
   'unknown_provider',
   'username_collision',
+  'email_link_blocked',
 ])
 
 export default function Login() {

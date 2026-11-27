@@ -37,9 +37,14 @@ COPY --from=frontend /src/frontend/dist /app/static
 # Defaults for a plain `docker run -v ./data:/app/data`. docker-compose.yml
 # sets these again because its env_file (.env) would otherwise override them
 # with the dev paths from .env.example.
+#
+# RUNNING_IN_DOCKER makes the app refuse to boot with the default SECRET_KEY /
+# ADMIN_PASS: the published port is reachable from other hosts even when
+# PUBLIC_BASE_URL still says localhost.
 ENV DATA_DIR=/app/data \
     DB_PATH=/app/data/just-wiki.db \
-    MEDIA_DIR=/app/data/media
+    MEDIA_DIR=/app/data/media \
+    RUNNING_IN_DOCKER=true
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \

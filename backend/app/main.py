@@ -13,11 +13,19 @@ from app.config import settings
 from app.database import (
     boot_db_context,
     close_db,
+    get_db,
+    write_transaction,
     init_db,
     request_db_context,
     seed_welcome_page,
 )
-from app.auth import ensure_admin_exists
+from app.auth import (
+    ensure_admin_exists,
+    hash_password_async,
+    revoke_sessions,
+    verify_password_async,
+)
+from app.services.accounts import DISABLED_PASSWORD_HASH
 from app.spa import install_spa
 from app.services.page_review import review_reminder_loop
 from app.routers import auth_router, oauth_router, pages, media, templates, search, tags, activity, bookmarks, versions, diagrams, users, comments, backup, export, trash, notifications, watch, public, dashboard, acl, groups, ai, tokens, reviews, settings as settings_router
@@ -37,9 +45,10 @@ _WEAK_ADMIN_PASSWORDS = {"admin", "password", "123456", ""}
 def _looks_production() -> bool:
     """Heuristic for "this instance is being exposed, not run locally".
 
-    True when any config signals a real deployment: secure cookies are on,
-    the public URL is not localhost, or explicit allowed origins were set.
-    Pure localhost dev (the defaults) returns False so `make dev` keeps
+    True when any config signals a real deployment: running in the Docker
+    image (which publishes the port on every interface), secure cookies are
+    on, the public URL is not localhost, or explicit allowed origins were
+    set. Pure localhost dev (the defaults) returns False so `make dev` keeps
     working out of the box with only a loud warning.
     """
     url = settings.PUBLIC_BASE_URL
@@ -47,7 +56,12 @@ def _looks_production() -> bool:
         url.startswith("http://localhost")
         or url.startswith("http://127.0.0.1")
     )
-    return settings.COOKIE_SECURE or not_localhost or bool(settings.ALLOWED_ORIGINS.strip())
+    return (
+        settings.RUNNING_IN_DOCKER
+        or settings.COOKIE_SECURE
+        or not_localhost
+        or bool(settings.ALLOWED_ORIGINS.strip())
+    )
 
 
 def _check_security():
@@ -78,18 +92,16 @@ def _check_security():
                 "╚══════════════════════════════════════════════════════╝",
                 safe_key[:44],
             )
-    admin_pass = settings.ADMIN_PASS.get_secret_value()
-    if admin_pass in _WEAK_ADMIN_PASSWORDS:
-        if production:
-            fatal.append(
-                "ADMIN_PASS is set to a weak default. Set a strong ADMIN_PASS "
-                "in .env before exposing the app."
-            )
-        else:
-            logger.warning(
-                "ADMIN_PASS is set to a weak default. "
-                "Change it in .env before deploying to production.",
-            )
+    # ADMIN_PASS is checked against the database in `_enforce_admin_password`
+    # (it only matters while the admin account actually uses it).
+
+    if production and not settings.cookie_secure:
+        logger.warning(
+            "COOKIE_SECURE=false: the session cookie is sent over plain HTTP "
+            "and can be sniffed on the network. Serve the app over HTTPS "
+            "(e.g. behind a TLS reverse proxy) and set COOKIE_SECURE=true "
+            "before exposing it to the internet."
+        )
 
     if fatal:
         raise RuntimeError(
@@ -143,6 +155,77 @@ def _check_security():
             )
 
 
+async def _enforce_admin_password() -> None:
+    """Refuse to run an exposed instance whose admin password is a default.
+
+    ADMIN_PASS only seeds the first admin, so the environment value alone
+    says little: an admin who changed the password in the UI is fine even if
+    .env still says "admin". What matters is the stored password:
+      * no admin yet and ADMIN_PASS is weak → it would be created weak: fatal.
+      * ADMIN_USER still has a weak password and ADMIN_PASS is strong → the
+        stored password is replaced with ADMIN_PASS (this is the way out for
+        an instance that was already deployed with admin/admin).
+      * ADMIN_USER still has a weak password and ADMIN_PASS is weak too:
+        fatal, with instructions.
+    Outside production only the first case applies, as a warning.
+    """
+    production = _looks_production()
+    env_pass = settings.ADMIN_PASS.get_secret_value()
+    env_weak = env_pass in _WEAK_ADMIN_PASSWORDS
+    db = await get_db()
+
+    if not await db.execute_fetchall("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1"):
+        if env_weak:
+            msg = (
+                "ADMIN_PASS is set to a weak default and would become the first "
+                "admin's password. Set a strong ADMIN_PASS in .env."
+            )
+            if production:
+                raise RuntimeError(f"Refusing to start with insecure configuration:\n  - {msg}")
+            logger.warning(msg)
+        return
+    if not production:
+        # Checking the stored hash costs several bcrypt rounds; local dev
+        # isn't reachable from outside, so skip it there.
+        return
+
+    rows = await db.execute_fetchall(
+        "SELECT id, password_hash FROM users "
+        "WHERE username = ? AND role = 'admin' AND deleted_at IS NULL",
+        (settings.ADMIN_USER,),
+    )
+    if not rows or rows[0]["password_hash"] == DISABLED_PASSWORD_HASH:
+        return
+    stored = rows[0]["password_hash"]
+    stored_weak = False
+    for weak in _WEAK_ADMIN_PASSWORDS:
+        if await verify_password_async(weak, stored):
+            stored_weak = True
+            break
+    if not stored_weak:
+        return
+
+    if not env_weak:
+        new_hash = await hash_password_async(env_pass)
+        async with write_transaction(db):
+            await db.execute(
+                "UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, rows[0]["id"])
+            )
+            await revoke_sessions(db, rows[0]["id"])
+        logger.warning(
+            "Admin account %r still had a default password; replaced it with ADMIN_PASS.",
+            settings.ADMIN_USER,
+        )
+        return
+
+    raise RuntimeError(
+        "Refusing to start with insecure configuration:\n  - "
+        f"Admin account {settings.ADMIN_USER!r} still uses a default password. "
+        "Set a strong ADMIN_PASS in .env and restart: it replaces the default "
+        "password on startup."
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _check_security()
@@ -151,6 +234,7 @@ async def lifespan(app: FastAPI):
     # seed_welcome_page) keep finding the right connection through get_db().
     async with boot_db_context() as db:
         await init_db()
+        await _enforce_admin_password()
         await ensure_admin_exists()
         await seed_welcome_page(db)
     reminders = asyncio.create_task(review_reminder_loop())
@@ -272,6 +356,50 @@ async def csrf_guard(request: Request, call_next):
     return await call_next(request)
 
 
+# Content-Security-Policy for the SPA shell. It is the backstop if a payload
+# ever slips past DOMPurify: no inline or third-party script can run, and the
+# app can't be framed (clickjacking). Allowances, each needed by the frontend:
+#   style 'unsafe-inline'   – Mermaid/KaTeX/editor set inline styles
+#   fonts.googleapis/gstatic – web fonts in index.html
+#   img https: http:        – pages may embed external images by URL
+#   embed.diagrams.net      – the Draw.io editor iframe
+_CSP = "; ".join([
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "img-src 'self' data: blob: https: http:",
+    "media-src 'self' blob:",
+    "connect-src 'self'",
+    "frame-src https://embed.diagrams.net",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+])
+# Swagger UI / ReDoc pull their bundle from a CDN with an inline bootstrap
+# script, so the SPA policy would blank them out.
+_CSP_EXEMPT_PREFIXES = ("/docs", "/redoc")
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Baseline hardening headers. `setdefault` so a route that sets a
+    stricter policy of its own (e.g. the diagram SVG endpoint) keeps it."""
+    response = await call_next(request)
+    h = response.headers
+    h.setdefault("X-Content-Type-Options", "nosniff")
+    h.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    if response.headers.get("content-type", "").startswith("text/html"):
+        h.setdefault("X-Frame-Options", "DENY")
+        if not request.url.path.startswith(_CSP_EXEMPT_PREFIXES):
+            h.setdefault("Content-Security-Policy", _CSP)
+    if settings.cookie_secure:
+        h.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return response
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(_ALLOWED_ORIGINS),
@@ -283,11 +411,11 @@ app.add_middleware(
 # authlib stashes OAuth state/nonce/PKCE in the signed session cookie between
 # /login and /callback. Registered before routes so the OAuth router can read it.
 #
-# https_only follows COOKIE_SECURE, but also auto-enables when PUBLIC_BASE_URL
+# https_only follows settings.cookie_secure: COOKIE_SECURE, or PUBLIC_BASE_URL
 # is https:// — operators running behind TLS commonly forget to flip
 # COOKIE_SECURE, and we don't want to leak an OAuth state cookie over
 # plaintext just because of a config oversight.
-_session_https_only = settings.COOKIE_SECURE or settings.PUBLIC_BASE_URL.startswith("https://")
+_session_https_only = settings.cookie_secure
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SECRET_KEY.get_secret_value(),

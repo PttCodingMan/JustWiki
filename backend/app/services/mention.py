@@ -138,7 +138,7 @@ async def _resolve_group_member_ids(db, group_names: set[str]) -> dict[str, set[
     return out
 
 
-async def _filter_readable(db, user_ids: set[int], page_id: int) -> set[int]:
+async def filter_readable_users(db, user_ids: set[int], page_id: int) -> set[int]:
     """Drop user_ids whose effective permission on ``page_id`` is ``none``.
 
     Calls ``resolve_page_permission`` per user. The set sizes here are
@@ -201,7 +201,7 @@ async def resolve_mention_targets(
         candidate_ids |= member_ids
 
     candidate_ids.discard(actor_id)
-    return await _filter_readable(db, candidate_ids, page_id)
+    return await filter_readable_users(db, candidate_ids, page_id)
 
 
 async def notify_mentions(

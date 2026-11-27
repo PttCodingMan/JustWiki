@@ -752,23 +752,23 @@ async def test_acl_put_replaces_rows_and_validates():
     bob = await _get_or_create_user(db, "acl_crud_bob_put", "editor")
     page = await _make_page(db, "acl-crud-put-page")
 
-    # Alice grants herself write first so she has manage permission.
-    await _add_acl(db, page, "user", alice["id"], "write")
+    # Alice holds an explicit manage grant, so she may edit the ACL.
+    await _add_acl(db, page, "user", alice["id"], "manage")
 
     async with _token_client(alice) as client:
-        # Replace with {alice:write, bob:read}
+        # Replace with {alice:manage, bob:read}
         resp = await client.put(
             "/api/pages/acl-crud-put-page/acl",
             json={
                 "rows": [
-                    {"principal_type": "user", "principal_id": alice["id"], "permission": "write"},
+                    {"principal_type": "user", "principal_id": alice["id"], "permission": "manage"},
                     {"principal_type": "user", "principal_id": bob["id"], "permission": "read"},
                 ]
             },
         )
     assert resp.status_code == 200
     pairs = {(r["principal_id"], r["permission"]) for r in resp.json()["explicit"]}
-    assert (alice["id"], "write") in pairs
+    assert (alice["id"], "manage") in pairs
     assert (bob["id"], "read") in pairs
 
     # Invalid user id rejected.
@@ -789,7 +789,7 @@ async def test_acl_delete_reverts_to_inheritance():
     db = await get_db()
     alice = await _get_or_create_user(db, "acl_crud_alice_del", "editor")
     page = await _make_page(db, "acl-crud-del-page")
-    await _add_acl(db, page, "user", alice["id"], "write")
+    await _add_acl(db, page, "user", alice["id"], "manage")
 
     async with _token_client(alice) as client:
         resp = await client.delete("/api/pages/acl-crud-del-page/acl")

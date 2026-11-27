@@ -11,6 +11,7 @@ from app.auth import (
     hash_password_async,
     require_admin,
     require_real_user,
+    revoke_sessions,
 )
 from app.database import fetch_one_or_404, get_db, write_transaction
 from app.services.accounts import DISABLED_PASSWORD_HASH, derive_username, pick_unique_username
@@ -47,6 +48,8 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     password: Optional[str] = None
     is_active: Optional[bool] = None
+    # Admin-set emails are trusted for SSO email linking (see services/oidc.py).
+    email: Optional[str] = None
 
 
 class UserRestore(BaseModel):
@@ -256,7 +259,8 @@ async def list_users(
     count_rows = await db.execute_fetchall(f"SELECT COUNT(*) as cnt FROM users {where}")
     total = count_rows[0]["cnt"]
     rows = await db.execute_fetchall(
-        f"""SELECT id, username, original_username, role, is_active, deleted_at, created_at
+        f"""SELECT id, username, original_username, role, email, email_trusted,
+                   is_active, deleted_at, created_at
             FROM users {where}
             ORDER BY id LIMIT ? OFFSET ?""",
         (per_page, offset),
@@ -400,6 +404,18 @@ async def update_user(user_id: int, body: UserUpdate, user=Depends(require_admin
         await check_password_policy(body.password)
         updates.append("password_hash = ?")
         values.append(await hash_password_async(body.password))
+    if body.email is not None:
+        email = body.email.strip().lower()
+        if email:
+            taken = await db.execute_fetchall(
+                "SELECT 1 FROM users WHERE LOWER(email) = ? AND id != ? AND deleted_at IS NULL",
+                (email, user_id),
+            )
+            if taken:
+                raise HTTPException(status_code=409, detail="Email is already in use")
+        updates.append("email = ?")
+        values.append(email)
+        updates.append("email_trusted = 1")
     if body.is_active is not None:
         # Suspending an account (is_active=0) locks the user out on every
         # credential path without deleting their data. Guard the same two
@@ -431,6 +447,10 @@ async def update_user(user_id: int, body: UserUpdate, user=Depends(require_admin
             await db.execute(
                 f"UPDATE users SET {', '.join(updates)} WHERE id = ?", values
             )
+            # A password reset or suspension must also end the sessions the
+            # user (or whoever stole their cookie) already holds.
+            if body.password is not None or body.is_active is False:
+                await revoke_sessions(db, user_id)
 
     row = await db.execute_fetchall(
         "SELECT id, username, role, is_active, created_at FROM users WHERE id = ?",

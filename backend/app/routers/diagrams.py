@@ -65,7 +65,6 @@ async def list_diagrams(user=Depends(get_current_user)):
            WHERE content_md LIKE '%::drawio%'"""
     )
     refs_by_diagram: dict[int, list[dict]] = {}
-    ref_page_ids_by_diagram: dict[int, set[int]] = {}
     for pr in page_rows:
         for did in extract_diagram_ids(pr["content_md"] or ""):
             refs_by_diagram.setdefault(did, []).append(
@@ -76,7 +75,6 @@ async def list_diagrams(user=Depends(get_current_user)):
                     "deleted": pr["deleted_at"] is not None,
                 }
             )
-            ref_page_ids_by_diagram.setdefault(did, set()).add(pr["id"])
 
     is_admin = user.get("role") == "admin"
     readable_ids: set[int] = set()
@@ -89,13 +87,12 @@ async def list_diagrams(user=Depends(get_current_user)):
         item["has_svg"] = bool(item["has_svg"])
         refs = refs_by_diagram.get(item["id"], [])
         if not is_admin:
-            # Hide diagrams whose owning page is unreadable and whose
-            # referencing pages are all unreadable. Orphan diagrams
-            # (no page_id and no references) fall through to admin-only.
-            owning_ok = item["page_id"] is not None and item["page_id"] in readable_ids
-            ref_ids = ref_page_ids_by_diagram.get(item["id"], set())
-            ref_ok = bool(ref_ids & readable_ids)
-            if not owning_ok and not ref_ok:
+            # Visibility follows the owning page only — the same rule as
+            # GET /diagrams/{id}. Referencing pages must not grant it: anyone
+            # can write `::drawio[N]` into their own page, and ids are
+            # sequential, so that would enumerate every diagram's name and
+            # owner. Orphan diagrams (no page_id) stay admin-only.
+            if item["page_id"] is None or item["page_id"] not in readable_ids:
                 continue
             refs = [p for p in refs if p["id"] in readable_ids]
         item["referenced_pages"] = refs
@@ -177,6 +174,26 @@ async def update_diagram(
         db, "SELECT * FROM diagrams WHERE id = ?", (diagram_id,), "Diagram not found"
     )
     await _require_diagram_access(db, user, row, write=True)
+    # Re-homing a diagram needs write on the destination too, or a user could
+    # push content into a page (or restricted space) they can't edit.
+    # Detaching it (page_id=null) makes it an admin-only orphan.
+    if (
+        "page_id" in body.model_fields_set
+        and body.page_id != row["page_id"]
+        and user.get("role") != "admin"
+    ):
+        if body.page_id is None:
+            raise HTTPException(
+                status_code=403, detail="Only admins can detach a diagram from its page"
+            )
+        dst_perm = await resolve_page_permission(db, user, body.page_id)
+        if dst_perm == "none":
+            raise HTTPException(status_code=404, detail="Page not found")
+        if dst_perm == "read":
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have write permission on the destination page",
+            )
 
     updates = []
     values = []

@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     MEDIA_DIR: str = "./data/media"
 
     COOKIE_SECURE: bool = False  # Set to True in production with HTTPS
+    # Set by the Docker image. A container is assumed to be reachable from
+    # other hosts, so insecure defaults (SECRET_KEY, ADMIN_PASS) are fatal
+    # there even when PUBLIC_BASE_URL still says localhost.
+    RUNNING_IN_DOCKER: bool = False
 
     # Comma-separated list of origins allowed for CSRF/CORS on top of the
     # always-included localhost dev origins. Set this to your public URL(s)
@@ -133,6 +137,13 @@ class Settings(BaseSettings):
     #
     # extra='ignore' so renaming/removing a setting doesn't crash on existing
     # deployments where the user's .env still has the old key.
+    @property
+    def cookie_secure(self) -> bool:
+        """Effective Secure flag for auth cookies: COOKIE_SECURE, or implied
+        by an https:// PUBLIC_BASE_URL so a TLS deployment that forgot to
+        flip the flag still never sends the session cookie in plaintext."""
+        return self.COOKIE_SECURE or self.PUBLIC_BASE_URL.startswith("https://")
+
     model_config = {
         "env_file": (".env", "../.env"),
         "env_file_encoding": "utf-8",

@@ -339,7 +339,7 @@ async def provision_ldap_user(db, lu: LdapUser) -> dict:
         if lu.groups_known:
             role = _derive_role([cn_of(dn) for dn in lu.groups])
             await db.execute(
-                "UPDATE users SET role = ?, email = ?, display_name = ? WHERE id = ?",
+                "UPDATE users SET role = ?, email = ?, email_trusted = 1, display_name = ? WHERE id = ?",
                 (role, lu.email, lu.display_name, user_id),
             )
             if settings.LDAP_SYNC_GROUPS:
@@ -350,7 +350,7 @@ async def provision_ldap_user(db, lu: LdapUser) -> dict:
                 user_id,
             )
             await db.execute(
-                "UPDATE users SET email = ?, display_name = ? WHERE id = ?",
+                "UPDATE users SET email = ?, email_trusted = 1, display_name = ? WHERE id = ?",
                 (lu.email, lu.display_name, user_id),
             )
 

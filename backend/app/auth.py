@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import time
 from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException, status, Request, Response
 from jose import JWTError, jwt
@@ -55,8 +56,17 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
+# bcrypt only looks at the first 72 bytes, and bcrypt>=5 raises ValueError on
+# anything longer instead of silently truncating.
+BCRYPT_MAX_BYTES = 72
+
+
 def verify_password(password: str, hashed: str) -> bool:
-    return bcrypt.checkpw(password.encode(), hashed.encode())
+    try:
+        return bcrypt.checkpw(password.encode(), hashed.encode())
+    except ValueError:
+        # Over-long password or malformed hash: a failed login, not a 500.
+        return False
 
 
 # bcrypt is intentionally slow (~100-500ms). Async handlers must use these
@@ -71,18 +81,26 @@ async def verify_password_async(password: str, hashed: str) -> bool:
 
 
 def create_token(
-    user_id: int, username: str, role: str, max_age: int | None = None
+    user_id: int,
+    username: str,
+    role: str,
+    max_age: int | None = None,
 ) -> str:
     """Issue a session JWT. `max_age` (seconds) defaults to TOKEN_EXPIRE_HOURS;
     login routes go through `set_session_cookie`, which passes the
-    admin-configured value from site settings."""
+    admin-configured value from site settings.
+
+    The `iat` claim lets `revoke_sessions` invalidate every token issued
+    before a password change / reset / suspension."""
     if max_age is None:
         max_age = TOKEN_EXPIRE_HOURS * 3600
-    expire = datetime.now(timezone.utc) + timedelta(seconds=max_age)
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(seconds=max_age)
     payload = {
         "sub": str(user_id),
         "username": username,
         "role": role,
+        "iat": int(now.timestamp()),
         "exp": expire,
     }
     return jwt.encode(payload, settings.SECRET_KEY.get_secret_value(), algorithm=ALGORITHM)
@@ -100,7 +118,7 @@ async def set_session_cookie(response: Response, user: dict) -> None:
         key="token",
         value=token,
         httponly=True,
-        secure=settings.COOKIE_SECURE,
+        secure=settings.cookie_secure,
         samesite="lax",
         max_age=max_age,
     )
@@ -116,13 +134,34 @@ def is_cookie_session(request: Request) -> bool:
     return bool(token) and not token.startswith(API_TOKEN_PREFIX)
 
 
+async def revoke_sessions(db, user_id: int) -> None:
+    """Invalidate every session JWT issued to `user_id` so far.
+
+    Records the current second in `users.sessions_revoked_at`; tokens whose
+    `iat` is older are rejected. A token minted in the same second (e.g. the
+    fresh cookie handed to the browser that just changed its password) stays
+    valid. Call inside a write transaction. API tokens are unaffected — they
+    have their own per-token revocation.
+    """
+    await db.execute(
+        "UPDATE users SET sessions_revoked_at = ? WHERE id = ?",
+        (int(time.time()), user_id),
+    )
+
+
 async def check_password_policy(password: str) -> None:
-    """Raise 400 if `password` is shorter than the admin-configured minimum."""
+    """Raise 400 if `password` is shorter than the admin-configured minimum
+    or longer than bcrypt can hash."""
     min_len = await site_settings.get_int("password_min_length")
     if len(password) < min_len:
         raise HTTPException(
             status_code=400,
             detail=f"Password must be at least {min_len} characters",
+        )
+    if len(password.encode()) > BCRYPT_MAX_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Password must be at most {BCRYPT_MAX_BYTES} bytes",
         )
 
 
@@ -181,39 +220,47 @@ async def _resolve_api_token(token: str) -> dict | None:
 async def resolve_request_credentials(request: Request) -> dict | None:
     """Decode whichever credential the request carries, or return None.
 
-    Recognises both personal API tokens (prefixed with `jwk_`) and JWT
-    session tokens, read from `Authorization: Bearer` first and falling
-    back to the `token` cookie. Returns the resolved user dict on success
-    and None on any failure (no token, invalid token, missing user). The
-    caller decides whether to raise 401 or treat it as anonymous.
+    Recognises personal API tokens (prefixed with `jwk_`) and JWT session
+    tokens, read from `Authorization: Bearer` first and falling back to the
+    `token` cookie. API tokens are only accepted from the header: the cookie
+    is reserved for session JWTs, so checks such as "API tokens cannot mint
+    API tokens" only need to look at the header. Returns the resolved user
+    dict on success and None on any failure (no token, invalid token,
+    missing user). The caller decides whether to raise 401 or treat it as
+    anonymous.
     """
     token = None
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header[7:]
+        if token.startswith(API_TOKEN_PREFIX):
+            return await _resolve_api_token(token)
     if not token:
         token = request.cookies.get("token")
-    if not token:
+    if not token or token.startswith(API_TOKEN_PREFIX):
         return None
-
-    if token.startswith(API_TOKEN_PREFIX):
-        return await _resolve_api_token(token)
 
     try:
         payload = jwt.decode(token, settings.SECRET_KEY.get_secret_value(), algorithms=[ALGORITHM])
         user_id = int(payload["sub"])
-    except (JWTError, KeyError, ValueError):
+        issued_at = int(payload.get("iat", 0))
+    except (JWTError, KeyError, ValueError, TypeError):
         return None
 
     db = await get_db()
     row = await db.execute_fetchall(
-        "SELECT id, username, role, display_name, email FROM users "
+        "SELECT id, username, role, display_name, email, sessions_revoked_at FROM users "
         "WHERE id = ? AND deleted_at IS NULL AND is_active = 1",
         (user_id,),
     )
     if not row:
         return None
-    return dict(row[0])
+    user = dict(row[0])
+    # Sessions issued before the last password change / revocation are dead.
+    revoked_at = user.pop("sessions_revoked_at")
+    if revoked_at is not None and issued_at < revoked_at:
+        return None
+    return user
 
 
 async def get_current_user(request: Request):

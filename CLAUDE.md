@@ -38,10 +38,11 @@ cd frontend && npm test -- src/path/to/file.test.jsx
 - **Framework**: FastAPI (async), aiosqlite for SQLite access (WAL mode)
 - **Entry**: `main.py` — app creation, CORS, lifespan hooks, router mounting, origin-based CSRF middleware
 - **Auth**: `auth.py` — issues and verifies credentials across three paths:
-  - **Cookie session** (web UI): JWT in httpOnly `token` cookie, bcrypt passwords, rate-limited login
+  - **Cookie session** (web UI): JWT in httpOnly `token` cookie, bcrypt passwords, rate-limited login. `auth.revoke_sessions` sets `users.sessions_revoked_at`; JWTs with an older `iat` are rejected (password change, admin reset, deactivation). The cookie only ever carries a JWT — `jwk_` API tokens are accepted from the `Authorization` header only
   - **Bearer API token** (`Authorization: Bearer jwk_…`): hashed SHA-256 on store, plaintext returned once at creation, revocable; managed via `routers/tokens.py`
-  - **SSO**: OIDC (Google/GitHub/generic, PKCE, authlib state stored in signed session cookie) via `routers/oauth_router.py` + `services/oidc.py`; LDAP via `services/ldap_auth.py`; invitation-only mode gates first-time signup
+  - **SSO**: OIDC (Google/GitHub/generic, PKCE, authlib state stored in signed session cookie) via `routers/oauth_router.py` + `services/oidc.py`; LDAP via `services/ldap_auth.py`; invitation-only mode gates first-time signup. SSO links to an existing account by email only when `users.email_trusted=1` (set by admin/invite/LDAP; a self-edited profile email clears it)
   - **CSRF**: origin/referer check in `main.py` for mutating cookie-auth requests; Bearer-token and login/logout paths are exempt
+  - **Startup / headers**: `main._check_security` + `_enforce_admin_password` refuse to boot an exposed instance (Docker image sets `RUNNING_IN_DOCKER`) with a default SECRET_KEY or admin password. `security_headers` middleware adds CSP (SPA HTML only), `X-Frame-Options`, `nosniff`, `Referrer-Policy`, HSTS when cookies are secure — new frontend features that load third-party scripts/frames/fonts must update `_CSP`
 - **Config**: `config.py` — Pydantic Settings reading from `.env`
 - **Schemas**: `schemas.py` — shared Pydantic request/response models
 - **Database**: `database.py` — schema DDL and FTS5 search index setup; first-launch welcome pages and default templates are markdown files in `app/seed/`; startup-time migrations live in `migrations.py` and record applied versions in the `schema_migrations` ledger so each migration runs once per DB
@@ -106,15 +107,16 @@ All endpoints under `/api/`. Vite dev server proxies `/api` to `localhost:8000`.
 
 ## ACL / Permissions
 
-Permission values: `admin > write > read > none`.
+Permission values: `admin > manage > write > read > none`. `manage` = `write` + deciding who can see the page: editing its ACL, toggling `is_public`, and moves that change which ACL anchor it inherits (`page_dep("manage")`, `has_permission(perm, level)` — never compare permission strings directly).
 
 Resolution logic (in `services/acl.py` — routers must use these helpers, never roll their own):
 - `admin` role bypasses all checks.
 - Per-page ACL rows live in `page_acl (page_id, principal_type, principal_id, permission)` where principal is a user or group.
-- To resolve: walk the `parent_id` chain, find the shallowest ancestor with any ACL row (the "anchor"), and take the most-permissive matching row. If no anchor exists, the page is open by default (write for editors, read for viewers).
-- `viewer` role is capped at `read` even when ACL grants write.
+- To resolve: walk the `parent_id` chain, find the shallowest ancestor with any ACL row (the "anchor", `find_acl_anchor`), and take the most-permissive matching row. If no anchor exists, the page is open by default (write for editors, read for viewers) and its creator gets `manage` on it. Inside a restricted space only explicit `manage` grants count.
+- `PUT /acl` refuses a change that would drop the caller's own `manage` (the ACL dialog pre-adds the current user as `manage` on a page's first rules); `DELETE /acl` (re-open the page) doesn't.
+- `viewer` role is capped at `read` even when ACL grants write or manage.
 - When `ANONYMOUS_READ=true` (env), unauthenticated requests get a synthetic guest user (`id=0`, `role=viewer`, `anonymous=True`) instead of 401. ACL still gates everything — guests can only read pages with no ACL anchor (the open-default set). All write/personal endpoints (bookmarks, comments POST, watch, profile, tokens, AI) reject the guest via `auth.require_real_user`; admin endpoints reject via `require_admin`. `/api/auth/me` keeps returning 401 for unauthenticated requests so the frontend can distinguish guest from logged-in.
-- Frontend: `usePermissions` store caches per-slug; seeded from `effective_permission` on page-view responses. Helper functions `canEdit`, `canRead`, `canManageAcl` are exported from the store file.
+- Frontend: `usePermissions` store caches per-slug; seeded from `effective_permission` on page-view responses. Helper functions `canEdit` (write+), `canRead`, `canManageAcl` (manage+, also gates the public-sharing menu) are exported from the store file.
 
 ## Themes
 

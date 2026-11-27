@@ -121,7 +121,7 @@ def get_oauth() -> OAuth:
                 client_id=settings.OIDC_GOOGLE_CLIENT_ID,
                 client_secret=settings.OIDC_GOOGLE_CLIENT_SECRET.get_secret_value(),
                 server_metadata_url=settings.OIDC_GOOGLE_DISCOVERY,
-                client_kwargs={"scope": "openid email profile"},
+                client_kwargs={"scope": "openid email profile", "code_challenge_method": "S256"},
             )
         elif pid == "github":
             # GitHub is OAuth2-only (no OIDC). Profile is fetched via REST API
@@ -141,7 +141,7 @@ def get_oauth() -> OAuth:
                 client_id=settings.OIDC_GENERIC_CLIENT_ID,
                 client_secret=settings.OIDC_GENERIC_CLIENT_SECRET.get_secret_value(),
                 server_metadata_url=settings.OIDC_GENERIC_DISCOVERY,
-                client_kwargs={"scope": "openid email profile"},
+                client_kwargs={"scope": "openid email profile", "code_challenge_method": "S256"},
             )
     _oauth = oauth
     return oauth
@@ -270,13 +270,24 @@ async def authenticate_and_provision(info: UserInfo) -> dict:
             await _record_login(db, identity_id)
         return user
 
-    # 2. Email link: an existing local user with the same email (requires
-    #    verified email to avoid takeover via an unverified claim).
+    # 2. Email link: an existing local user with the same email. Both sides
+    #    must be trustworthy: the IdP must have verified the address, and
+    #    the local email must have been set by an admin / directory rather
+    #    than typed by the user on their profile — otherwise anyone could
+    #    claim a colleague's address and capture their first SSO login.
+    #    Ambiguous matches (several accounts with the same email) never link.
     if info.email_verified:
         rows = await db.execute_fetchall(
-            "SELECT id FROM users WHERE LOWER(email) = ? AND deleted_at IS NULL",
+            "SELECT id, email_trusted FROM users "
+            "WHERE LOWER(email) = ? AND deleted_at IS NULL",
             (info.email.lower(),),
         )
+        if len(rows) > 1 or (rows and not rows[0]["email_trusted"]):
+            raise OAuthAccessError(
+                "email_link_blocked",
+                "An account with this email exists but cannot be linked "
+                "automatically. Ask an admin to link it.",
+            )
         if rows:
             user_id = rows[0]["id"]
             async with write_transaction(db):

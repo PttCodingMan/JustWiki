@@ -10,6 +10,8 @@ from app.database import get_db, write_transaction
 from app.services.acl import (
     PageAccess,
     build_id_clause,
+    find_acl_anchor,
+    has_permission,
     invalidate_readable_cache,
     list_readable_page_ids,
     page_dep,
@@ -95,6 +97,60 @@ async def _would_create_parent_cycle(db, page_id: int, new_parent_id: int | None
         (new_parent_id, page_id),
     )
     return bool(rows)
+
+
+async def _check_new_parent(
+    db, user: dict, page_id: int, page_perm: str, parent_id: int | None
+) -> None:
+    """Validate re-parenting `page_id` under `parent_id` (None = top level).
+
+    Shared by `PUT /pages/{slug}` and `PATCH /pages/{slug}/move` so neither
+    can skip a check the other enforces:
+
+    * The destination must exist, be live and be writable by the caller —
+      otherwise a read-only member could plant pages inside a restricted
+      space. A parent the caller can't even read is reported exactly like a
+      missing one so page ids can't be probed.
+    * If the move changes which ACL the page inherits (it has no rules of
+      its own and the old and new parents sit under different anchors), it
+      changes who can see the page and its subtree, so it needs `manage` on
+      the page — plain write must not be able to pull a page out of a
+      restricted space or hide someone else's page in a private one.
+    """
+    if parent_id is not None:
+        # Reject a nonexistent/soft-deleted destination up front. Without
+        # this, resolve_page_permission on an unknown id returns the
+        # open-default and the UPDATE then trips the FK as an opaque 500,
+        # or nests the page under a trashed parent.
+        parent_rows = await db.execute_fetchall(
+            "SELECT id FROM pages WHERE id = ? AND deleted_at IS NULL",
+            (parent_id,),
+        )
+        dst_perm = await resolve_page_permission(db, user, parent_id) if parent_rows else "none"
+        if dst_perm == "none":
+            raise HTTPException(status_code=400, detail="Parent page not found")
+        if await _would_create_parent_cycle(db, page_id, parent_id):
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot set parent: would create a cycle in the page tree",
+            )
+        if not has_permission(dst_perm, "write"):
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to move pages under this parent",
+            )
+
+    if has_permission(page_perm, "manage"):
+        return
+    current_anchor = await find_acl_anchor(db, page_id)
+    if current_anchor == page_id:
+        return  # the page carries its own rules; they move with it
+    if current_anchor != await find_acl_anchor(db, parent_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Moving this page would change who can access it; "
+                   "that needs manage permission on the page",
+        )
 
 
 @router.get("", response_model=PageListResponse)
@@ -241,7 +297,7 @@ async def create_page(body: PageCreate, user=Depends(get_current_user)):
             raise HTTPException(status_code=400, detail="Parent page not found")
         # Require write permission on the parent to nest under it.
         parent_perm = await resolve_page_permission(db, user, body.parent_id)
-        if parent_perm not in ("admin", "write"):
+        if not has_permission(parent_perm, "write"):
             raise HTTPException(
                 status_code=403,
                 detail="You do not have permission to create pages under this parent",
@@ -366,24 +422,16 @@ async def update_page(
     sort_order = body.sort_order if body.sort_order is not None else current["sort_order"]
 
     if "parent_id" in body.model_fields_set and parent_id != current["parent_id"]:
-        if parent_id is not None:
-            # Validate the target parent exists and is live BEFORE hitting the
-            # FK — a nonexistent parent_id would otherwise surface as an opaque
-            # 500 (IntegrityError), and a soft-deleted parent would silently
-            # nest a live page under a trashed one.
-            parent_rows = await db.execute_fetchall(
-                "SELECT id FROM pages WHERE id = ? AND deleted_at IS NULL",
-                (parent_id,),
-            )
-            if not parent_rows:
-                raise HTTPException(status_code=400, detail="Parent page not found")
-        if await _would_create_parent_cycle(db, current["id"], parent_id):
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot set parent: would create a cycle in the page tree",
-            )
+        await _check_new_parent(db, user, current["id"], ctx.permission, parent_id)
     current_is_public = bool(current.get("is_public", 0))
     is_public = body.is_public if body.is_public is not None else current_is_public
+    # Publishing bypasses the ACL for anonymous internet readers, so it is a
+    # visibility decision (manage), not an edit (write).
+    if bool(is_public) != current_is_public and not has_permission(ctx.permission, "manage"):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the page owner or someone with manage permission can change public sharing",
+        )
     current_page_type = current.get("page_type") or "document"
     page_type = body.page_type if body.page_type is not None else current_page_type
     # mindmap_layout is `Optional[Literal[...]]` — explicit NULL is meaningful
@@ -526,29 +574,8 @@ async def move_page(
     updates = []
     params = []
     if "parent_id" in body.model_fields_set:
-        if body.parent_id is not None:
-            # Reject a nonexistent/soft-deleted destination up front. Without
-            # this, resolve_page_permission on an unknown id returns the
-            # open-default and the UPDATE then trips the FK as an opaque 500,
-            # or nests the page under a trashed parent.
-            parent_rows = await db.execute_fetchall(
-                "SELECT id FROM pages WHERE id = ? AND deleted_at IS NULL",
-                (body.parent_id,),
-            )
-            if not parent_rows:
-                raise HTTPException(status_code=400, detail="Parent page not found")
-        if await _would_create_parent_cycle(db, page_id, body.parent_id):
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot move page: would create a cycle in the page tree",
-            )
-        if body.parent_id is not None:
-            dst_perm = await resolve_page_permission(db, user, body.parent_id)
-            if dst_perm not in ("admin", "write"):
-                raise HTTPException(
-                    status_code=403,
-                    detail="You do not have permission to move pages under this parent",
-                )
+        if body.parent_id != ctx.page["parent_id"]:
+            await _check_new_parent(db, user, page_id, ctx.permission, body.parent_id)
         updates.append("parent_id = ?")
         params.append(body.parent_id)
     if "sort_order" in body.model_fields_set:

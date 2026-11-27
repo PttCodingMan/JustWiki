@@ -9,7 +9,9 @@ services/acl.list_readable_page_ids so we never leak content from pages the
 user cannot read — this is non-negotiable.
 """
 
+import html
 import json
+import re
 import time
 from collections import deque
 
@@ -139,15 +141,24 @@ async def _retrieve_context(db, user: dict, question: str) -> list[dict]:
     return out
 
 
+_WIKI_PAGE_TAG_RE = re.compile(r"<\s*/?\s*wiki_page", re.IGNORECASE)
+
+
 def _build_messages(context_pages: list[dict], history: list[ChatMessage], question: str) -> list[dict]:
     """Assemble the OpenAI-compatible messages array."""
     page_blocks = []
     for p in context_pages:
         # Wrap content in tagged delimiters so the model can distinguish
         # retrieved (untrusted) text from the (trusted) system instructions.
+        # Page authors control title and content, so neither may forge the
+        # delimiter: escape the attributes and defuse any wiki_page tag in
+        # the body that would otherwise "close" the block early.
+        title = html.escape(p["title"] or "", quote=True)
+        slug = html.escape(p["slug"] or "", quote=True)
+        content = _WIKI_PAGE_TAG_RE.sub("[wiki_page", p["content"])
         page_blocks.append(
-            f"<wiki_page slug=\"{p['slug']}\" title=\"{p['title']}\">\n"
-            f"{p['content']}\n"
+            f"<wiki_page slug=\"{slug}\" title=\"{title}\">\n"
+            f"{content}\n"
             "</wiki_page>"
         )
     pages_text = "\n\n".join(page_blocks)
