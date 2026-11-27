@@ -99,7 +99,7 @@ export default function PublicPageView({ notFound }) {
     <div className="min-h-screen bg-bg text-text flex flex-col">
       <header className="app-nav sticky top-0 z-40 h-14 flex justify-between items-center px-4 sm:px-6 no-print">
         <div className="flex items-center gap-2 min-w-0">
-          <img src="/favicon.png" alt="" className="h-7 w-7 shrink-0" />
+          <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="" className="h-7 w-7 shrink-0" />
           <span className="font-display text-[1.45rem] leading-none text-text truncate translate-y-[1px]">{siteName}</span>
         </div>
         <div className="flex items-center gap-1.5">

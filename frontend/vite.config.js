@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { readFileSync } from 'node:fs'
+import process from 'node:process'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -21,6 +22,8 @@ function readVersion() {
 const APP_VERSION = readVersion()
 
 export default defineConfig({
+  // The static demo is served from a GitHub Pages project path (/<repo>/).
+  base: process.env.VITE_BASE || '/',
   plugins: [react(), tailwindcss()],
   define: {
     __APP_VERSION__: JSON.stringify(APP_VERSION),

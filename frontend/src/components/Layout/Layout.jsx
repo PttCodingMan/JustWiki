@@ -13,6 +13,7 @@ import SearchModal from '../Search/SearchModal'
 import NotificationBell from './NotificationBell'
 import ThemeSwitcher from '../ThemeSwitcher'
 import LanguageSwitcher from '../LanguageSwitcher'
+import { IS_DEMO } from '../../lib/demoApi'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '')
 
@@ -145,7 +146,7 @@ export default function Layout({ children }) {
         </button>
         <Link to="/" aria-label={siteName} className="group flex items-center gap-2 pl-1 pr-2 min-w-0">
           <img
-            src="/favicon.png"
+            src={`${import.meta.env.BASE_URL}favicon.png`}
             alt=""
             className="h-7 w-7 shrink-0 transition-transform duration-500 group-hover:-rotate-12 group-hover:scale-110"
             style={{ transitionTimingFunction: 'var(--ease-spring)' }}
@@ -201,7 +202,18 @@ export default function Layout({ children }) {
         {!isGuest && <NotificationBell />}
         <ThemeSwitcher />
         <LanguageSwitcher />
-        {isGuest ? (
+        {IS_DEMO ? (
+          // The static demo has no backend to sign in to.
+          <a
+            href="https://github.com/PttCodingMan/JustWiki"
+            target="_blank"
+            rel="noreferrer"
+            className="btn-primary ml-1"
+            title={t('common.demoHint')}
+          >
+            {t('common.demoBadge')}
+          </a>
+        ) : isGuest ? (
           <button onClick={() => navigate('/login')} className="btn-primary ml-1">
             {t('common.signIn')}
           </button>

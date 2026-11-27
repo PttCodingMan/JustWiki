@@ -1,0 +1,79 @@
+name: Demo site
+
+# Read-only demo on GitHub Pages: the real frontend built in demo mode, with
+# every API response pre-rendered from a freshly seeded wiki
+# (backend/scripts/build_static_demo.py). Deployed only from main.
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.4.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - id: pages
+        uses: actions/configure-pages@v6
+
+      - name: Build frontend in demo mode
+        env:
+          VITE_DEMO: 'true'
+          # e.g. "/JustWiki/" for a project site, "/" for a custom domain.
+          VITE_BASE: ${{ steps.pages.outputs.base_path }}/
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Snapshot demo data
+        run: |
+          cd backend
+          uv venv
+          uv pip install -r requirements.txt
+          source .venv/bin/activate
+          PYTHONPATH=. python scripts/build_static_demo.py ../frontend/dist
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

@@ -95,7 +95,7 @@ export default function Login() {
         <div className="login-grid" aria-hidden="true" />
 
         <div className="relative flex items-center gap-2.5 animate-enter">
-          <img src="/favicon.png" alt="" className="h-8 w-8" />
+          <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="" className="h-8 w-8" />
           <span className="font-display text-2xl text-text">{siteName}</span>
         </div>
 
@@ -145,7 +145,7 @@ export default function Login() {
         </div>
         <div className="w-full max-w-[22rem] animate-enter">
           <div className="lg:hidden flex flex-col items-center text-center mb-10">
-            <img src="/favicon.png" alt="" className="h-12 w-12 mb-4" />
+            <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="" className="h-12 w-12 mb-4" />
             <h1 className="font-display text-5xl text-text leading-none tracking-tight">{loginTitle}</h1>
             {loginSubtitle && <p className="text-text-secondary mt-3 text-sm">{loginSubtitle}</p>}
           </div>
