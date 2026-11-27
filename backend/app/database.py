@@ -211,6 +211,22 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE INDEX IF NOT EXISTS idx_notifications_user_unread
     ON notifications(user_id, read_at, created_at DESC);
 
+-- Periodic review ("is this page still accurate?"). One row per page that
+-- has review turned on (no row = no review). Due when
+-- reviewed_at + interval_days has passed. notified_at is set once the
+-- owner has been reminded for the current cycle and cleared on verify, so
+-- the reminder fires once per cycle (services/page_review.py).
+CREATE TABLE IF NOT EXISTS page_reviews (
+    page_id       INTEGER PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
+    owner_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    interval_days INTEGER NOT NULL,
+    reviewed_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    reviewed_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    notified_at   TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_page_reviews_owner ON page_reviews(owner_id);
+
 CREATE TABLE IF NOT EXISTS activity_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER REFERENCES users(id),

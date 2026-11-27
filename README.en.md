@@ -55,6 +55,8 @@ All your data = one `data/just-wiki.db` SQLite file + the `media/` folder. Backu
 - **Multi-user + group ACL** — per-page permission control (inherited from parent pages)
 - **Concurrent-edit safety** — optimistic locking (`base_version`) so simultaneous edits never silently clobber each other
 - **Version history** — page revisions with diff view; roll back when something gets broken
+- **Draft autosave** — in-progress edits are kept in the browser, so a closed tab or crash doesn't lose work
+- **Periodic review** — give a page an owner and a review interval; the owner is reminded when it falls due, pages show when they were last verified, and a Reviews list surfaces what's overdue
 - **Comments, bookmarks, tags, page subscriptions** — everything a small team needs
 - **Activity log & trash** — see recent changes; deletions are soft and recoverable
 - **SSO & API tokens** — built-in OIDC (Google, GitHub, custom), LDAP, and personal Bearer tokens for enterprise SSO and automation scripts

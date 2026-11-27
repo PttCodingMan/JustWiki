@@ -281,7 +281,7 @@ function ExportSection() {
   )
 }
 
-const WEBHOOK_EVENTS = ['page.created', 'page.updated', 'page.deleted']
+const WEBHOOK_EVENTS = ['page.created', 'page.updated', 'page.deleted', 'page.review_due']
 const DEFAULT_WEBHOOK_FORM = {
   name: '',
   url: '',

@@ -23,6 +23,7 @@ import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import UserProfile from './pages/UserProfile'
 import Trash from './pages/Trash'
+import Reviews from './pages/Reviews'
 import Chat from './pages/Chat'
 import PublicPageView from './pages/PublicPageView'
 import PageOrPublicView from './pages/PageOrPublicView'
@@ -36,6 +37,7 @@ const GUEST_BLOCKED_ROUTES = [
   /^\/admin/,
   /^\/dashboard$/,
   /^\/trash$/,
+  /^\/reviews$/,
   /^\/profile$/,
   /^\/u\//,
   /^\/chat$/,
@@ -163,6 +165,7 @@ export default function App() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/u/:username" element={<UserProfile />} />
         <Route path="/trash" element={<Trash />} />
+        <Route path="/reviews" element={<Reviews />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/page/:slug" element={<PageOrPublicView />} />
         <Route path="/page/:slug/edit" element={<PageEdit />} />

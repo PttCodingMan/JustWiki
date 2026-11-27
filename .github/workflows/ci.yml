@@ -36,21 +36,21 @@ jobs:
       - uses: dorny/paths-filter@v4
         id: filter
         with:
+          # `shared` files go into the image from both sides, so they run
+          # both test suites (YAML anchor; paths-filter flattens the list).
           filters: |
+            shared: &shared
+              - 'VERSION'
+              - 'Dockerfile'
+              - '.dockerignore'
+              - '.github/workflows/ci.yml'
+              - 'docker-compose.yml'
             backend:
+              - *shared
               - 'backend/**'
-              - 'VERSION'
-              - 'Dockerfile'
-              - '.dockerignore'
-              - '.github/workflows/ci.yml'
-              - 'docker-compose.yml'
             frontend:
+              - *shared
               - 'frontend/**'
-              - 'VERSION'
-              - 'Dockerfile'
-              - '.dockerignore'
-              - '.github/workflows/ci.yml'
-              - 'docker-compose.yml'
 
   backend-tests:
     needs: changes

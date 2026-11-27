@@ -37,6 +37,7 @@ export default function NotificationBell() {
     if (n.event === 'page.updated') return t('notifications.pageUpdated', { actor, title })
     if (n.event === 'page.created') return t('notifications.pageCreated', { actor, title })
     if (n.event === 'page.deleted') return t('notifications.pageDeleted', { actor, title })
+    if (n.event === 'page.review_due') return t('notifications.reviewDue', { title })
     return t('notifications.fallback', { event: n.event, title })
   }
 

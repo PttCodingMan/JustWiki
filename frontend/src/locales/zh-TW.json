@@ -41,6 +41,7 @@
     "graphView": "關係圖",
     "aiChat": "AI 對話",
     "trash": "回收桶",
+    "reviews": "文件複查",
     "dashboard": "儀表板",
     "admin": "管理",
     "bookmarks": "書籤",
@@ -58,6 +59,7 @@
     "pageUpdated": "{{actor}} 更新了 {{title}}",
     "pageCreated": "{{actor}} 建立了 {{title}}",
     "pageDeleted": "{{actor}} 刪除了 {{title}}",
+    "reviewDue": "{{title}} 該複查了",
     "fallback": "{{event}} {{title}}"
   },
   "theme": {
@@ -496,6 +498,13 @@
     "titlePlaceholder": "頁面標題",
     "publicWarning": "此頁面為公開頁面，任何編輯都會被全世界看到。",
     "shortcutHint": "按 Ctrl+S 儲存 · 輸入 / 開啟指令",
+    "draft": {
+      "title": "找到未儲存的草稿",
+      "detail": "這個瀏覽器裡有 {{time}} 留下的未儲存變更。",
+      "stale": "頁面在那之後已被修改（草稿基於 v{{draftVersion}}，目前是 v{{currentVersion}}），儲存時會請你處理衝突。",
+      "restore": "還原草稿",
+      "discard": "捨棄草稿"
+    },
     "diagramsLabel": "本頁中的圖表（點擊以編輯）",
     "diagramLoading": "載入圖表 #{{id}}…",
     "diagramOverlay": "點擊以在 Draw.io 中編輯",
@@ -702,7 +711,8 @@
     "actions": {
       "created": "建立",
       "updated": "更新",
-      "deleted": "刪除"
+      "deleted": "刪除",
+      "verified": "驗證"
     }
   },
   "userProfile": {
@@ -799,11 +809,6 @@
       "latest": "最新版：{{version}}",
       "checkFailed": "檢查失敗",
       "disabled": "已停用更新檢查"
-    },
-    "build": {
-      "title": "建置資訊",
-      "frontend": "前端建置版本",
-      "backend": "後端版本"
     }
   },
   "login": {
@@ -823,5 +828,45 @@
   },
   "appFooter": {
     "sourceCode": "在 GitHub 檢視原始碼"
+  },
+  "review": {
+    "settings": "複查設定",
+    "verify": "標記為已驗證",
+    "verifiedToast": "已標記為已驗證",
+    "verifyFailed": "標記失敗",
+    "verifiedOn": "{{date}} 驗證",
+    "owner": "負責人",
+    "noOwner": "未指定負責人",
+    "dueIn": "{{count}} 天後需複查",
+    "overdue": "已逾期 {{count}} 天",
+    "status": {
+      "ok": "正常",
+      "due_soon": "即將到期",
+      "overdue": "已逾期"
+    },
+    "dialog": {
+      "title": "定期複查",
+      "description": "定期提醒負責人確認這頁內容是否仍然正確。到期時，負責人（未指定則為頁面建立者）會收到通知。",
+      "interval": "複查週期",
+      "everyDays": "每 {{count}} 天",
+      "owner": "負責人",
+      "ownerPlaceholder": "搜尋使用者…",
+      "ownerHint": "選填。未指定時會通知頁面建立者。",
+      "clearOwner": "更換",
+      "enable": "開啟複查",
+      "save": "儲存",
+      "cancel": "取消",
+      "turnOff": "關閉複查",
+      "saveFailed": "儲存複查設定失敗。"
+    }
+  },
+  "reviews": {
+    "title": "文件複查",
+    "intro": "已開啟定期複查的頁面，最急的排在最前面。",
+    "all": "全部",
+    "mine": "我負責的",
+    "empty": "還沒有頁面開啟複查。可從頁面的 ⋯ 選單 →「複查設定」開啟。",
+    "emptyMine": "你目前沒有負責複查的頁面。",
+    "failedLoad": "載入失敗。"
   }
 }

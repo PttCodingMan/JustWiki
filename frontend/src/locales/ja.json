@@ -41,6 +41,7 @@
     "graphView": "グラフビュー",
     "aiChat": "AI チャット",
     "trash": "ゴミ箱",
+    "reviews": "レビュー",
     "dashboard": "ダッシュボード",
     "admin": "管理",
     "bookmarks": "ブックマーク",
@@ -58,6 +59,7 @@
     "pageUpdated": "{{actor}} が {{title}} を更新しました",
     "pageCreated": "{{actor}} が {{title}} を作成しました",
     "pageDeleted": "{{actor}} が {{title}} を削除しました",
+    "reviewDue": "{{title}} のレビュー期限です",
     "fallback": "{{event}} {{title}}"
   },
   "theme": {
@@ -496,6 +498,13 @@
     "titlePlaceholder": "ページタイトル",
     "publicWarning": "このページは公開されています。編集内容は誰でも閲覧できます。",
     "shortcutHint": "Ctrl+S で保存 · / でコマンド",
+    "draft": {
+      "title": "未保存の下書きがあります",
+      "detail": "このブラウザに {{time}} の未保存の変更が残っています。",
+      "stale": "その後ページが更新されています（下書きは v{{draftVersion}}、現在は v{{currentVersion}}）。保存時に競合の解決が必要です。",
+      "restore": "下書きを復元",
+      "discard": "下書きを破棄"
+    },
     "diagramsLabel": "このページの図（クリックで編集）",
     "diagramLoading": "図 #{{id}} を読み込み中…",
     "diagramOverlay": "クリックして Draw.io で編集",
@@ -702,7 +711,8 @@
     "actions": {
       "created": "作成しました",
       "updated": "更新しました",
-      "deleted": "削除しました"
+      "deleted": "削除しました",
+      "verified": "確認しました"
     }
   },
   "userProfile": {
@@ -799,11 +809,6 @@
       "latest": "最新: {{version}}",
       "checkFailed": "確認に失敗しました",
       "disabled": "更新チェックは無効です"
-    },
-    "build": {
-      "title": "ビルド",
-      "frontend": "フロントエンドビルド",
-      "backend": "バックエンドバージョン"
     }
   },
   "login": {
@@ -823,5 +828,45 @@
   },
   "appFooter": {
     "sourceCode": "GitHub でソースコードを見る"
+  },
+  "review": {
+    "settings": "レビュー設定",
+    "verify": "確認済みにする",
+    "verifiedToast": "確認済みにしました",
+    "verifyFailed": "確認済みにできませんでした",
+    "verifiedOn": "{{date}} に確認",
+    "owner": "担当者",
+    "noOwner": "担当者なし",
+    "dueIn": "あと {{count}} 日でレビュー期限",
+    "overdue": "レビュー期限を {{count}} 日超過",
+    "status": {
+      "ok": "最新",
+      "due_soon": "期限間近",
+      "overdue": "期限切れ"
+    },
+    "dialog": {
+      "title": "定期レビュー",
+      "description": "このページの内容がまだ正しいか、担当者に定期的に確認してもらいます。期限になると担当者（未設定の場合はページ作成者）に通知されます。",
+      "interval": "レビュー間隔",
+      "everyDays": "{{count}} 日ごと",
+      "owner": "担当者",
+      "ownerPlaceholder": "ユーザーを検索…",
+      "ownerHint": "任意。未設定の場合はページ作成者に通知されます。",
+      "clearOwner": "変更",
+      "enable": "レビューを有効にする",
+      "save": "保存",
+      "cancel": "キャンセル",
+      "turnOff": "レビューを無効にする",
+      "saveFailed": "レビュー設定を保存できませんでした。"
+    }
+  },
+  "reviews": {
+    "title": "レビュー",
+    "intro": "定期レビューが有効なページ（期限が近い順）。",
+    "all": "すべて",
+    "mine": "自分が担当",
+    "empty": "定期レビューが有効なページはまだありません。ページの ⋯ メニュー →「レビュー設定」から有効にできます。",
+    "emptyMine": "担当しているページはありません。",
+    "failedLoad": "読み込みに失敗しました。"
   }
 }

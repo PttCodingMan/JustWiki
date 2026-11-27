@@ -389,6 +389,14 @@ export default function Sidebar() {
           )}
           {!user?.anonymous && (
             <NavItem
+              to="/reviews"
+              icon={<><path d="M9 12l2 2 4-4" /><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" /></>}
+            >
+              {t('sidebar.reviews')}
+            </NavItem>
+          )}
+          {!user?.anonymous && (
+            <NavItem
               to="/trash"
               icon={<><path d="M4 7h16M10 11v6M14 11v6" /><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" /></>}
             >

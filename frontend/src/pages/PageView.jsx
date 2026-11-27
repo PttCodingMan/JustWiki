@@ -14,6 +14,7 @@ import TocDrawer from '../components/Viewer/TocDrawer'
 import Comments from '../components/Comments'
 import ConfirmDialog from '../components/ConfirmDialog'
 import AclManager from '../components/AclManager'
+import { ReviewBanner, ReviewSettingsDialog } from '../components/PageReview'
 import { stripBrTags } from '../lib/markdown'
 import api from '../api/client'
 
@@ -95,6 +96,7 @@ export default function PageView() {
   const [publicConfirmOpen, setPublicConfirmOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [aclManagerOpen, setAclManagerOpen] = useState(false)
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
   const [toast, setToast] = useState('')
   const [headings, setHeadings] = useState([])
   const [tocDrawerOpen, setTocDrawerOpen] = useState(false)
@@ -218,6 +220,20 @@ export default function PageView() {
 
   const handleRemoveTag = async (tagName) => {
     await removeTag(slug, tagName)
+  }
+
+  const setReview = useCallback((review) => {
+    setPage((p) => (p ? { ...p, review } : p))
+  }, [])
+
+  const handleVerify = async () => {
+    try {
+      const res = await api.post(`/pages/${slug}/review/verify`)
+      setReview(res.data)
+      setToast(t('review.verifiedToast'))
+    } catch {
+      setToast(t('review.verifyFailed'))
+    }
   }
 
   const handleCopyPublicLink = async () => {
@@ -441,6 +457,16 @@ export default function PageView() {
                 {t('pageView.managePermissions')}
               </button>
             )}
+            <button
+              onClick={() => { setMenuOpen(false); setReviewDialogOpen(true) }}
+              className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
+            >
+              <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <path d="M9 12l2 2 4-4" />
+                <path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" />
+              </svg>
+              {t('review.settings')}
+            </button>
             </>
             )}
             <div className="border-t border-border my-1" />
@@ -583,6 +609,8 @@ export default function PageView() {
             )}
           </div>
 
+          <ReviewBanner review={page.review} writable={writable} onVerify={handleVerify} />
+
           {/* Tags */}
           {(pageTags.length > 0 || !isGuest) && (
             <div className="flex flex-wrap items-center gap-1.5 mt-5">
@@ -724,6 +752,16 @@ export default function PageView() {
         open={aclManagerOpen}
         onClose={() => setAclManagerOpen(false)}
       />
+
+      {writable && (
+        <ReviewSettingsDialog
+          open={reviewDialogOpen}
+          slug={slug}
+          review={page.review}
+          onClose={() => setReviewDialogOpen(false)}
+          onSaved={setReview}
+        />
+      )}
 
       {toast && (
         <div role="status" className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-text text-bg text-sm font-medium px-4 py-2.5 rounded-xl shadow-xl z-[110] animate-enter flex items-center gap-2">

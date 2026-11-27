@@ -8,11 +8,12 @@
 # ── Frontend build ──
 FROM node:20-alpine AS frontend
 
-WORKDIR /app
+# Mirror the repo layout so vite.config.js finds VERSION at ../VERSION.
+WORKDIR /src/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ .
-COPY VERSION /app/VERSION
+COPY VERSION /src/VERSION
 RUN npm run build \
  # Pre-compress text assets so the backend can serve .gz without spending
  # CPU per request. Originals stay for clients that don't accept gzip.
@@ -31,7 +32,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ .
 COPY VERSION /app/VERSION
 # config.FRONTEND_DIST_DIR defaults to <backend>/static, i.e. /app/static.
-COPY --from=frontend /app/dist /app/static
+COPY --from=frontend /src/frontend/dist /app/static
 
 # Defaults for a plain `docker run -v ./data:/app/data`. docker-compose.yml
 # sets these again because its env_file (.env) would otherwise override them
