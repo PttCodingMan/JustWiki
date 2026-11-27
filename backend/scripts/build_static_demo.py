@@ -14,7 +14,9 @@ Media files are copied to ``<out>/api/media/``, and ``_search.json`` holds the
 page text for the client-side search.
 
 Each guide page's slug is derived from its name in MANUAL_PAGES, so page URLs
-stay the same from one build to the next even as pages are added.
+stay the same from one build to the next even as pages are added. The
+first-launch "Getting Started" pages from ``app/seed/`` are added as a second
+root, with slugs fixed the same way.
 """
 import asyncio
 import hashlib
@@ -92,8 +94,9 @@ def _manual_slug(name: str) -> str:
 
 
 async def _seed_manual(db) -> None:
-    """Insert the guide as pages and make its index the home page."""
+    """Insert the guide and the first-launch pages; the guide index is home."""
     from app.config import settings
+    from app.database import GETTING_STARTED_PAGES, insert_getting_started_pages
     from app.services.page_slug import rewrite_page_slugs
     from app.services.search import rebuild_search_index
     from app.services.wikilink import parse_and_update_backlinks
@@ -108,8 +111,15 @@ async def _seed_manual(db) -> None:
         "SELECT id FROM users WHERE role = 'admin' LIMIT 1"
     ))[0]["id"]
     slug_map = {name: _manual_slug(name) for name, *_ in MANUAL_PAGES}
+    # The pages a fresh install starts with, kept as a second root so the
+    # demo also shows what a new wiki looks like. Guide pages can link to
+    # them by seed name, e.g. [[getting-started]].
+    welcome_slugs = {name: _manual_slug(f"seed:{name}") for name, *_ in GETTING_STARTED_PAGES}
+    if slug_map.keys() & welcome_slugs.keys():
+        sys.exit("A guide page shares its name with a first-launch seed page")
+    slug_map.update(welcome_slugs)
     if len(set(slug_map.values())) != len(slug_map):
-        sys.exit("Two guide pages hash to the same slug; rename one of them")
+        sys.exit("Two demo pages hash to the same slug; rename one of them")
 
     page_ids: dict[str, int] = {}
     next_sort: dict[str | None, int] = {}
@@ -147,6 +157,10 @@ async def _seed_manual(db) -> None:
             )
         await rebuild_search_index(db, page_id, title, content)
         seeded.append((page_id, content))
+
+    await insert_getting_started_pages(
+        db, admin_id, welcome_slugs, hub_sort_order=next_sort.get(None, 0)
+    )
 
     # Second pass so links to pages inserted later still resolve.
     for page_id, content in seeded:

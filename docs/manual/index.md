@@ -9,6 +9,7 @@ This site is a read-only demo of JustWiki itself. The UI is the real app; the co
 
 - [[zh-guide|使用手冊（中文）]]
 - [[en-guide|User Guide (English)]]
+- [[getting-started|Getting Started]] — 剛安裝好時內建的導覽頁 / the welcome pages a fresh install starts with
 
 :::tip
 想自己架一套？部署方式請看 GitHub 上的 [README](https://github.com/PttCodingMan/JustWiki)。

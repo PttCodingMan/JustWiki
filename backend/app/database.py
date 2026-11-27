@@ -791,6 +791,51 @@ async def rebuild_all_media_refs(db):
     await db.execute(f"PRAGMA user_version = {current | 0x1}")
 
 
+# The "Getting Started" hub followed by the pages nested under it.
+GETTING_STARTED_PAGES = [("getting-started", "Getting Started", 0, "document"), *WELCOME_PAGES]
+
+
+async def insert_getting_started_pages(db, admin_id, slug_map, hub_sort_order=0):
+    """Insert the first-launch "Getting Started" pages as a root of the tree.
+
+    ``slug_map`` maps each seed name in GETTING_STARTED_PAGES to its slug.
+    Also used by scripts/build_static_demo.py, which passes fixed slugs.
+    Does not commit.
+    """
+    from app.services.page_slug import rewrite_page_slugs
+    from app.services.search import rebuild_search_index
+    from app.services.wikilink import parse_and_update_backlinks
+
+    # Parent is inserted first so the children's parent_id resolves;
+    # wikilinks are parsed in a second pass so cross-links between siblings
+    # are not silently dropped.
+    hub_id = None
+    seeded = []
+    for seed_name, title, sort_order, page_type in GETTING_STARTED_PAGES:
+        content = rewrite_page_slugs(_read_seed(f"{seed_name}.md"), slug_map)
+        if hub_id is None:
+            sort_order = hub_sort_order
+        cursor = await db.execute(
+            """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, created_by, page_type)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (slug_map[seed_name], title, content, hub_id, sort_order, admin_id, page_type),
+        )
+        page_id = cursor.lastrowid
+        hub_id = hub_id or page_id  # the first page is the hub
+
+        await db.execute(
+            """INSERT INTO page_versions (page_id, title, content_md, edited_by, version_num)
+               VALUES (?, ?, ?, ?, 1)""",
+            (page_id, title, content, admin_id),
+        )
+
+        await rebuild_search_index(db, page_id, title, content)
+        seeded.append((page_id, content))
+
+    for page_id, content in seeded:
+        await parse_and_update_backlinks(db, page_id, content)
+
+
 async def seed_welcome_page(db):
     """Create a welcome/guide page on first launch when no pages exist."""
     # Ensure logo.png exists in media directory (independent of whether pages exist)
@@ -838,39 +883,10 @@ async def seed_welcome_page(db):
     )
     admin_id = admin_rows[0]["id"] if admin_rows else None
 
-    from app.services.page_slug import new_page_slug, rewrite_page_slugs
-    from app.services.search import rebuild_search_index
-    from app.services.wikilink import parse_and_update_backlinks
+    from app.services.page_slug import new_page_slug
 
-    # "Getting Started" hub at the top of the tree, with bilingual walkthroughs
-    # and mindmap demos nested underneath. Parent is inserted first so the
-    # children's parent_id resolves; wikilinks are parsed in a second pass so
-    # cross-links between siblings are not silently dropped.
-    seed_pages = [("getting-started", "Getting Started", 0, "document"), *WELCOME_PAGES]
-    slug_map = {seed_name: new_page_slug() for seed_name, *_ in seed_pages}
-    hub_id = None
-    seeded = []
-    for seed_name, title, sort_order, page_type in seed_pages:
-        content = rewrite_page_slugs(_read_seed(f"{seed_name}.md"), slug_map)
-        cursor = await db.execute(
-            """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, created_by, page_type)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (slug_map[seed_name], title, content, hub_id, sort_order, admin_id, page_type),
-        )
-        page_id = cursor.lastrowid
-        hub_id = hub_id or page_id  # the first page is the hub
-
-        await db.execute(
-            """INSERT INTO page_versions (page_id, title, content_md, edited_by, version_num)
-               VALUES (?, ?, ?, ?, 1)""",
-            (page_id, title, content, admin_id),
-        )
-
-        await rebuild_search_index(db, page_id, title, content)
-        seeded.append((page_id, content))
-
-    for page_id, content in seeded:
-        await parse_and_update_backlinks(db, page_id, content)
+    slug_map = {seed_name: new_page_slug() for seed_name, *_ in GETTING_STARTED_PAGES}
+    await insert_getting_started_pages(db, admin_id, slug_map)
 
     # Pin Getting Started as the default landing page so first-time visitors
     # see the guide instead of an empty "All Pages" list. Admins can clear

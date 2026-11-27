@@ -1,5 +1,3 @@
-# 歡迎使用 JustWiki
-
 > 🌐 **語言：** [[welcome|English]] · 中文
 
 ![JustWiki](/api/media/logo.png)
