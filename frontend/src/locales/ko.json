@@ -41,6 +41,7 @@
     "graphView": "그래프 뷰",
     "aiChat": "AI 챗",
     "trash": "휴지통",
+    "reviews": "검토",
     "dashboard": "대시보드",
     "admin": "관리",
     "bookmarks": "북마크",
@@ -58,6 +59,7 @@
     "pageUpdated": "{{actor}}님이 {{title}}을(를) 업데이트했습니다",
     "pageCreated": "{{actor}}님이 {{title}}을(를) 만들었습니다",
     "pageDeleted": "{{actor}}님이 {{title}}을(를) 삭제했습니다",
+    "reviewDue": "{{title}} 검토 기한입니다",
     "fallback": "{{event}} {{title}}"
   },
   "theme": {
@@ -496,6 +498,13 @@
     "titlePlaceholder": "페이지 제목",
     "publicWarning": "이 페이지는 공개되어 있습니다. 모든 편집은 누구나 볼 수 있습니다.",
     "shortcutHint": "Ctrl+S로 저장 · /로 명령 입력",
+    "draft": {
+      "title": "저장되지 않은 초안이 있습니다",
+      "detail": "이 브라우저에 {{time}}의 저장되지 않은 변경 사항이 남아 있습니다.",
+      "stale": "그 이후 페이지가 변경되었습니다(초안 v{{draftVersion}}, 현재 v{{currentVersion}}). 저장할 때 충돌을 해결해야 합니다.",
+      "restore": "초안 복원",
+      "discard": "초안 삭제"
+    },
     "diagramsLabel": "이 페이지의 다이어그램 (클릭하여 편집)",
     "diagramLoading": "다이어그램 #{{id}} 불러오는 중…",
     "diagramOverlay": "Draw.io에서 편집하려면 클릭",
@@ -702,7 +711,8 @@
     "actions": {
       "created": "만들었습니다",
       "updated": "업데이트했습니다",
-      "deleted": "삭제했습니다"
+      "deleted": "삭제했습니다",
+      "verified": "확인했습니다"
     }
   },
   "userProfile": {
@@ -818,5 +828,45 @@
   },
   "appFooter": {
     "sourceCode": "GitHub에서 소스 코드 보기"
+  },
+  "review": {
+    "settings": "검토 설정",
+    "verify": "확인 완료로 표시",
+    "verifiedToast": "확인 완료로 표시했습니다",
+    "verifyFailed": "확인 표시에 실패했습니다",
+    "verifiedOn": "{{date}} 확인",
+    "owner": "담당자",
+    "noOwner": "담당자 없음",
+    "dueIn": "{{count}}일 후 검토 예정",
+    "overdue": "검토 기한 {{count}}일 초과",
+    "status": {
+      "ok": "최신",
+      "due_soon": "기한 임박",
+      "overdue": "기한 초과"
+    },
+    "dialog": {
+      "title": "정기 검토",
+      "description": "이 페이지 내용이 여전히 정확한지 담당자가 정기적으로 확인하도록 알립니다. 기한이 되면 담당자(없으면 페이지 작성자)에게 알림이 갑니다.",
+      "interval": "검토 주기",
+      "everyDays": "{{count}}일마다",
+      "owner": "담당자",
+      "ownerPlaceholder": "사용자 검색…",
+      "ownerHint": "선택 사항입니다. 담당자가 없으면 페이지 작성자에게 알림이 갑니다.",
+      "clearOwner": "변경",
+      "enable": "검토 켜기",
+      "save": "저장",
+      "cancel": "취소",
+      "turnOff": "검토 끄기",
+      "saveFailed": "검토 설정을 저장하지 못했습니다."
+    }
+  },
+  "reviews": {
+    "title": "검토",
+    "intro": "정기 검토가 켜진 페이지(기한이 가까운 순).",
+    "all": "전체",
+    "mine": "내 담당",
+    "empty": "아직 정기 검토가 켜진 페이지가 없습니다. 페이지의 ⋯ 메뉴 → '검토 설정'에서 켤 수 있습니다.",
+    "emptyMine": "담당 중인 페이지가 없습니다.",
+    "failedLoad": "불러오지 못했습니다."
   }
 }

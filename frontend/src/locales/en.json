@@ -42,6 +42,7 @@
     "graphView": "Graph View",
     "aiChat": "AI Chat",
     "trash": "Trash",
+    "reviews": "Reviews",
     "dashboard": "Dashboard",
     "admin": "Admin",
     "bookmarks": "Bookmarks",
@@ -59,6 +60,7 @@
     "pageUpdated": "{{actor}} updated {{title}}",
     "pageCreated": "{{actor}} created {{title}}",
     "pageDeleted": "{{actor}} deleted {{title}}",
+    "reviewDue": "Time to review {{title}}",
     "fallback": "{{event}} {{title}}"
   },
   "theme": {
@@ -498,6 +500,13 @@
     "titlePlaceholder": "Page title",
     "publicWarning": "This page is publicly accessible. Any edit will be visible to the world.",
     "shortcutHint": "Press Ctrl+S to save · Type / for commands",
+    "draft": {
+      "title": "Unsaved draft found",
+      "detail": "This browser has unsaved changes from {{time}}.",
+      "stale": "The page has changed since (draft is based on v{{draftVersion}}, current is v{{currentVersion}}), so saving will ask you to resolve the conflict.",
+      "restore": "Restore draft",
+      "discard": "Discard draft"
+    },
     "diagramsLabel": "Diagrams in this page (click to edit)",
     "diagramLoading": "Loading diagram #{{id}}...",
     "diagramOverlay": "Click to edit in Draw.io",
@@ -704,7 +713,8 @@
     "actions": {
       "created": "created",
       "updated": "updated",
-      "deleted": "deleted"
+      "deleted": "deleted",
+      "verified": "verified"
     }
   },
   "userProfile": {
@@ -820,5 +830,48 @@
   },
   "appFooter": {
     "sourceCode": "View source on GitHub"
+  },
+  "review": {
+    "settings": "Review settings",
+    "verify": "Mark as verified",
+    "verifiedToast": "Marked as verified",
+    "verifyFailed": "Failed to mark as verified",
+    "verifiedOn": "Verified {{date}}",
+    "owner": "Owner",
+    "noOwner": "No owner",
+    "dueIn_one": "review due in {{count}} day",
+    "dueIn": "review due in {{count}} days",
+    "overdue_one": "review overdue by {{count}} day",
+    "overdue": "review overdue by {{count}} days",
+    "status": {
+      "ok": "Up to date",
+      "due_soon": "Due soon",
+      "overdue": "Overdue"
+    },
+    "dialog": {
+      "title": "Periodic review",
+      "description": "Remind an owner to check that this page is still accurate. When the review falls due, the owner (or the page creator if there is none) gets a notification.",
+      "interval": "Review interval",
+      "everyDays_one": "Every day",
+      "everyDays": "Every {{count}} days",
+      "owner": "Owner",
+      "ownerPlaceholder": "Search users…",
+      "ownerHint": "Optional. Without an owner, reminders go to the page creator.",
+      "clearOwner": "Change",
+      "enable": "Turn on review",
+      "save": "Save",
+      "cancel": "Cancel",
+      "turnOff": "Turn off review",
+      "saveFailed": "Failed to save review settings."
+    }
+  },
+  "reviews": {
+    "title": "Reviews",
+    "intro": "Pages with periodic review turned on, most urgent first.",
+    "all": "All",
+    "mine": "Owned by me",
+    "empty": "No pages have review turned on yet. Turn it on from a page's ⋯ menu → Review settings.",
+    "emptyMine": "You don't own any pages under review.",
+    "failedLoad": "Failed to load reviews."
   }
 }

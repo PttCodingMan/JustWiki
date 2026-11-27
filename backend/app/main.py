@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import logging
 import secrets
 from contextlib import asynccontextmanager
@@ -17,7 +19,8 @@ from app.database import (
 )
 from app.auth import ensure_admin_exists
 from app.spa import install_spa
-from app.routers import auth_router, oauth_router, pages, media, templates, search, tags, activity, bookmarks, versions, diagrams, users, comments, backup, export, trash, notifications, watch, public, dashboard, acl, groups, ai, tokens, settings as settings_router
+from app.services.page_review import review_reminder_loop
+from app.routers import auth_router, oauth_router, pages, media, templates, search, tags, activity, bookmarks, versions, diagrams, users, comments, backup, export, trash, notifications, watch, public, dashboard, acl, groups, ai, tokens, reviews, settings as settings_router
 
 logger = logging.getLogger("justwiki")
 
@@ -150,7 +153,11 @@ async def lifespan(app: FastAPI):
         await init_db()
         await ensure_admin_exists()
         await seed_welcome_page(db)
+    reminders = asyncio.create_task(review_reminder_loop())
     yield
+    reminders.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await reminders
     await close_db()
 
 
@@ -314,6 +321,7 @@ app.include_router(acl.router)
 app.include_router(groups.router)
 app.include_router(ai.router)
 app.include_router(tokens.router)
+app.include_router(reviews.router)
 app.include_router(settings_router.router)
 
 

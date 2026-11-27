@@ -45,8 +45,8 @@ cd frontend && npm test -- src/path/to/file.test.jsx
 - **Config**: `config.py` — Pydantic Settings reading from `.env`
 - **Schemas**: `schemas.py` — shared Pydantic request/response models
 - **Database**: `database.py` — schema DDL and FTS5 search index setup; first-launch welcome pages and default templates are markdown files in `app/seed/`; startup-time migrations live in `migrations.py` and record applied versions in the `schema_migrations` ledger so each migration runs once per DB
-- **Routers**: One file per domain — `pages.py`, `search.py`, `media.py`, `versions.py`, `tags.py`, `templates.py`, `users.py`, `diagrams.py`, `comments.py`, `bookmarks.py`, `activity.py`, `backup.py`, `export.py`, `auth_router.py`, `oauth_router.py`, `tokens.py`, `trash.py`, `notifications.py`, `watch.py`, `public.py`, `dashboard.py`, `acl.py`, `groups.py`, `ai.py`
-- **Services**: `search.py` (FTS5 indexing, CJK segmentation), `wikilink.py` (backlink tracking), `acl.py` (permission resolution — single source of truth, routers must use these helpers), `media_ref.py` (tracks which pages reference each media file), `diagram_ref.py`, `notifications.py` (fan-out to watchers on page events), `oidc.py` (OIDC client + provider config), `ldap_auth.py` (LDAP bind + attribute mapping), `accounts.py` (username derivation + SSO/LDAP user provisioning shared with invites)
+- **Routers**: One file per domain — `pages.py`, `search.py`, `media.py`, `versions.py`, `tags.py`, `templates.py`, `users.py`, `diagrams.py`, `comments.py`, `bookmarks.py`, `activity.py`, `backup.py`, `export.py`, `auth_router.py`, `oauth_router.py`, `tokens.py`, `trash.py`, `notifications.py`, `watch.py`, `public.py`, `dashboard.py`, `acl.py`, `groups.py`, `ai.py`, `reviews.py`
+- **Services**: `search.py` (FTS5 indexing, CJK segmentation), `wikilink.py` (backlink tracking), `acl.py` (permission resolution — single source of truth, routers must use these helpers), `media_ref.py` (tracks which pages reference each media file), `diagram_ref.py`, `notifications.py` (fan-out to watchers on page events), `oidc.py` (OIDC client + provider config), `ldap_auth.py` (LDAP bind + attribute mapping), `accounts.py` (username derivation + SSO/LDAP user provisioning shared with invites), `page_review.py` (periodic review status + the hourly due-reminder loop started in the app lifespan)
 - **Deps**: Python 3.11+, managed with `uv`
 
 ### Frontend (`frontend/src/`)
@@ -67,7 +67,7 @@ These are separate systems with independent rendering logic — changes to one d
 
 ### Database (SQLite, single file at `backend/data/just-wiki.db` in dev, `/app/data/just-wiki.db` in docker)
 
-Key tables: `users`, `pages` (with `parent_id` hierarchy and `slug` URL), `page_versions`, `tags`, `page_tags`, `backlinks`, `templates`, `media`, `media_references`, `diagrams`, `comments`, `bookmarks`, `activity_log`, `page_acl`, `groups`, `group_members`, `page_watchers`, `notifications`, `view_dedup`. FTS5 virtual table `search_index` for full-text search with CJK support.
+Key tables: `users`, `pages` (with `parent_id` hierarchy and `slug` URL), `page_versions`, `tags`, `page_tags`, `backlinks`, `templates`, `media`, `media_references`, `diagrams`, `comments`, `bookmarks`, `activity_log`, `page_acl`, `groups`, `group_members`, `page_watchers`, `notifications`, `view_dedup`, `page_reviews`. FTS5 virtual table `search_index` for full-text search with CJK support.
 
 Pages use **soft-delete** (`deleted_at` column) — `DELETE /api/pages/{slug}` sets `deleted_at` rather than removing the row. Trash endpoints (`/api/trash`) handle list/restore/purge. Restore re-indexes FTS and re-parses backlinks.
 
@@ -101,6 +101,7 @@ All endpoints under `/api/`. Vite dev server proxies `/api` to `localhost:8000`.
 - Notifications: `/api/notifications` (list, mark-read)
 - Public: `/api/public/pages/{slug}` (unauthenticated, rate-limited 60 req/min/IP)
 - Dashboard: `GET /api/dashboard/stats` (admin only)
+- Reviews: `PUT/DELETE /api/pages/{slug}/review`, `POST /api/pages/{slug}/review/verify` (write permission); `GET /api/reviews?scope=all|mine` (ACL-filtered list). Review status is also embedded as `review` in `GET /api/pages/{slug}`
 - Health: `GET /api/health`
 
 ## ACL / Permissions

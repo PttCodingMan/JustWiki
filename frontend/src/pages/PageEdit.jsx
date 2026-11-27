@@ -13,6 +13,8 @@ import MindmapLayoutSelect from '../components/MindmapLayoutSelect'
 import DrawioModal from '../components/DrawioModal'
 import useUnsavedWarning, { confirmDiscard } from '../hooks/useUnsavedWarning'
 import { useMediaPicker, useSaveShortcut } from '../hooks/useEditorPage'
+import useDraftAutosave from '../hooks/useDraftAutosave'
+import { clearDraft, loadDraft, pruneDrafts } from '../lib/drafts'
 import { stripBrTags } from '../lib/markdown'
 import api from '../api/client'
 
@@ -37,6 +39,11 @@ export default function PageEdit() {
   const [error, setError] = useState('')
   const [conflict, setConflict] = useState(null)  // { currentVersion } on 409
   const [original, setOriginal] = useState({ title: '', content: '', mindmapLayout: 'lr' })
+  // Local draft found on load that differs from the server copy; the user
+  // chooses to restore or discard it. Autosave pauses until they do.
+  const [draftOffer, setDraftOffer] = useState(null)
+  // Bumped to remount the (uncontrolled) editor with restored content.
+  const [editorEpoch, setEditorEpoch] = useState(0)
   const baseVersionRef = useRef(null)
   const editorRef = useRef(null)
   const saveBtnRef = useRef(null)
@@ -64,11 +71,41 @@ export default function PageEdit() {
 
   useUnsavedWarning(dirty, t('pageEdit.unsavedWarning'))
 
+  const discardDraft = useDraftAutosave({
+    userId: user?.id,
+    slug,
+    enabled: !!page && page.slug === slug && !draftOffer,
+    dirty,
+    title,
+    content,
+    mindmapLayout,
+    baseVersionRef,
+  })
+
   const handleCancel = useCallback(() => {
     if (confirmDiscard(dirty, t('pageEdit.unsavedWarning'))) {
+      discardDraft()
       navigate(`/page/${slug}`)
     }
-  }, [dirty, t, navigate, slug])
+  }, [dirty, t, navigate, slug, discardDraft])
+
+  const handleRestoreDraft = useCallback(() => {
+    if (!draftOffer) return
+    setTitle(draftOffer.title)
+    setContent(draftOffer.content)
+    setMindmapLayout(draftOffer.mindmapLayout || 'lr')
+    // Keep the version the draft was written against: if the page changed
+    // since, saving hits the normal 409 conflict flow instead of silently
+    // overwriting the newer version.
+    if (draftOffer.baseVersion != null) baseVersionRef.current = draftOffer.baseVersion
+    setEditorEpoch((n) => n + 1)
+    setDraftOffer(null)
+  }, [draftOffer])
+
+  const handleDiscardDraft = useCallback(() => {
+    clearDraft(user?.id, slug)
+    setDraftOffer(null)
+  }, [user?.id, slug])
 
   useEffect(() => {
     getPage(slug).then((p) => {
@@ -85,6 +122,15 @@ export default function PageEdit() {
       setMindmapLayout(initialLayout)
       setOriginal({ title: p.title, content: p.content_md, mindmapLayout: initialLayout })
       baseVersionRef.current = p.version
+      pruneDrafts()
+      const draft = loadDraft(user?.id, slug)
+      const differs = draft && (
+        draft.title !== p.title ||
+        draft.content !== p.content_md ||
+        (draft.mindmapLayout || 'lr') !== initialLayout
+      )
+      if (draft && !differs) clearDraft(user?.id, slug)
+      setDraftOffer(differs ? draft : null)
       // React Router keeps PageEdit mounted across slug transitions, so
       // ALWAYS reset preview to the per-page default — not just the mindmap
       // branch — otherwise opening a mindmap and then a doc leaves the doc
@@ -204,6 +250,7 @@ export default function PageEdit() {
       fetchTree().catch(() => {})
       setOriginal({ title, content: cleanContent, mindmapLayout })
       setSaving(false)
+      discardDraft()
       navigate(`/page/${slug}`)
     } catch (err) {
       console.error('Save failed:', err)
@@ -223,7 +270,7 @@ export default function PageEdit() {
       }
       setSaving(false)
     }
-  }, [slug, title, content, mindmapLayout, page, saving, navigate, fetchTree, updatePage, t])
+  }, [slug, title, content, mindmapLayout, page, saving, navigate, fetchTree, updatePage, t, discardDraft])
 
   const handleReloadLatest = useCallback(async () => {
     try {
@@ -239,6 +286,10 @@ export default function PageEdit() {
           mindmapLayout: latestLayout,
         })
         baseVersionRef.current = latest.version
+        // The editor is uncontrolled (reads defaultValue on mount only), so
+        // remount it; otherwise it keeps showing — and handleSave, which reads
+        // the live editor, would save — the edits the user just discarded.
+        setEditorEpoch((n) => n + 1)
         setConflict(null)
       }
     } catch (e) {
@@ -315,6 +366,33 @@ export default function PageEdit() {
           <span>{t('pageEdit.publicWarning')}</span>
         </div>
       )}
+      {draftOffer && (
+        <div className="mb-3 px-3 py-3 bg-sky-500/10 text-sky-900 dark:text-sky-200 text-sm rounded-lg border border-sky-500/30">
+          <div className="font-semibold mb-1">{t('pageEdit.draft.title')}</div>
+          <div className="mb-2">
+            {t('pageEdit.draft.detail', { time: new Date(draftOffer.savedAt).toLocaleString() })}
+            {draftOffer.baseVersion != null && draftOffer.baseVersion !== page.version && (
+              <> {t('pageEdit.draft.stale', { draftVersion: draftOffer.baseVersion, currentVersion: page.version })}</>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleRestoreDraft}
+              className="px-3 py-1 bg-sky-600 text-white rounded hover:bg-sky-700"
+            >
+              {t('pageEdit.draft.restore')}
+            </button>
+            <button
+              type="button"
+              onClick={handleDiscardDraft}
+              className="px-3 py-1 bg-surface border border-sky-500/40 rounded hover:bg-surface-hover"
+            >
+              {t('pageEdit.draft.discard')}
+            </button>
+          </div>
+        </div>
+      )}
       {error && (
         <div className="mb-3 px-3 py-2 bg-red-500/10 text-red-600 text-sm rounded-lg border border-red-500/25">
           {error}
@@ -355,7 +433,7 @@ export default function PageEdit() {
         <div className={showPreview ? 'edit-split-editor' : ''}>
           <div className="editor-paper bg-surface rounded-2xl shadow-sm border border-hairline min-h-[500px]">
             <Editor
-              key={slug}
+              key={`${slug}:${editorEpoch}`}
               ref={editorRef}
               defaultValue={content}
               onChange={setContent}

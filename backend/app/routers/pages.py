@@ -19,6 +19,7 @@ from app.services.search import rebuild_search_index, remove_from_search_index
 from app.services.wikilink import parse_and_update_backlinks
 from app.services.media_ref import parse_and_update_media_refs
 from app.services.page_slug import new_page_slug
+from app.services.page_review import get_page_review
 from app.routers.activity import log_activity
 from app.routers.versions import save_version
 from app.services.notifications import (
@@ -317,6 +318,7 @@ async def get_page(slug: str, ctx: PageAccess = Depends(page_dep("read"))):
                 page["view_count"] += 1
 
     page["effective_permission"] = permission
+    page["review"] = await get_page_review(db, page["id"])
     return page
 
 

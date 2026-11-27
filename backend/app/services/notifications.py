@@ -91,9 +91,8 @@ async def notify_page_deleted(db, page: dict, actor: dict) -> None:
         logger.warning("notify_page_deleted failed: %s", exc)
 
 
-async def _dispatch(db, event: str, page: dict, actor: dict, changes: dict) -> None:
-    # 1. Build payload
-    payload = {
+def _payload(event: str, page: dict, actor: dict | None, changes: dict) -> dict:
+    return {
         "event": event,
         "page": {
             "id": page.get("id"),
@@ -102,31 +101,28 @@ async def _dispatch(db, event: str, page: dict, actor: dict, changes: dict) -> N
             "version": page.get("version"),
             "updated_at": str(page.get("updated_at")) if page.get("updated_at") else None,
         },
-        "actor": {
-            "id": actor.get("id"),
-            "username": actor.get("username"),
-        },
+        # None for system-originated events (e.g. a review falling due).
+        "actor": {"id": actor.get("id"), "username": actor.get("username")} if actor else None,
         "changes": changes,
     }
 
-    # 2. Record in-app notification for watchers (excluding the actor)
-    watchers = await db.execute_fetchall(
-        """SELECT w.user_id FROM page_watchers w
-           WHERE w.page_id = ? AND w.user_id != ?""",
-        (page.get("id"), actor.get("id")),
-    )
-    watcher_ids = [w["user_id"] for w in watchers]
-    if watcher_ids:
-        metadata = json.dumps({"event": event, "title": page.get("title"), "slug": page.get("slug")})
-        async with write_transaction(db):
-            for wid in watcher_ids:
-                await db.execute(
-                    """INSERT INTO notifications (user_id, event, page_id, actor_id, metadata)
-                       VALUES (?, ?, ?, ?, ?)""",
-                    (wid, event, page.get("id"), actor.get("id"), metadata),
-                )
 
-    # 3. Fire outbound webhooks (fire-and-forget)
+async def _insert_notifications(
+    db, user_ids: list[int], event: str, page: dict, actor_id: int | None
+) -> None:
+    if not user_ids:
+        return
+    metadata = json.dumps({"event": event, "title": page.get("title"), "slug": page.get("slug")})
+    async with write_transaction(db):
+        for uid in user_ids:
+            await db.execute(
+                """INSERT INTO notifications (user_id, event, page_id, actor_id, metadata)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (uid, event, page.get("id"), actor_id, metadata),
+            )
+
+
+async def _fire_webhooks(db, event: str, payload: dict) -> None:
     hooks = await db.execute_fetchall(
         "SELECT id, url, events FROM webhooks WHERE is_active = 1"
     )
@@ -139,6 +135,33 @@ async def _dispatch(db, event: str, page: dict, actor: dict, changes: dict) -> N
     if targets:
         # Run dispatches concurrently but do not block the HTTP response.
         asyncio.create_task(_post_many(targets, payload))
+
+
+async def _dispatch(db, event: str, page: dict, actor: dict, changes: dict) -> None:
+    # In-app notification for watchers (excluding the actor), then webhooks.
+    watchers = await db.execute_fetchall(
+        """SELECT w.user_id FROM page_watchers w
+           WHERE w.page_id = ? AND w.user_id != ?""",
+        (page.get("id"), actor.get("id")),
+    )
+    await _insert_notifications(
+        db, [w["user_id"] for w in watchers], event, page, actor.get("id")
+    )
+    await _fire_webhooks(db, event, _payload(event, page, actor, changes))
+
+
+async def notify_review_due(db, page: dict, recipient_ids: list[int], changes: dict) -> None:
+    """Remind the page's owner that its periodic review is due.
+
+    System-originated, so there is no actor. Never raises: the caller is a
+    background loop that must keep going for the remaining pages.
+    """
+    event = "page.review_due"
+    try:
+        await _insert_notifications(db, recipient_ids, event, page, None)
+        await _fire_webhooks(db, event, _payload(event, page, None, changes))
+    except Exception as exc:  # pragma: no cover — guardrail
+        logger.warning("notify_review_due failed: %s", exc)
 
 
 async def _post_many(urls: list[str], payload: dict) -> None:

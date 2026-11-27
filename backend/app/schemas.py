@@ -72,6 +72,9 @@ class PageResponse(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
     effective_permission: str | None = None
+    # Periodic review settings/status (services/page_review.py); only
+    # populated by GET /api/pages/{slug}. None = review not enabled.
+    review: dict | None = None
 
 
 class PageListResponse(BaseModel):
