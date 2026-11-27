@@ -266,7 +266,7 @@ function BackupSection() {
   )
 }
 
-const IMPORT_SOURCES = ['auto', 'markdown', 'obsidian', 'hackmd']
+const IMPORT_SOURCES = ['auto', 'markdown', 'obsidian', 'hackmd', 'wikijs']
 
 function flattenTree(nodes, depth = 0, out = []) {
   for (const node of nodes || []) {

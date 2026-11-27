@@ -181,13 +181,14 @@
     },
     "import": {
       "title": "Markdown からインポート",
-      "intro": "他のツールから移行します。Markdown ファイルの .zip（フォルダ、Obsidian Vault、HackMD/HedgeDoc のエクスポート）または単一の .md ノートをアップロードしてください。",
+      "intro": "他のツールから移行します。Markdown ファイルの .zip（フォルダ、Obsidian Vault、HackMD/HedgeDoc のエクスポート、Wiki.js のストレージフォルダ）または単一の .md ノートをアップロードしてください。",
       "source": "ソース",
       "sources": {
         "auto": "自動検出",
         "markdown": "Markdown フォルダ（GitHub、MkDocs、Docusaurus…）",
         "obsidian": "Obsidian Vault",
-        "hackmd": "HackMD / HedgeDoc"
+        "hackmd": "HackMD / HedgeDoc",
+        "wikijs": "Wiki.js（ストレージフォルダ）"
       },
       "parent": "インポート先",
       "parentRoot": "トップレベル",

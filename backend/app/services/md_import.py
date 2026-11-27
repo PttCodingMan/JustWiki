@@ -6,6 +6,10 @@ Covers the sources whose export *is* plain Markdown on disk:
     Docusaurus, GitBook, a plain notes folder, …)
   * ``obsidian`` — an Obsidian vault (auto-detected via ``.obsidian/``)
   * ``hackmd``   — HackMD / HedgeDoc notes (a single ``.md`` or a zip of them)
+  * ``wikijs``   — a Wiki.js 2.x "Local File System" / Git storage dump
+    (auto-detected from its page metadata block). Pages are ``<path>.md`` or,
+    for the visual editor, ``<path>.html``; non-default locales sit under a
+    ``<locale>/`` folder; uploads keep their folder path.
 
 This module is pure: it reads an :class:`ImportSource`, plans the page tree,
 rewrites links/embeds into JustWiki syntax and returns the pages and media to
@@ -30,6 +34,8 @@ from __future__ import annotations
 import io
 import json
 import posixpath
+import base64
+import binascii
 import re
 import unicodedata
 import uuid
@@ -38,9 +44,13 @@ from dataclasses import dataclass, field
 from typing import Callable
 from urllib.parse import unquote
 
-FLAVORS = ("markdown", "obsidian", "hackmd")
+from app.services.html_to_md import html_to_markdown
+
+FLAVORS = ("markdown", "obsidian", "hackmd", "wikijs")
 
 DOC_EXTS = (".md", ".markdown")
+# Page formats some sources produce that only a source-specific mode reads.
+_OTHER_PAGE_EXTS = (".html", ".htm", ".adoc", ".asciidoc")
 
 # Attachment extension → (MIME, stored extension). Must stay a subset of the
 # media router's ALLOWED_TYPES (asserted in tests) — imports may not smuggle
@@ -98,6 +108,10 @@ class ImportSource:
     @property
     def paths(self) -> list[str]:
         return list(self._entries)
+
+    def head(self, path: str, n: int) -> bytes:
+        """First ``n`` bytes, for format sniffing (not counted as a read)."""
+        return self._entries[path](n)
 
     def read(self, path: str, limit: int) -> bytes | None:
         """Return the file's bytes, or None if it exceeds ``limit``."""
@@ -242,7 +256,7 @@ def _unquote_scalar(v: str) -> str:
     return v
 
 
-def _parse_frontmatter(text: str) -> tuple[dict, str | None, str]:
+def _parse_frontmatter(text: str, strict: bool = True) -> tuple[dict, str | None, str]:
     """Minimal YAML subset: top-level ``key: scalar``, ``key: [a, b]`` and
     ``key:`` followed by ``- item`` lines. Returns (data, raw_yaml, body).
     Nested structures are kept only in raw_yaml.
@@ -253,7 +267,9 @@ def _parse_frontmatter(text: str) -> tuple[dict, str | None, str]:
     raw = m.group(1) or ""
     # A note may simply open with a `---` rule; only treat the block as
     # frontmatter when every line looks like YAML, or its text would be lost.
-    if not all(_YAML_LINE_RE.match(line) for line in raw.split("\n") if line.strip()):
+    # (Not for Wiki.js, whose metadata block is known to be one and whose
+    # values are written verbatim — a multi-line description breaks YAML.)
+    if strict and not all(_YAML_LINE_RE.match(line) for line in raw.split("\n") if line.strip()):
         return {}, None, text
     data: dict[str, object] = {}
     current: str | None = None
@@ -536,6 +552,68 @@ _BLOCK_ID_RE = re.compile(r"[ \t]+\^[A-Za-z0-9-]+[ \t]*$", re.M)
 _INLINE_TAG_RE = re.compile(r"(?:^|(?<=\s))#([\w/-]*[^\W\d][\w/-]*)", re.M)
 
 
+# ── Wiki.js specifics ───────────────────────────────────────────────────────
+# Formats taken from Wiki.js 2.5 source: server/helpers/page.js
+# (injectPageMetadata, localeSegmentRegex), server/modules/storage/disk and
+# server/modules/rendering/html-core (link rules).
+
+_WIKIJS_FM_KEYS = {"description", "published", "date", "editor", "dateCreated"}
+_HTML_META_RE = re.compile(r"\A<!--[ \t]*\n(.*?)\n-->[ \t]*(?:\n|\Z)", re.S)
+_WIKIJS_SIGNATURE_RE = re.compile(
+    r"\A(?:---|<!--)[ \t]*\n(?:[^\n]*\n){0,40}?editor:[^\n]*\n(?:[^\n]*\n){0,40}?dateCreated:")
+_LOCALE_SEGMENT_RE = re.compile(r"^[A-Za-z]{2}(?:-[A-Za-z]{2})?$")
+_WIKIJS_SYSTEM_LINK_RE = re.compile(r"^[A-Za-z](?:/|$)")  # /t/tag, /i/42, /s/…
+# markdown-it-attrs blocks: {.class #id key="value"}
+_WIKIJS_ATTR_RE = re.compile(
+    r"[ \t]*\{[ \t]*(?:(?:[.#][\w-]+|[\w-]+=(?:\"[^\"\n]*\"|'[^'\n]*'|[^\s}\"']+))[ \t]*)+\}")
+_WIKIJS_CALLOUT_ATTR_RE = re.compile(
+    r"^[ \t]*\{[^{}\n]*\.is-(info|success|warning|danger)\b[^{}\n]*\}[ \t]*$")
+# markdown-it-imsize: ![alt](src =100x200)
+_WIKIJS_IMSIZE_RE = re.compile(r"(!\[[^\]\n]*\]\([^)\s]+)[ \t]+=\d*x\d*([ \t]+\"[^\"\n]*\")?\)")
+_WIKIJS_DIAGRAM_RE = re.compile(r"^```diagram[ \t]*\n(.*?)\n```[ \t]*$", re.M | re.S)
+
+
+def _looks_like_wikijs(source: ImportSource) -> bool:
+    """Wiki.js writes the same metadata block at the top of every page."""
+    checked = 0
+    for path in source.paths:
+        if _ext(path) not in (".md", ".html"):
+            continue
+        head = source.head(path, 4096).decode("utf-8", "replace").replace("\r\n", "\n")
+        if _WIKIJS_SIGNATURE_RE.match(head.lstrip("\ufeff")):
+            return True
+        checked += 1
+        if checked >= 20:
+            return False
+    return False
+
+
+def _wikijs_callouts(text: str) -> str:
+    """``> text`` followed by ``{.is-info}`` (or ending in ``> {.is-info}``)
+    → an Obsidian-style ``> [!info]`` header that _convert_callouts handles."""
+    out: list[str] = []
+    for is_code, chunk in _split_code_blocks(text):
+        if is_code:
+            out.append(chunk)
+            continue
+        lines = chunk.split("\n")
+        i = 0
+        while i < len(lines):
+            qm = _QUOTE_PREFIX_RE.match(lines[i])
+            m = _WIKIJS_CALLOUT_ATTR_RE.match(lines[i][qm.end():] if qm else lines[i])
+            if m:
+                start = i - 1
+                while start >= 0 and _QUOTE_PREFIX_RE.match(lines[start]):
+                    start -= 1
+                start += 1
+                if start < i:
+                    del lines[i]
+                    lines.insert(start, f"> [!{m.group(1)}]")
+            i += 1
+        out.append("\n".join(lines))
+    return "\n".join(out)
+
+
 # ── Link rewriting ──────────────────────────────────────────────────────────
 
 _WIKILINK_RE = re.compile(r"(!?)\[\[([^\[\]\n]+?)\]\]")
@@ -574,9 +652,9 @@ def _natural_key(s: str):
     return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", s.casefold())]
 
 
-def _strip_doc_ext(path: str) -> str:
+def _strip_doc_ext(path: str, exts: tuple[str, ...] = DOC_EXTS) -> str:
     lower = path.lower()
-    for ext in DOC_EXTS:
+    for ext in exts:
         if lower.endswith(ext):
             return path[: -len(ext)]
     return path
@@ -590,6 +668,10 @@ def _is_index_name(path: str) -> bool:
 
 def _ext(path: str) -> str:
     return posixpath.splitext(path)[1].lower()
+
+
+def _escape_md(text: str) -> str:
+    return re.sub(r"([\\`*_\[\]])", r"\\\1", text)
 
 
 def _safe_label(text: str) -> str:
@@ -606,6 +688,7 @@ class _Doc:
     aliases: list[str] = field(default_factory=list)
     frontmatter_raw: str | None = None
     breaks: bool | None = None  # frontmatter `breaks:` override
+    description: str = ""
 
 
 class _Converter:
@@ -629,13 +712,18 @@ class _Converter:
             or flavor == "hackmd"
         )
 
+        # Wiki.js stores visual-editor pages as .html next to the .md ones.
+        self.doc_exts = DOC_EXTS + (".html",) if flavor == "wikijs" else DOC_EXTS
         self.docs: dict[str, _Doc] = {}
         self.asset_paths: dict[str, str] = {}  # lower path → real path
         self.asset_by_name: dict[str, list[str]] = {}
+        self.skipped_pages: list[str] = []
         for path in source.paths:
             ext = _ext(path)
-            if ext in DOC_EXTS:
+            if ext in self.doc_exts:
                 self.docs[path] = _Doc(path)
+            elif ext in _OTHER_PAGE_EXTS:
+                self.skipped_pages.append(path)
             else:
                 self.asset_paths[path.lower()] = path
                 self.asset_by_name.setdefault(posixpath.basename(path).lower(), []).append(path)
@@ -650,6 +738,9 @@ class _Converter:
         self.doc_by_alias: dict[str, list[str]] = {}
         self.media: dict[str, PlannedMedia | None] = {}  # asset path → media (None = rejected)
         self.media_order: list[PlannedMedia] = []
+
+    def _noext(self, path: str) -> str:
+        return _strip_doc_ext(path, self.doc_exts)
 
     # ── warnings ──
     def warn(self, path: str | None, message: str) -> None:
@@ -674,25 +765,40 @@ class _Converter:
                 text = data.decode("utf-8", errors="replace")
                 self.warn(path, "Not valid UTF-8; undecodable bytes were replaced")
             doc = self.docs[path]
-            doc.text = text.replace("\r\n", "\n").replace("\r", "\n")
-            fm, raw, body = _parse_frontmatter(doc.text)
+            text = text.replace("\r\n", "\n").replace("\r", "\n")
+            if _ext(path) == ".html":  # Wiki.js visual-editor page
+                m = _HTML_META_RE.match(text)
+                fm = _parse_frontmatter(f"---\n{m.group(1)}\n---\n", strict=False)[0] if m else {}
+                raw, body = None, html_to_markdown(text[m.end():] if m else text)
+            else:
+                fm, raw, body = _parse_frontmatter(text, strict=self.flavor != "wikijs")
             doc.text = body
             doc.title = str(fm.get("title") or "").strip() if isinstance(fm.get("title"), str) else ""
-            doc.tags = _as_list(fm.get("tags")) + _as_list(fm.get("tag"))
+            if self.flavor == "wikijs":
+                # Wiki.js joins tag names with ", " — tags may contain spaces.
+                tags = fm.get("tags")
+                doc.tags = [t.strip() for t in tags.split(",")] if isinstance(tags, str) else []
+                if isinstance(fm.get("description"), str):
+                    doc.description = fm["description"].strip()
+                if str(fm.get("published", "")).lower() == "false":
+                    self.warn(path, "Page was unpublished in Wiki.js; imported as a normal page")
+            else:
+                doc.tags = _as_list(fm.get("tags")) + _as_list(fm.get("tag"))
             doc.aliases = _as_list(fm.get("aliases")) if isinstance(fm.get("aliases"), list) else (
                 [str(fm["aliases"])] if fm.get("aliases") else [])
             if isinstance(fm.get("alias"), str):
                 doc.aliases.append(fm["alias"])
             if isinstance(fm.get("breaks"), str) and fm["breaks"].lower() in ("true", "false"):
                 doc.breaks = fm["breaks"].lower() == "true"
-            if raw is not None and any(k not in _CONSUMED_FM_KEYS for k in fm):
+            consumed = _CONSUMED_FM_KEYS | (_WIKIJS_FM_KEYS if self.flavor == "wikijs" else set())
+            if raw is not None and any(k not in consumed for k in fm):
                 doc.frontmatter_raw = raw.rstrip("\n")
             if self.flavor == "hackmd":
                 tags, doc.text = _hackmd_tags(doc.text)
                 doc.tags += tags
 
         for path in self.docs:
-            noext = _strip_doc_ext(path).lower()
+            noext = self._noext(path).lower()
             self.doc_by_noext[noext] = path
             self.doc_by_stem.setdefault(posixpath.basename(noext), []).append(path)
             for alias in self.docs[path].aliases:
@@ -718,7 +824,7 @@ class _Converter:
             candidates = [f"{folder}/index", f"{folder}/readme", f"{folder}/{name}",
                           f"{parent}/{name}" if parent else name]
             for cand in candidates:
-                for ext in DOC_EXTS:
+                for ext in self.doc_exts:
                     hit = lower_docs.get(f"{cand}{ext}".lower())
                     if hit and hit not in claimed:
                         folder_note[folder] = hit
@@ -736,10 +842,13 @@ class _Converter:
             if path in claimed:
                 continue
             children.setdefault(posixpath.dirname(path), []).append(
-                (False, posixpath.basename(_strip_doc_ext(path)), path))
+                (False, posixpath.basename(self._noext(path)), path))
 
         def visit(folder: str, parent_key: str | None) -> None:
-            entries = sorted(children.get(folder, []), key=lambda e: (not e[0], _natural_key(e[1])))
+            entries = sorted(children.get(folder, []), key=lambda e: (
+                # Wiki.js's root page is `home`; keep it first, like its nav.
+                not (self.flavor == "wikijs" and not folder and e[1].lower() == "home"),
+                not e[0], _natural_key(e[1])))
             for order, (is_folder, name, ref) in enumerate(entries):
                 if is_folder:
                     note = folder_note.get(ref)
@@ -782,7 +891,7 @@ class _Converter:
         return sorted(candidates, key=lambda p: (posixpath.dirname(p) != from_dir, p.count("/"), p))[0]
 
     def resolve_doc(self, target: str, from_dir: str) -> str | None:
-        t = _strip_doc_ext(unicodedata.normalize("NFC", target).strip().strip("/")).lower()
+        t = self._noext(unicodedata.normalize("NFC", target).strip().strip("/")).lower()
         if not t:
             return None
         rel = posixpath.normpath(posixpath.join(from_dir.lower(), t))
@@ -819,25 +928,51 @@ class _Converter:
         if ext not in ASSET_TYPES:
             self.warn(from_path, f"Attachment type not supported, left as text: {asset_path}")
             return None
-        mime, stored_ext = ASSET_TYPES[ext]
         data = self.source.read(asset_path, self.max_asset_bytes)
         if data is None:
             self.warn(from_path, f"Attachment exceeds the upload size limit: {asset_path}")
             return None
+        return self._plan_media(asset_path, data, ext, posixpath.basename(asset_path), from_path)
+
+    def _plan_media(self, key: str, data: bytes, ext: str, name: str, from_path: str) -> str | None:
+        mime, stored_ext = ASSET_TYPES[ext]
+        if len(data) > self.max_asset_bytes:
+            self.warn(from_path, f"Attachment exceeds the upload size limit: {key}")
+            return None
         from app.routers.media import check_media_content
         error = check_media_content(data, mime)
         if error:
-            self.warn(from_path, f"Attachment rejected ({error}): {asset_path}")
+            self.warn(from_path, f"Attachment rejected ({error}): {key}")
             return None
         media = PlannedMedia(
             filename=f"{uuid.uuid4().hex}{stored_ext}",
-            original_name=posixpath.basename(asset_path),
+            original_name=name,
             mime_type=mime,
             data=data,
         )
-        self.media[asset_path] = media
+        self.media[key] = media
         self.media_order.append(media)
         return f"/api/media/{media.filename}"
+
+    def _wikijs_diagrams(self, text: str, doc_path: str) -> str:
+        """Wiki.js ```diagram fences hold a base64 SVG (draw.io export)."""
+        counter = 0
+
+        def repl(m: re.Match) -> str:
+            nonlocal counter
+            counter += 1
+            try:
+                data = base64.b64decode(re.sub(r"\s+", "", m.group(1)), validate=True)
+            except (binascii.Error, ValueError):
+                self.warn(doc_path, "Diagram block is not valid base64; kept as code")
+                return m.group(0)
+            url = self._plan_media(f"diagram #{counter} (kept as code)", data, ".svg",
+                                   f"diagram-{counter}.svg", doc_path)
+            if not url:
+                return m.group(0)
+            return f"![diagram]({url})"
+
+        return _WIKIJS_DIAGRAM_RE.sub(repl, text)
 
     # ── content conversion ──
     def convert_doc(self, doc_path: str) -> str:
@@ -853,6 +988,11 @@ class _Converter:
             before, after = text[:h1[1]].rstrip("\n"), text[h1[2]:].lstrip("\n")
             text = f"{before}\n\n{after}" if before.strip() else after
 
+        if self.flavor == "wikijs":
+            text = self._wikijs_diagrams(text, doc_path)
+            text = _wikijs_callouts(text)
+            if doc.description:
+                text = f"*{_escape_md(doc.description)}*\n\n{text}"
         text = _convert_callouts(text)
         soft_breaks = self.soft_breaks and doc.breaks is not False
         parts = []
@@ -879,6 +1019,10 @@ class _Converter:
             doc.tags += _INLINE_TAG_RE.findall(chunk)
         if self.flavor == "hackmd":
             chunk = _hackmd_embeds(chunk)
+        if self.flavor == "wikijs":
+            chunk = _WIKIJS_IMSIZE_RE.sub(r"\1\2)", chunk)
+            chunk = _WIKIJS_ATTR_RE.sub("", chunk)
+            chunk = re.sub(r"^[ \t]+$", "", chunk, flags=re.M)
         chunk = _WIKILINK_RE.sub(lambda m: self._wikilink(m, doc_path, from_dir), chunk)
         chunk = self._convert_html(chunk, doc_path, from_dir)
         chunk = _MD_LINK_RE.sub(lambda m: self._md_link(m, doc_path, from_dir), chunk)
@@ -924,17 +1068,22 @@ class _Converter:
         """Resolve a Markdown link target. Returns (kind, value) where kind is
         'page' (value=slug), 'media' (value=url) or 'broken'; None = leave."""
         t = raw_target[1:-1] if raw_target.startswith("<") and raw_target.endswith(">") else raw_target
+        if t.startswith(("/api/media/", "/page/")):  # produced by an earlier pass
+            return None
+        if self.flavor == "wikijs" and t and not re.match(r"^(?:[A-Za-z][A-Za-z0-9+.-]*:|//|#)", t):
+            path = unquote(re.split(r"[#?]", t, maxsplit=1)[0])
+            return self._wikijs_target(path, doc_path, from_dir, absolute=t.startswith("/")) if path else None
         if not t or _EXTERNAL_RE.match(t):
             return None
         path = unquote(re.split(r"[#?]", t, maxsplit=1)[0])
         if not path:
             return None
         ext = _ext(path)
-        if ext in DOC_EXTS or ext == "":
+        if ext in self.doc_exts or ext == "":
             doc = self.resolve_doc(path, from_dir)
             if doc:
                 return "page", self.pages[self.doc_page[doc]].slug
-            if ext in DOC_EXTS:
+            if ext in self.doc_exts:
                 self.warn(doc_path, f"Link target not found in the import: {path}")
                 return "broken", path
             folder = posixpath.normpath(posixpath.join(
@@ -945,6 +1094,52 @@ class _Converter:
         if asset:
             url = self.media_url(asset, doc_path)
             return ("media", url) if url else ("broken", path)
+        self.warn(doc_path, f"Link target not found in the import: {path}")
+        return "broken", path
+
+    def _wikijs_page(self, path: str) -> str | None:
+        """Exact Wiki.js page path (no extension) → slug of its page."""
+        key = posixpath.normpath(unicodedata.normalize("NFC", path).strip("/") or "home").lower()
+        doc = self.doc_by_noext.get(key)
+        if doc:
+            return self.pages[self.doc_page[doc]].slug
+        folder = self.folder_pages.get(key)
+        return self.pages[folder].slug if folder else None
+
+    def _wikijs_target(self, path: str, doc_path: str, from_dir: str,
+                       absolute: bool) -> tuple[str, str]:
+        """Wiki.js link rules (rendering/html-core): any '.' makes it an asset
+        link; relative page links are children of the current page (or of the
+        root from `home`); a leading 2-letter segment may be a locale."""
+        clean = path.strip().strip("/")
+        if absolute and _WIKIJS_SYSTEM_LINK_RE.match(clean):
+            self.warn(doc_path, f"Wiki.js system link has no equivalent: /{clean}")
+            return "broken", path
+        if "." in posixpath.basename(clean):
+            asset = self.resolve_asset(clean, "" if absolute else from_dir)
+            if asset:
+                url = self.media_url(asset, doc_path)
+                return ("media", url) if url else ("broken", path)
+            self.warn(doc_path, f"Link target not found in the import: {path}")
+            return "broken", path
+        if absolute:
+            first, _, rest = clean.partition("/")
+            if _LOCALE_SEGMENT_RE.match(first):
+                rest = rest or "home"
+                # Non-default locales live under <locale>/; the default
+                # locale's pages are at the root even when linked as /en/….
+                candidates = [f"{first}/{rest}", rest, clean]
+            else:
+                candidates = [clean]
+        else:
+            page_path = self._noext(doc_path)
+            base = posixpath.dirname(page_path) if posixpath.basename(page_path).lower() == "home" else page_path
+            # Child of the current page, or root-relative ("absoluteLinks").
+            candidates = [posixpath.join(base, clean), clean]
+        for cand in candidates:
+            slug = self._wikijs_page(cand)
+            if slug:
+                return "page", slug
         self.warn(doc_path, f"Link target not found in the import: {path}")
         return "broken", path
 
@@ -1037,6 +1232,9 @@ class _Converter:
         return alt or posixpath.basename(value)
 
     def run(self) -> ImportResult:
+        for path in self.skipped_pages:
+            self.warn(path, "Skipped: not a Markdown page (HTML pages are read in Wiki.js mode only;"
+                            " AsciiDoc is not supported)")
         self.load_docs()
         if not self.docs:
             raise ImportFailed("No Markdown (.md) files found in the upload")
@@ -1064,7 +1262,12 @@ def convert(
 ) -> ImportResult:
     """Plan an import. ``flavor`` is one of FLAVORS or 'auto'."""
     if flavor == "auto":
-        flavor = "obsidian" if source.has_obsidian_dir else "markdown"
+        if source.has_obsidian_dir:
+            flavor = "obsidian"
+        elif _looks_like_wikijs(source):
+            flavor = "wikijs"
+        else:
+            flavor = "markdown"
     if flavor not in FLAVORS:
         raise ImportFailed(f"Unknown source type: {flavor}")
     return _Converter(source, flavor, new_slug, max_asset_bytes).run()

@@ -181,13 +181,14 @@
     },
     "import": {
       "title": "從 Markdown 匯入",
-      "intro": "從其他工具搬家。上傳 Markdown 檔案的 .zip（一般資料夾、Obsidian vault、HackMD/HedgeDoc 匯出），或單一 .md 筆記。",
+      "intro": "從其他工具搬家。上傳 Markdown 檔案的 .zip（一般資料夾、Obsidian vault、HackMD/HedgeDoc 匯出、Wiki.js 儲存資料夾），或單一 .md 筆記。",
       "source": "來源",
       "sources": {
         "auto": "自動偵測",
         "markdown": "Markdown 資料夾（GitHub、MkDocs、Docusaurus…）",
         "obsidian": "Obsidian vault",
-        "hackmd": "HackMD / HedgeDoc"
+        "hackmd": "HackMD / HedgeDoc",
+        "wikijs": "Wiki.js（儲存資料夾）"
       },
       "parent": "匯入到",
       "parentRoot": "最上層",

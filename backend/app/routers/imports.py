@@ -1,4 +1,5 @@
-"""Bulk import of Markdown content (folder zip, Obsidian vault, HackMD notes).
+"""Bulk import of Markdown content (folder zip, Obsidian vault, HackMD notes,
+Wiki.js storage dump).
 
 The conversion itself lives in ``services/md_import.py`` and is pure; this
 router owns the side effects: writing media files, inserting pages/tags/media

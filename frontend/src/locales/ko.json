@@ -181,13 +181,14 @@
     },
     "import": {
       "title": "Markdown에서 가져오기",
-      "intro": "다른 도구에서 옮겨옵니다. Markdown 파일의 .zip(폴더, Obsidian 볼트, HackMD/HedgeDoc 내보내기) 또는 단일 .md 노트를 업로드하세요.",
+      "intro": "다른 도구에서 옮겨옵니다. Markdown 파일의 .zip(폴더, Obsidian 볼트, HackMD/HedgeDoc 내보내기, Wiki.js 스토리지 폴더) 또는 단일 .md 노트를 업로드하세요.",
       "source": "소스",
       "sources": {
         "auto": "자동 감지",
         "markdown": "Markdown 폴더 (GitHub, MkDocs, Docusaurus…)",
         "obsidian": "Obsidian 볼트",
-        "hackmd": "HackMD / HedgeDoc"
+        "hackmd": "HackMD / HedgeDoc",
+        "wikijs": "Wiki.js (스토리지 폴더)"
       },
       "parent": "가져올 위치",
       "parentRoot": "최상위",
