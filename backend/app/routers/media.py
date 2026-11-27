@@ -96,6 +96,28 @@ def _sniff_mime(content: bytes) -> str | None:
     return None
 
 
+def check_media_content(content: bytes, content_type: str) -> str | None:
+    """Validate an upload's bytes against its declared type.
+
+    Returns an error message, or None when the content is acceptable. Shared
+    by the upload route and the importer so both apply the same rules.
+    """
+    # Client-declared Content-Type is untrusted — verify against magic bytes
+    # for formats we can recognise. Mismatches almost always indicate a
+    # polyglot / mislabelled upload trying to dodge the allow-list.
+    sniffed = _sniff_mime(content)
+    if sniffed is not None and sniffed != content_type:
+        return f"File contents do not match declared type {content_type}"
+
+    # SVG is an XML format that can carry <script> / event handlers. We still
+    # store it (diagrams use SVG), but refuse anything that contains
+    # executable markup. The serve path additionally forces an attachment
+    # disposition + nosniff so the browser never parses it as active content.
+    if content_type == "image/svg+xml" and _SVG_SCRIPT_RE.search(content):
+        return "SVG upload contains scripting or event handlers"
+    return None
+
+
 @router.post("/upload", response_model=MediaResponse, status_code=201)
 async def upload_media(
     file: UploadFile = File(...),
@@ -115,25 +137,9 @@ async def upload_media(
     if size > max_mb * 1024 * 1024:
         raise HTTPException(status_code=413, detail=f"File too large. Maximum size is {max_mb} MB")
 
-    # Client-declared Content-Type is untrusted — verify against magic bytes
-    # for formats we can recognise. Mismatches almost always indicate a
-    # polyglot / mislabelled upload trying to dodge the allow-list.
-    sniffed = _sniff_mime(content)
-    if sniffed is not None and sniffed != file.content_type:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File contents do not match declared type {file.content_type}",
-        )
-
-    # SVG is an XML format that can carry <script> / event handlers. We still
-    # store it (diagrams use SVG), but refuse anything that contains
-    # executable markup. The serve path additionally forces an attachment
-    # disposition + nosniff so the browser never parses it as active content.
-    if file.content_type == "image/svg+xml" and _SVG_SCRIPT_RE.search(content):
-        raise HTTPException(
-            status_code=400,
-            detail="SVG upload contains scripting or event handlers",
-        )
+    error = check_media_content(content, file.content_type)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
 
     # Derive the stored extension from the validated content type, not the
     # uploader's filename — the filename extension is attacker-controlled and

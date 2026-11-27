@@ -181,6 +181,27 @@
       "saveSuccess": "Settings saved.",
       "saveFailed": "Failed to save settings"
     },
+    "import": {
+      "title": "Import from Markdown",
+      "intro": "Move content from another tool. Upload a .zip of Markdown files (a folder, an Obsidian vault, a HackMD/HedgeDoc export) or a single .md note.",
+      "source": "Source",
+      "sources": {
+        "auto": "Auto-detect",
+        "markdown": "Markdown folder (GitHub, MkDocs, Docusaurus…)",
+        "obsidian": "Obsidian vault",
+        "hackmd": "HackMD / HedgeDoc"
+      },
+      "parent": "Import under",
+      "parentRoot": "Top level",
+      "hint": "Folders become parent pages; links, images and attachments are rewritten. Imported pages are created as you, without notifications.",
+      "btn": "Import",
+      "importing": "Importing...",
+      "failed": "Import failed",
+      "success": "Imported {{pages}} pages and {{media}} files.",
+      "warnings_one": "{{count}} warning",
+      "warnings_other": "{{count}} warnings",
+      "moreWarnings": "…and {{count}} more"
+    },
     "backup": {
       "title": "Backup & Restore",
       "downloadTitle": "Download Backup",
@@ -721,7 +742,8 @@
       "created": "created",
       "updated": "updated",
       "deleted": "deleted",
-      "verified": "verified"
+      "verified": "verified",
+      "imported": "imported"
     }
   },
   "userProfile": {
@@ -746,7 +768,8 @@
     "actions": {
       "created": "created",
       "updated": "updated",
-      "commented": "commented"
+      "commented": "commented",
+      "imported": "imported"
     },
     "time": {
       "justNow": "just now",

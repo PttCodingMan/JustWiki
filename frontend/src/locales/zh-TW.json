@@ -179,6 +179,27 @@
       "saveSuccess": "設定已儲存。",
       "saveFailed": "儲存設定失敗"
     },
+    "import": {
+      "title": "從 Markdown 匯入",
+      "intro": "從其他工具搬家。上傳 Markdown 檔案的 .zip（一般資料夾、Obsidian vault、HackMD/HedgeDoc 匯出），或單一 .md 筆記。",
+      "source": "來源",
+      "sources": {
+        "auto": "自動偵測",
+        "markdown": "Markdown 資料夾（GitHub、MkDocs、Docusaurus…）",
+        "obsidian": "Obsidian vault",
+        "hackmd": "HackMD / HedgeDoc"
+      },
+      "parent": "匯入到",
+      "parentRoot": "最上層",
+      "hint": "資料夾會變成父頁面，連結、圖片與附件會自動改寫。匯入的頁面建立者是你，不會發送通知。",
+      "btn": "匯入",
+      "importing": "匯入中...",
+      "failed": "匯入失敗",
+      "success": "已匯入 {{pages}} 個頁面、{{media}} 個檔案。",
+      "warnings_one": "{{count}} 則警告",
+      "warnings_other": "{{count}} 則警告",
+      "moreWarnings": "…還有 {{count}} 則"
+    },
     "backup": {
       "title": "備份與還原",
       "downloadTitle": "下載備份",
@@ -719,7 +740,8 @@
       "created": "建立",
       "updated": "更新",
       "deleted": "刪除",
-      "verified": "驗證"
+      "verified": "驗證",
+      "imported": "匯入了"
     }
   },
   "userProfile": {
@@ -744,7 +766,8 @@
     "actions": {
       "created": "建立",
       "updated": "編輯",
-      "commented": "留言"
+      "commented": "留言",
+      "imported": "匯入了"
     },
     "time": {
       "justNow": "剛剛",
