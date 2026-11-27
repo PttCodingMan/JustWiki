@@ -799,11 +799,6 @@
       "latest": "最新: {{version}}",
       "checkFailed": "確認に失敗しました",
       "disabled": "更新チェックは無効です"
-    },
-    "build": {
-      "title": "ビルド",
-      "frontend": "フロントエンドビルド",
-      "backend": "バックエンドバージョン"
     }
   },
   "login": {

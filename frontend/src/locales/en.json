@@ -801,11 +801,6 @@
       "latest": "Latest: {{version}}",
       "checkFailed": "Check failed",
       "disabled": "Update check disabled"
-    },
-    "build": {
-      "title": "Build",
-      "frontend": "Frontend build",
-      "backend": "Backend version"
     }
   },
   "login": {

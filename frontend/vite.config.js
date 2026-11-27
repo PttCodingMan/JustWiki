@@ -7,19 +7,15 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 
-// Read the repo-root VERSION at build time. In dev/CI the frontend lives
-// under repo-root/frontend, so `../VERSION` resolves. Inside the Docker
-// image we COPY VERSION next to the app, so `./VERSION` resolves. Fall
-// back to "0.0.0" if neither is present.
+// Read the repo-root VERSION at build time. The Docker build stage keeps the
+// same layout (/src/frontend + /src/VERSION), so `../VERSION` resolves in dev,
+// CI and the image alike. Fall back to "0.0.0" if it's missing.
 function readVersion() {
-  for (const rel of ['../VERSION', './VERSION']) {
-    try {
-      return readFileSync(resolve(here, rel), 'utf8').trim() || '0.0.0'
-    } catch {
-      // try next candidate
-    }
+  try {
+    return readFileSync(resolve(here, '../VERSION'), 'utf8').trim() || '0.0.0'
+  } catch {
+    return '0.0.0'
   }
-  return '0.0.0'
 }
 
 const APP_VERSION = readVersion()

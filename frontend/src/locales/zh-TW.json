@@ -799,11 +799,6 @@
       "latest": "最新版：{{version}}",
       "checkFailed": "檢查失敗",
       "disabled": "已停用更新檢查"
-    },
-    "build": {
-      "title": "建置資訊",
-      "frontend": "前端建置版本",
-      "backend": "後端版本"
     }
   },
   "login": {

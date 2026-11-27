@@ -98,10 +98,6 @@ function StatCard({ title, value, sub }) {
   )
 }
 
-// Injected by Vite at build time. See frontend/vite.config.js.
-// eslint-disable-next-line no-undef
-const BUILD_APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0'
-
 export default function Dashboard() {
   const { t } = useTranslation()
   const { formatBytes, formatPercent } = useFormatters()
@@ -204,16 +200,6 @@ export default function Dashboard() {
               value={stats.python_version}
               sub={t('dashboard.card.sqliteSub', { version: stats.sqlite_version })}
             />
-          </div>
-
-          <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-5">
-            <h2 className="text-sm font-semibold text-text mb-3">{t('dashboard.build.title')}</h2>
-            <dl className="grid grid-cols-2 gap-y-2 text-sm">
-              <dt className="text-text-secondary">{t('dashboard.build.frontend')}</dt>
-              <dd className="text-text">{BUILD_APP_VERSION}</dd>
-              <dt className="text-text-secondary">{t('dashboard.build.backend')}</dt>
-              <dd className="text-text">{stats.app_version}</dd>
-            </dl>
           </div>
         </>
       )}

@@ -799,11 +799,6 @@
       "latest": "최신 버전: {{version}}",
       "checkFailed": "확인 실패",
       "disabled": "업데이트 확인이 비활성화됨"
-    },
-    "build": {
-      "title": "빌드",
-      "frontend": "프론트엔드 빌드",
-      "backend": "백엔드 버전"
     }
   },
   "login": {
