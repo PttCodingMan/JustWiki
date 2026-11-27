@@ -1,29 +1,70 @@
-"""Snapshot a freshly seeded wiki into static files for the read-only demo.
+"""Snapshot the user guide into static files for the read-only demo.
 
 Run from ``backend/`` after building the frontend with ``VITE_DEMO=true``:
 
     PYTHONPATH=. python scripts/build_static_demo.py ../frontend/dist
 
 The script boots JustWiki against a throwaway data directory with
-ANONYMOUS_READ on, seeds the first-launch content, then calls every read
-endpoint the guest UI uses (in-process, no server) and writes each response
-to ``<out>/demo-api/<path>.json`` as ``{"status": ..., "data": ...}``.
+ANONYMOUS_READ on, imports the guide from ``docs/manual/`` (see
+MANUAL_PAGES), then calls every read endpoint the guest UI uses (in-process,
+no server) and writes each response to ``<out>/demo-api/<path>.json`` as
+``{"status": ..., "data": ...}``.
 ``frontend/src/lib/demoApi.js`` serves those files in place of the backend.
 Media files are copied to ``<out>/api/media/``, and ``_search.json`` holds the
 page text for the client-side search.
 
-Slugs are drawn from a fixed-seed generator so page URLs stay the same from
-one build to the next.
+Each guide page's slug is derived from its name in MANUAL_PAGES, so page URLs
+stay the same from one build to the next even as pages are added.
 """
 import asyncio
+import hashlib
 import json
 import os
-import random
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 from urllib.parse import quote
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MANUAL_DIR = REPO_ROOT / "docs" / "manual"
+IMAGES_DIR = REPO_ROOT / "docs" / "images"
+
+# The guide's page tree: (name, file under docs/manual/, title, parent name,
+# page type). Parents come before children; siblings keep this order. Pages
+# link to each other as [[name]] / [[name|text]], rewritten to the slugs.
+# Renaming an entry changes that page's URL.
+MANUAL_PAGES = [
+    ("index", "index.md", "JustWiki 說明文件 · Documentation", None, "document"),
+    ("zh-guide", "zh-TW/guide.md", "使用手冊（中文）", "index", "document"),
+    ("zh-quick-start", "zh-TW/quick-start.md", "快速上手", "zh-guide", "document"),
+    ("zh-shortcuts", "zh-TW/shortcuts.md", "鍵盤快捷鍵", "zh-quick-start", "document"),
+    ("zh-editor", "zh-TW/editor.md", "編輯器", "zh-guide", "document"),
+    ("zh-rich-content", "zh-TW/rich-content.md", "豐富內容", "zh-guide", "document"),
+    ("zh-links", "zh-TW/links.md", "連結與嵌入", "zh-guide", "document"),
+    ("zh-organize", "zh-TW/organize.md", "整理頁面", "zh-guide", "document"),
+    ("zh-mindmap", "zh-TW/mindmap.md", "心智圖頁面", "zh-organize", "mindmap"),
+    ("zh-browse", "zh-TW/browse.md", "搜尋與瀏覽", "zh-guide", "document"),
+    ("zh-collaboration", "zh-TW/collaboration.md", "協作", "zh-guide", "document"),
+    ("zh-permissions", "zh-TW/permissions.md", "權限與帳號", "zh-guide", "document"),
+    ("zh-ai", "zh-TW/ai.md", "AI 問答", "zh-guide", "document"),
+    ("zh-admin", "zh-TW/admin.md", "管理員指南", "zh-guide", "document"),
+    ("zh-developer", "zh-TW/developer.md", "開發者指南", "zh-guide", "document"),
+    ("en-guide", "en/guide.md", "User Guide (English)", "index", "document"),
+    ("en-quick-start", "en/quick-start.md", "Quick Start", "en-guide", "document"),
+    ("en-shortcuts", "en/shortcuts.md", "Keyboard Shortcuts", "en-quick-start", "document"),
+    ("en-editor", "en/editor.md", "The Editor", "en-guide", "document"),
+    ("en-rich-content", "en/rich-content.md", "Rich Content", "en-guide", "document"),
+    ("en-links", "en/links.md", "Links & Embeds", "en-guide", "document"),
+    ("en-organize", "en/organize.md", "Organizing Pages", "en-guide", "document"),
+    ("en-mindmap", "en/mindmap.md", "Mindmap Page", "en-organize", "mindmap"),
+    ("en-browse", "en/browse.md", "Search & Browse", "en-guide", "document"),
+    ("en-collaboration", "en/collaboration.md", "Collaboration", "en-guide", "document"),
+    ("en-permissions", "en/permissions.md", "Permissions & Accounts", "en-guide", "document"),
+    ("en-ai", "en/ai.md", "AI Chat", "en-guide", "document"),
+    ("en-admin", "en/admin.md", "Admin Guide", "en-guide", "document"),
+    ("en-developer", "en/developer.md", "Developer Guide", "en-guide", "document"),
+]
 
 
 def _configure_env(tmp: Path) -> None:
@@ -42,15 +83,80 @@ def _configure_env(tmp: Path) -> None:
     })
 
 
-def _stable_slugs():
-    from app.services import page_slug
+def _manual_slug(name: str) -> str:
+    """A slug in the app's own format, fixed for a given page name."""
+    from app.services.page_slug import PAGE_SLUG_ALPHABET, PAGE_SLUG_LENGTH
 
-    rng = random.Random(20261127)
+    digest = hashlib.sha256(f"justwiki-demo:{name}".encode()).digest()
+    return "".join(PAGE_SLUG_ALPHABET[b % len(PAGE_SLUG_ALPHABET)] for b in digest[:PAGE_SLUG_LENGTH])
 
-    def new_page_slug() -> str:
-        return "".join(rng.choice(page_slug.PAGE_SLUG_ALPHABET) for _ in range(page_slug.PAGE_SLUG_LENGTH))
 
-    page_slug.new_page_slug = new_page_slug
+async def _seed_manual(db) -> None:
+    """Insert the guide as pages and make its index the home page."""
+    from app.config import settings
+    from app.services.page_slug import rewrite_page_slugs
+    from app.services.search import rebuild_search_index
+    from app.services.wikilink import parse_and_update_backlinks
+
+    # Screenshots referenced by the guide as /api/media/<file>.
+    media_dir = Path(settings.MEDIA_DIR)
+    media_dir.mkdir(parents=True, exist_ok=True)
+    for img in IMAGES_DIR.glob("*.png"):
+        shutil.copyfile(img, media_dir / img.name)
+
+    admin_id = (await db.execute_fetchall(
+        "SELECT id FROM users WHERE role = 'admin' LIMIT 1"
+    ))[0]["id"]
+    slug_map = {name: _manual_slug(name) for name, *_ in MANUAL_PAGES}
+    if len(set(slug_map.values())) != len(slug_map):
+        sys.exit("Two guide pages hash to the same slug; rename one of them")
+
+    page_ids: dict[str, int] = {}
+    next_sort: dict[str | None, int] = {}
+    seeded = []
+    for name, filename, title, parent, page_type in MANUAL_PAGES:
+        content = (MANUAL_DIR / filename).read_text(encoding="utf-8").strip()
+        # The files open with an H1 so they read well on GitHub, but the app
+        # already shows the page title above the content. A mindmap keeps
+        # its H1: that's the root node.
+        if page_type == "document" and content.startswith("# "):
+            content = content.split("\n", 1)[1].lstrip() if "\n" in content else ""
+        content = content + "\n"
+        content = rewrite_page_slugs(content, slug_map)
+        sort_order = next_sort.get(parent, 0)
+        next_sort[parent] = sort_order + 1
+        cursor = await db.execute(
+            """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, created_by, page_type)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (slug_map[name], title, content, page_ids.get(parent), sort_order, admin_id, page_type),
+        )
+        page_id = cursor.lastrowid
+        page_ids[name] = page_id
+        await db.execute(
+            """INSERT INTO page_versions (page_id, title, content_md, edited_by, version_num)
+               VALUES (?, ?, ?, ?, 1)""",
+            (page_id, title, content, admin_id),
+        )
+        # Tag pages by language so the tag filter has something to show.
+        tag = {"zh-": "中文", "en-": "English"}.get(name[:3])
+        if tag:
+            await db.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
+            await db.execute(
+                "INSERT INTO page_tags (page_id, tag_id) SELECT ?, id FROM tags WHERE name = ?",
+                (page_id, tag),
+            )
+        await rebuild_search_index(db, page_id, title, content)
+        seeded.append((page_id, content))
+
+    # Second pass so links to pages inserted later still resolve.
+    for page_id, content in seeded:
+        await parse_and_update_backlinks(db, page_id, content)
+
+    await db.execute(
+        "INSERT OR REPLACE INTO site_settings (key, value) VALUES ('home_page_slug', ?)",
+        (slug_map["index"],),
+    )
+    await db.commit()
 
 
 # Endpoints the guest UI calls that don't depend on a page. Query params are
@@ -109,6 +215,9 @@ async def _snapshot(out_dir: Path) -> None:
     async with boot_db_context() as db:
         await init_db()
         await ensure_admin_exists()
+        await _seed_manual(db)
+        # Pages now exist, so this only copies the logo into media/ and
+        # skips the first-launch welcome pages.
         await seed_welcome_page(db)
         pages = [dict(r) for r in await db.execute_fetchall(
             """SELECT p.id, p.slug, p.title, p.content_md, p.updated_at, p.view_count, p.page_type,
@@ -163,7 +272,6 @@ def main() -> None:
     tmp = Path(tempfile.mkdtemp(prefix="justwiki-demo-"))
     try:
         _configure_env(tmp)
-        _stable_slugs()
         asyncio.run(_snapshot(out_dir))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

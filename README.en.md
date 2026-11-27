@@ -8,217 +8,163 @@
 
 # JustWiki
 
-A lightweight, self-hosted wiki for small teams. Just clone, run, and write.
+A lightweight, self-hosted wiki for small teams. Markdown-first, and all your data is one SQLite file plus a media folder — no external database. A 1 vCPU / 512 MB VM or a Raspberry Pi is enough.
 
 <p align="center">
   <img src="docs/images/hero.png" alt="JustWiki main UI: page tree on the left, table of contents on the right, Markdown viewer in the middle" width="100%">
 </p>
 
-## Why JustWiki
+**📖 Documentation and live demo: <https://codingman.cc/JustWiki/>**
 
-Built for "small team, no ops headaches":
+Features, how-tos, permissions, SSO, AI chat and administration are all covered in the documentation, which is itself a read-only JustWiki. This README only covers deployment.
 
-- **vs Outline** — no PostgreSQL / Redis / MinIO, no 4 CPU / 8 GB box; a 1 vCPU / 512 MB VM — or even a Raspberry Pi — runs it fine
-- **vs Wiki.js** — v3 has been "coming soon" since 2021 with no beta; v2 is in maintenance. JustWiki is actively developed
-- **vs BookStack** — unlimited page nesting, not capped at Book → Chapter → Page
-- **vs Notion / Obsidian** — self-hosted, your data on your own machine, with full multi-user collaboration (ACL, comments, page subscriptions) — not cloud lock-in or a single-user notebook
+## Quick start (Docker Compose)
 
-All your data = one `data/just-wiki.db` SQLite file + the `media/` folder. Backup, migration, and export are just copying files.
-
-## Features
-
-**Editing & content**
-- **Markdown-first WYSIWYG** — Milkdown lets non-technical users write naturally, while the storage stays plain Markdown so engineers can pipe it through Git or scripts; you're never locked into a proprietary format
-- **Slash commands & rich blocks** — Mermaid diagrams, KaTeX math, callout blocks
-- **Wikilinks** — `[[page]]` syntax with automatic backlink tracking
-- **Page hierarchy & templates** — nested page trees, one-click reusable templates
-- **Draw.io integration** — embedded diagram editor
-
-<p align="center">
-  <img src="docs/images/rich-content.png" alt="Callout blocks (Info / Warning / Tip / Danger) and Mermaid diagrams rendered in the viewer" width="90%">
-</p>
-
-**Views & search**
-- **Multiple views** — tree and graph (with 3D / 2D-plane toggle)
-- **Full-text search** — FTS5 powered, with native CJK support
-
-<p align="center">
-  <img src="docs/images/graph-3d.png" alt="3D knowledge graph with planet-style nodes and visible link edges" width="90%">
-</p>
-
-**AI Q&A (optional)**
-- **Grounded in your wiki** — RAG retrieves the relevant pages and cites them as links at the bottom of each answer
-- **Permission-aware** — respects ACL; the model only sees pages the current user can read
-- **Bring your own model** — any OpenAI-compatible endpoint works (OpenAI, Gemini, Ollama, Groq, DeepSeek…)
-
-**Collaboration & permissions**
-- **Multi-user + group ACL** — per-page permission control (inherited from parent pages)
-- **Concurrent-edit safety** — optimistic locking (`base_version`) so simultaneous edits never silently clobber each other
-- **Version history** — page revisions with diff view; roll back when something gets broken
-- **Draft autosave** — in-progress edits are kept in the browser, so a closed tab or crash doesn't lose work
-- **Periodic review** — give a page an owner and a review interval; the owner is reminded when it falls due, pages show when they were last verified, and a Reviews list surfaces what's overdue
-- **Comments, bookmarks, tags, page subscriptions** — everything a small team needs
-- **Activity log & trash** — see recent changes; deletions are soft and recoverable
-- **SSO & API tokens** — built-in OIDC (Google, GitHub, custom), LDAP, and personal Bearer tokens for enterprise SSO and automation scripts
-
-**Export & deployment**
-- **Flexible export** — per-page Markdown / HTML / PDF (browser print), full-site static zip
-- **One SQLite file** — no external database needed. Backup = copy one file
-- **Themes** — 9 built-in color palettes ([preview](#themes))
-- **Docker support** — `docker-compose up` and done
-
-## Themes
-
-<p align="center">
-  <img src="docs/images/themes.png" alt="9 built-in themes: Light, Dark, Lavender, Forest, Rose, Ocean, Sand, Sunset, Nord" width="100%">
-</p>
-
-Nine curated palettes ship out of the box — **Light, Dark, Lavender, Forest, Rose, Ocean, Sand, Sunset, Nord**. Switch any time from the top-right theme picker; your choice is remembered per browser.
-
-## Deployment
-
-### Docker (Recommended)
-
-The fastest way to get JustWiki running is with Docker Compose.
+Requirements: Docker and Docker Compose.
 
 ```bash
-cp .env.example .env
-# edit .env — at minimum change SECRET_KEY and ADMIN_PASS
-docker-compose up -d
+mkdir justwiki && cd justwiki
+curl -fsSLO https://raw.githubusercontent.com/PttCodingMan/JustWiki/main/docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/PttCodingMan/JustWiki/main/.env.example -o .env
 ```
 
-Open http://localhost:3000 to start writing.
-
-JustWiki ships as a single image (`ghcr.io/pttcodingman/justwiki`) — the same container serves the API and the frontend, so it also runs without Compose:
+Edit `.env` and change at least these two:
 
 ```bash
-docker run -d --name justwiki -p 3000:8000 -v ./data:/app/data \
-  -e SECRET_KEY=<random-string> -e ADMIN_PASS=<strong-password> \
+# Generate a key: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+SECRET_KEY=<random string>
+ADMIN_PASS=<strong password>
+```
+
+Start it:
+
+```bash
+docker compose up -d
+```
+
+Open <http://localhost:3000> and sign in as `admin` with your `ADMIN_PASS`.
+
+> [!IMPORTANT]
+> The container **refuses to start** while `SECRET_KEY` is a default or the admin account still has a default password. The reason is printed in the log (`docker compose logs justwiki`).
+
+## Without Compose: docker run
+
+JustWiki ships as a single image (`ghcr.io/pttcodingman/justwiki`); one container serves both the API and the frontend:
+
+```bash
+docker run -d --name justwiki --restart unless-stopped \
+  -p 3000:8000 -v ./data:/app/data \
+  -e SECRET_KEY=<random string> -e ADMIN_PASS=<strong password> \
   -e PUBLIC_BASE_URL=http://localhost:3000 \
   ghcr.io/pttcodingman/justwiki:latest
 ```
 
-> **Behind your own reverse proxy** (Caddy, Traefik, nginx…): set `TRUST_PROXY=true` in `.env` and put your public URL (e.g. `https://wiki.example.com`) in `PUBLIC_BASE_URL_DOCKER`.
->
-> **Upgrading from the old two-image layout** (backend + frontend): switch to the new `docker-compose.yml` and run `docker-compose up -d --remove-orphans`. The `./data` directory and host port 3000 are unchanged. The old compose file forced `TRUST_PROXY` on and the new one doesn't, so set it in `.env` if you run a proxy in front.
+The app listens on port 8000 inside the container; the health check endpoint is `/api/health`.
 
-### Configuration
+## Exposing it
 
-All settings live in a single `.env` file. See [.env.example](.env.example) for available options.
+When people connect from other machines or through a domain, three more things are needed:
 
-Key variables:
+1. **HTTPS** — put a TLS reverse proxy (Caddy, Traefik, nginx…) in front, or the session cookie travels in clear text
+2. **Allow the public URL as an origin** — otherwise every write (edits, comments…) from that URL is rejected by the CSRF check with 403
+3. **Trust the proxy** — so login rate limits see the real client IP
 
-| Variable        | Description                        | Default              |
-| --------------- | ---------------------------------- | -------------------- |
-| `SECRET_KEY`    | Session signing key                | `change-me-...`      |
-| `ADMIN_USER`    | Admin username                     | `admin`              |
-| `ADMIN_PASS`    | Admin password                     | `admin`              |
-| `DB_PATH`       | SQLite database path               | `./backend/data/just-wiki.db`|
-| `AI_ENABLED`    | Enable AI chat                     | `false`              |
-| `AI_API_KEY`    | LLM provider API key (required if enabled) | —            |
+`.env`:
 
-## Usage
+```bash
+PUBLIC_BASE_URL_DOCKER=https://wiki.example.com   # with docker run, set PUBLIC_BASE_URL instead
+ALLOWED_ORIGINS=https://wiki.example.com
+TRUST_PROXY=true
+```
 
-### Slash Commands
+An `https://` public URL turns secure cookies on automatically (same as `COOKIE_SECURE=true`).
 
-<p align="center">
-  <img src="docs/images/slash-commands.png" alt="Type / in the editor to open the slash command menu" width="80%">
-</p>
-
-In the editor, type `/` to open the slash menu. You can filter by typing after the slash.
-
-| Command | Description |
-| ------- | ----------- |
-| `/h1` | Heading 1 — big section heading |
-| `/h2` | Heading 2 — medium section heading |
-| `/h3` | Heading 3 — small section heading |
-| `/bullet` | Bullet List — unordered list |
-| `/ordered` | Ordered List — numbered list |
-| `/quote` | Blockquote — quote block |
-| `/code` | Code Block — code snippet |
-| `/hr` | Divider — horizontal rule |
-| `/callout-info` | Info Callout — `:::info` block |
-| `/callout-warning` | Warning Callout — `:::warning` block |
-| `/callout-tip` | Tip Callout — `:::tip` block |
-| `/callout-danger` | Danger Callout — `:::danger` block |
-| `/mermaid` | Mermaid Diagram — insert mermaid chart |
-| `/math` | Math Formula — KaTeX math block |
-| `/drawio` | Draw.io Diagram — insert Draw.io embed |
-
-### Wikilink Autocomplete
-
-<p align="center">
-  <img src="docs/images/wikilink.png" alt="Typing [[ opens a page search dropdown" width="90%">
-</p>
-
-Type `[[` in the editor to open a page search dropdown; keep typing to filter, ↑ ↓ to select, Enter to insert. JustWiki tracks the reverse direction automatically — every page shows incoming links in its **LINKED FROM** section.
-
----
-
-## Development Guide
-
-### Tech Stack
-
-| Layer    | Stack                                          |
-| -------- | ---------------------------------------------- |
-| Backend  | Python, FastAPI, aiosqlite, Pydantic           |
-| Frontend | React 19, Vite, Tailwind CSS 4, Zustand        |
-| Editor   | Milkdown (ProseMirror)                         |
-| Database | SQLite (single file)                           |
-| Deploy   | Docker Compose                                 |
-
-### Local Development
-
-1. **Setup**: Install backend & frontend dependencies and create `.env`
-   ```bash
-   make setup
-   ```
-   *Requires: Python 3.11+, Node.js 20+, [uv](https://docs.astral.sh/uv/)*
-
-2. **Run**: Start backend (port 8000) and the Vite dev server for the frontend (port 5173)
-   ```bash
-   make dev
-   ```
-
-### Makefile Commands
-
-| Command | Description |
-| ------- | ----------- |
-| `make dev` | Start backend + frontend in dev mode |
-| `make dev-backend` | Start backend only |
-| `make dev-frontend` | Start frontend only |
-| `make build` | Build frontend for production |
-| `make backup` | Backup SQLite database with timestamp |
-| `make clean` | Remove database, media, and frontend dist |
-| `make docker-up` | `docker-compose up -d` |
-| `make docker-down` | `docker-compose down` |
-| `make setup` | First-time setup (install deps, create .env) |
-
-### Project Structure
+Caddy (certificates handled automatically):
 
 ```
-justwiki/
-├── backend/          # FastAPI REST API
-│   └── app/
-│       ├── main.py
-│       ├── routers/  # pages, search, media, tags, versions, ...
-│       └── services/ # markdown, search, AI, webhook, export
-├── frontend/         # React SPA (Vite)
-│   └── src/
-│       ├── components/
-│       │   ├── Editor/   # Milkdown editor
-│       │   ├── Viewer/   # Markdown renderer
-│       │   ├── Search/   # Search
-│       │   └── Layout/   # Sidebar, Navbar
-│       ├── pages/
-│       ├── hooks/
-│       └── store/        # Zustand
-├── data/             # Runtime data (SQLite, media)
-├── docker-compose.yml
-├── Makefile
-└── .env.example
+wiki.example.com {
+    reverse_proxy localhost:3000
+}
 ```
+
+nginx:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name wiki.example.com;
+    # ssl_certificate / ssl_certificate_key ...
+
+    # Media uploads go up to 100 MB; restoring a backup from the UI up to 500 MB
+    client_max_body_size 510m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+> [!NOTE]
+> On a LAN with no proxy, connecting to `http://<host IP>:3000` directly, you still need that URL in `ALLOWED_ORIGINS` (comma-separated for several) or editing won't work. Leave `TRUST_PROXY` at `false`.
+
+## Configuration
+
+Everything is configured in `.env`; run `docker compose up -d` after a change to recreate the container. See [.env.example](.env.example) for every option with comments.
+
+| Variable | Meaning | Default |
+| -------- | ------- | ------- |
+| `SECRET_KEY` | Session signing key — **must be changed** | `change-me-...` |
+| `ADMIN_USER` / `ADMIN_PASS` | The first admin account; `ADMIN_PASS` **must be changed** | `admin` / `admin` |
+| `PUBLIC_BASE_URL_DOCKER` | Public URL (Compose) | `http://localhost:3000` |
+| `ALLOWED_ORIGINS` | Origins allowed to send writes, comma-separated | localhost only |
+| `TRUST_PROXY` | Set to `true` behind a reverse proxy | `false` |
+| `COOKIE_SECURE` | Force secure cookies (automatic with an https public URL) | `false` |
+| `ANONYMOUS_READ` | Let signed-out visitors read the whole wiki | `false` |
+| `AI_ENABLED` | Turn on AI chat (also needs `AI_API_KEY` etc.) | `false` |
+| `OIDC_ENABLED` / `LDAP_ENABLED` | Turn on SSO / LDAP sign-in (requires HTTPS) | `false` |
+| `CHECK_UPDATES` | Let the dashboard check ghcr.io for new versions | `false` |
+
+For AI chat, SSO and LDAP details see [AI Chat](https://codingman.cc/JustWiki/page/Tw2agRKS) and the [Admin Guide](https://codingman.cc/JustWiki/page/pkXTD5C3) in the documentation.
+
+## Data and backups
+
+All data lives in `./data`:
+
+```
+data/
+├── just-wiki.db   # SQLite database (WAL mode; -wal / -shm files may sit beside it)
+└── media/         # uploaded images and files
+```
+
+- **From the UI** — Admin → Backup & Restore → Download Backup gives a `.zip` with the database and media; the same page restores from a `.zip`
+- **From the host** — stop the container and copy all of `data/`; if it's running, copy the `-wal` file too
+- **Moving servers** — put `docker-compose.yml`, `.env` and `data/` on the new machine and run `docker compose up -d`
+
+## Upgrading
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+The database schema migrates automatically on startup. Back up `data/` first.
+
+> **Upgrading from the old two-image layout (backend + frontend)**: switch to the new `docker-compose.yml` and run `docker compose up -d --remove-orphans`. The `./data` directory and host port 3000 are unchanged. The old compose file forced `TRUST_PROXY` on and the new one doesn't — set it in `.env` if you have a proxy in front.
+
+## Building from source
+
+```bash
+git clone https://github.com/PttCodingMan/JustWiki.git
+cd JustWiki
+cp .env.example .env   # edit as described above
+docker compose up -d --build
+```
+
+For local development, tests and the project layout, see the [Developer Guide](https://codingman.cc/JustWiki/page/iP4uO0Bn).
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+Released under the [MIT License](LICENSE).
