@@ -176,6 +176,27 @@
       "saveSuccess": "設定を保存しました。",
       "saveFailed": "設定の保存に失敗しました"
     },
+    "import": {
+      "title": "Markdown からインポート",
+      "intro": "他のツールから移行します。Markdown ファイルの .zip（フォルダ、Obsidian Vault、HackMD/HedgeDoc のエクスポート）または単一の .md ノートをアップロードしてください。",
+      "source": "ソース",
+      "sources": {
+        "auto": "自動検出",
+        "markdown": "Markdown フォルダ（GitHub、MkDocs、Docusaurus…）",
+        "obsidian": "Obsidian Vault",
+        "hackmd": "HackMD / HedgeDoc"
+      },
+      "parent": "インポート先",
+      "parentRoot": "トップレベル",
+      "hint": "フォルダは親ページになり、リンク・画像・添付ファイルは書き換えられます。ページはあなたの名前で作成され、通知は送信されません。",
+      "btn": "インポート",
+      "importing": "インポート中...",
+      "failed": "インポートに失敗しました",
+      "success": "{{pages}} ページと {{media}} ファイルをインポートしました。",
+      "warnings_one": "警告 {{count}} 件",
+      "warnings_other": "警告 {{count}} 件",
+      "moreWarnings": "…ほか {{count}} 件"
+    },
     "backup": {
       "title": "バックアップと復元",
       "downloadTitle": "バックアップをダウンロード",
@@ -712,7 +733,8 @@
       "created": "作成しました",
       "updated": "更新しました",
       "deleted": "削除しました",
-      "verified": "確認しました"
+      "verified": "確認しました",
+      "imported": "インポートしました"
     }
   },
   "userProfile": {
@@ -737,7 +759,8 @@
     "actions": {
       "created": "作成",
       "updated": "更新",
-      "commented": "コメント"
+      "commented": "コメント",
+      "imported": "インポートしました"
     },
     "time": {
       "justNow": "たった今",

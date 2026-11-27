@@ -20,7 +20,7 @@ from app.database import (
 from app.auth import ensure_admin_exists
 from app.spa import install_spa
 from app.services.page_review import review_reminder_loop
-from app.routers import auth_router, oauth_router, pages, media, templates, search, tags, activity, bookmarks, versions, diagrams, users, comments, backup, export, trash, notifications, watch, public, dashboard, acl, groups, ai, tokens, reviews, settings as settings_router
+from app.routers import auth_router, oauth_router, pages, media, templates, search, tags, activity, bookmarks, versions, diagrams, users, comments, backup, export, imports, trash, notifications, watch, public, dashboard, acl, groups, ai, tokens, reviews, settings as settings_router
 
 logger = logging.getLogger("justwiki")
 
@@ -312,6 +312,7 @@ app.include_router(users.router)
 app.include_router(comments.router)
 app.include_router(backup.router)
 app.include_router(export.router)
+app.include_router(imports.router)
 app.include_router(trash.router)
 app.include_router(notifications.router)
 app.include_router(watch.router)

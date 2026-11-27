@@ -176,6 +176,27 @@
       "saveSuccess": "설정이 저장되었습니다.",
       "saveFailed": "설정 저장에 실패했습니다"
     },
+    "import": {
+      "title": "Markdown에서 가져오기",
+      "intro": "다른 도구에서 옮겨옵니다. Markdown 파일의 .zip(폴더, Obsidian 볼트, HackMD/HedgeDoc 내보내기) 또는 단일 .md 노트를 업로드하세요.",
+      "source": "소스",
+      "sources": {
+        "auto": "자동 감지",
+        "markdown": "Markdown 폴더 (GitHub, MkDocs, Docusaurus…)",
+        "obsidian": "Obsidian 볼트",
+        "hackmd": "HackMD / HedgeDoc"
+      },
+      "parent": "가져올 위치",
+      "parentRoot": "최상위",
+      "hint": "폴더는 상위 페이지가 되고 링크, 이미지, 첨부 파일은 자동으로 변환됩니다. 페이지는 본인 이름으로 생성되며 알림은 보내지 않습니다.",
+      "btn": "가져오기",
+      "importing": "가져오는 중...",
+      "failed": "가져오기 실패",
+      "success": "페이지 {{pages}}개와 파일 {{media}}개를 가져왔습니다.",
+      "warnings_one": "경고 {{count}}개",
+      "warnings_other": "경고 {{count}}개",
+      "moreWarnings": "…외 {{count}}개"
+    },
     "backup": {
       "title": "백업 및 복원",
       "downloadTitle": "백업 다운로드",
@@ -712,7 +733,8 @@
       "created": "만들었습니다",
       "updated": "업데이트했습니다",
       "deleted": "삭제했습니다",
-      "verified": "확인했습니다"
+      "verified": "확인했습니다",
+      "imported": "가져옴"
     }
   },
   "userProfile": {
@@ -737,7 +759,8 @@
     "actions": {
       "created": "생성",
       "updated": "수정",
-      "commented": "댓글"
+      "commented": "댓글",
+      "imported": "가져옴"
     },
     "time": {
       "justNow": "방금",

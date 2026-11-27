@@ -149,6 +149,18 @@ docker run -d --name justwiki -p 3000:8000 -v ./data:/app/data \
 
 在編輯器中輸入 `[[` 即會跳出頁面搜尋下拉，繼續輸入即時篩選；按 ↑ ↓ 選擇、Enter 插入。系統會自動建立反向連結，讓你在頁面底部的 **LINKED FROM** 區塊看到所有引用來源。
 
+### 從其他工具搬家
+
+管理員可在 **Admin → 從 Markdown 匯入** 上傳 `.zip`（或單一 `.md`），支援：
+
+| 來源 | 會轉換的內容 |
+| --- | --- |
+| **Markdown 資料夾**（GitHub、MkDocs、Docusaurus…） | 資料夾 → 父頁面（`index.md` / `README.md` 當資料夾頁），相對 `.md` 連結 → wikilink，圖片與附件上傳到媒體庫，常見 HTML 轉成 Markdown，`:::note` 等提示區塊 |
+| **Obsidian vault**（自動偵測 `.obsidian/`） | `[[筆記]]`、別名、`![[圖片]]`、`![[筆記]]` 嵌入、`> [!note]` callout、`#標籤`、`%%註解%%`、換行規則依 vault 的 Strict line breaks 設定 |
+| **HackMD / HedgeDoc** | 第一個 H1 當標題、`###### tags:`、`:::success` / `:::spoiler`、`{%youtube %}` 等嵌入、`[TOC]` |
+
+找不到目標的連結會保留文字並列在匯入報告中。頁面建立者為執行匯入的管理員，不會發送通知；原始的作者、時間與版本歷史不會搬過來。
+
 ---
 
 ## 開發者指南

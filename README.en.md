@@ -153,6 +153,18 @@ In the editor, type `/` to open the slash menu. You can filter by typing after t
 
 Type `[[` in the editor to open a page search dropdown; keep typing to filter, ↑ ↓ to select, Enter to insert. JustWiki tracks the reverse direction automatically — every page shows incoming links in its **LINKED FROM** section.
 
+### Migrating from other tools
+
+Admins can upload a `.zip` (or a single `.md`) under **Admin → Import from Markdown**:
+
+| Source | What gets converted |
+| --- | --- |
+| **Markdown folder** (GitHub, MkDocs, Docusaurus…) | Folders → parent pages (`index.md` / `README.md` become the folder page), relative `.md` links → wikilinks, images and attachments → media library, common HTML → Markdown, `:::note`-style admonitions |
+| **Obsidian vault** (auto-detected via `.obsidian/`) | `[[notes]]`, aliases, `![[images]]`, `![[note]]` embeds, `> [!note]` callouts, `#tags`, `%%comments%%`, line breaks per the vault's Strict line breaks setting |
+| **HackMD / HedgeDoc** | First H1 as title, `###### tags:`, `:::success` / `:::spoiler`, `{%youtube %}`-style embeds, `[TOC]` |
+
+Links whose target isn't in the upload are kept as text and listed in the import report. Pages are created as the importing admin without notifications; original authors, timestamps and history are not carried over.
+
 ---
 
 ## Development Guide
