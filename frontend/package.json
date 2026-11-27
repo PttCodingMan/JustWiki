@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@mermaid-js/layout-elk": "^0.2.3",
     "@milkdown/kit": "^7.23.0",
     "axios": "^1.15.0",
     "dompurify": "^3.3.3",

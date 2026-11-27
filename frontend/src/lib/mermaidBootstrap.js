@@ -8,6 +8,9 @@
  * now goes through `ensureMermaid()` — init runs once per theme switch.
  */
 import mermaid from 'mermaid'
+import elkLayouts from '@mermaid-js/layout-elk'
+
+mermaid.registerLayoutLoaders(elkLayouts)
 
 let lastTheme = null
 
