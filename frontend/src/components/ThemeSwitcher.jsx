@@ -5,7 +5,7 @@ import useTheme, { themes, fonts } from '../store/useTheme'
 // Each font option's label is drawn in that face so the menu doubles as a
 // preview. Keep in sync with the `:root[data-font=…]` stacks in index.css.
 const fontPreviewFamily = {
-  sans: '"Inter", sans-serif',
+  sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   jetbrains: '"JetBrains Mono", monospace',
   plex: '"IBM Plex Mono", monospace',
 }

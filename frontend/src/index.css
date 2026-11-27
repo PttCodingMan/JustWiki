@@ -21,13 +21,12 @@
   --color-border: #e6ecf4;
   --color-text-tertiary: color-mix(in oklab, var(--color-text-secondary) 72%, var(--color-bg));
   --color-hairline: color-mix(in oklab, var(--color-border) 75%, transparent);
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", "PingFang TC", "Noto Sans TC", "Hiragino Sans",
-    "Microsoft JhengHei", "Noto Sans CJK TC", "Apple SD Gothic Neo",
-    "Noto Sans KR", sans-serif;
-  --font-display: "Instrument Serif", "Iowan Old Style", "Apple Garamond",
-    Georgia, "Noto Serif TC", "Songti TC", "Hiragino Mincho ProN",
-    "Noto Serif CJK TC", serif;
+  /* 中文字體排在系統英文字體之後：排在前面的話英文會改用蘋方/正黑體內建的英文字形。
+     Chromium 會照清單挑到 PingFang TC；Safari 的 -apple-system 則依系統語言自行選中文字體 */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Hiragino Sans",
+    "Noto Sans CJK TC", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --font-display: var(--font-sans);
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, "Liberation Mono", "Courier New", monospace;
 
@@ -261,7 +260,6 @@ html {
 body {
   margin: 0;
   font-family: var(--font-sans);
-  font-feature-settings: "cv11", "ss01", "ss03";
   font-optical-sizing: auto;
   background: var(--color-bg);
   color: var(--color-text);

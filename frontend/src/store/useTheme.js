@@ -48,11 +48,11 @@ export const themes = {
   },
 }
 
-// Reading font. `sans` keeps the default Inter/Instrument Serif pairing; the
+// Reading font. `sans` keeps the default system UI + CJK stack; the
 // mono options swap both the body and display stacks (see index.css,
 // `:root[data-font=…]`). Code blocks keep JetBrains Mono either way.
 export const fonts = {
-  sans: { name: 'Inter', mono: false },
+  sans: { name: 'System', mono: false },
   jetbrains: { name: 'JetBrains Mono', mono: true },
   plex: { name: 'IBM Plex Mono', mono: true },
 }
