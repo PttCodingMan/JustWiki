@@ -46,7 +46,7 @@ cd frontend && npm test -- src/path/to/file.test.jsx
 - **Schemas**: `schemas.py` — shared Pydantic request/response models
 - **Database**: `database.py` — schema DDL and FTS5 search index setup; first-launch welcome pages and default templates are markdown files in `app/seed/`; startup-time migrations live in `migrations.py` and record applied versions in the `schema_migrations` ledger so each migration runs once per DB
 - **Routers**: One file per domain — `pages.py`, `search.py`, `media.py`, `versions.py`, `tags.py`, `templates.py`, `users.py`, `diagrams.py`, `comments.py`, `bookmarks.py`, `activity.py`, `backup.py`, `export.py`, `imports.py`, `auth_router.py`, `oauth_router.py`, `tokens.py`, `trash.py`, `notifications.py`, `watch.py`, `public.py`, `dashboard.py`, `acl.py`, `groups.py`, `ai.py`, `reviews.py`
-- **Services**: `search.py` (FTS5 indexing, CJK segmentation), `wikilink.py` (backlink tracking), `acl.py` (permission resolution — single source of truth, routers must use these helpers), `media_ref.py` (tracks which pages reference each media file), `diagram_ref.py`, `notifications.py` (fan-out to watchers on page events), `oidc.py` (OIDC client + provider config), `ldap_auth.py` (LDAP bind + attribute mapping), `accounts.py` (username derivation + SSO/LDAP user provisioning shared with invites), `page_review.py` (periodic review status + the hourly due-reminder loop started in the app lifespan), `md_import.py` (pure Markdown/Obsidian/HackMD → JustWiki conversion used by `routers/imports.py`; rewrites links to random slugs, plans media, never touches the DB)
+- **Services**: `search.py` (FTS5 indexing, CJK segmentation), `wikilink.py` (backlink tracking), `acl.py` (permission resolution — single source of truth, routers must use these helpers), `media_ref.py` (tracks which pages reference each media file), `diagram_ref.py`, `notifications.py` (fan-out to watchers on page events), `oidc.py` (OIDC client + provider config), `ldap_auth.py` (LDAP bind + attribute mapping), `accounts.py` (username derivation + SSO/LDAP user provisioning shared with invites), `page_review.py` (periodic review status + the hourly due-reminder loop started in the app lifespan), `md_import.py` (pure Markdown/Obsidian/HackMD/Wiki.js → JustWiki conversion used by `routers/imports.py`; rewrites links to random slugs, plans media, never touches the DB), `html_to_md.py` (stdlib HTML → Markdown for imported WYSIWYG pages)
 - **Deps**: Python 3.11+, managed with `uv`
 
 ### Frontend (`frontend/src/`)
@@ -102,7 +102,7 @@ All endpoints under `/api/`. Vite dev server proxies `/api` to `localhost:8000`.
 - Public: `/api/public/pages/{slug}` (unauthenticated, rate-limited 60 req/min/IP)
 - Dashboard: `GET /api/dashboard/stats` (admin only)
 - Reviews: `PUT/DELETE /api/pages/{slug}/review`, `POST /api/pages/{slug}/review/verify` (write permission); `GET /api/reviews?scope=all|mine` (ACL-filtered list). Review status is also embedded as `review` in `GET /api/pages/{slug}`
-- Import: `POST /api/import` (admin; multipart `file` = .zip or .md, `source` = auto|markdown|obsidian|hackmd, optional `parent_slug`) — returns a report with created pages and warnings
+- Import: `POST /api/import` (admin; multipart `file` = .zip or .md, `source` = auto|markdown|obsidian|hackmd|wikijs, optional `parent_slug`) — returns a report with created pages and warnings
 - Health: `GET /api/health`
 
 ## ACL / Permissions

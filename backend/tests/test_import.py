@@ -348,6 +348,132 @@ def test_nfd_and_non_flagged_utf8_filenames():
     assert f"[[{pages['한글 노트'].slug}|한글 노트]]" in c and f"[[{pages['ガイド'].slug}|ガイド]]" in c
 
 
+# ── Converter: Wiki.js ──────────────────────────────────────────────────────
+
+
+def wikijs_file(title, content, *, html=False, tags="", description="", published="true"):
+    """Byte-for-byte what Wiki.js 2.5 writes (server/helpers/page.js
+    injectPageMetadata) for its disk / git storage targets."""
+    meta = [
+        ("title", title),
+        ("description", description),
+        ("published", published),
+        ("date", "2024-03-01T10:20:30.123Z"),
+        ("tags", tags),
+        ("editor", "ckeditor" if html else "markdown"),
+        ("dateCreated", "2023-12-24T08:00:00.000Z"),
+    ]
+    block = "\n".join(f"{k}: {v}" for k, v in meta)
+    if html:
+        return "<!--\n" + block + "\n-->\n\n" + content
+    return "---\n" + block + "\n---\n\n" + content
+
+
+SVG = b'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>'
+SVG_FOREIGN = b'<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><div>x</div></foreignObject></svg>'
+
+WIKIJS_DUMP = {
+    "home.md": wikijs_file("Welcome", (
+        "# Welcome\n\n"
+        "Start with the [guide](/guide) or [setup](/en/guide/setup) and [docs](guide/setup).\n"
+        "Tagged [stuff](/t/howto), unknown [x](/nowhere), image ![Logo](/uploads/logo.png =200x){.align-center}\n\n"
+        "> Read this first\n> twice\n{.is-warning}\n\n"
+        "- [Guide](/guide)\n- [中文](/zh/guide)\n{.links-list}\n\n"
+        "# Tabs {.tabset}\n## One\ncontent\n\n"
+        "```diagram\n" + base64.b64encode(SVG).decode() + "\n```\n\n"
+        "```diagram\n" + base64.b64encode(SVG_FOREIGN).decode() + "\n```\n\n"
+        "```js\nconst a = {.is-info}\n```\n"
+    ), tags="getting started, intro", description="The front page"),
+    "guide.md": wikijs_file("User Guide", "Child: [setup](setup). Back [home](/)."),
+    "guide/setup.md": wikijs_file("Setup", "Steps.\n\n> Note\n> {.is-info}\n", published="false"),
+    "guide/visual.html": wikijs_file("Visual Page", (
+        '<h2>Visual</h2><p>Go to <a href="/guide/setup">setup</a> or '
+        '<a href="https://example.com">site</a>.</p>'
+        '<figure class="image"><img src="/uploads/logo.png" alt="Logo"></figure>'
+        '<ul><li>one</li><li>two</li></ul>'
+        '<blockquote class="is-success"><p>Done</p></blockquote>'
+    ), html=True, tags="visual"),
+    "zh/guide.md": wikijs_file("指南", "中文頁面 [首頁](/zh/home)"),
+    "zh/home.md": wikijs_file("首頁", "歡迎"),
+    "uploads/logo.png": PNG,
+    "notes/readme.adoc": "= AsciiDoc page",
+}
+
+
+def test_wikijs_dump_autodetected_and_structure():
+    r = run(WIKIJS_DUMP)
+    assert r.flavor == "wikijs"
+    pages = by_title(r)
+    assert {"Welcome", "User Guide", "Setup", "Visual Page", "zh", "指南", "首頁"} <= set(pages)
+    # guide.md is the page of the guide/ folder (Wiki.js parent/child paths)
+    assert pages["Setup"].parent_key == pages["User Guide"].key
+    assert pages["Visual Page"].parent_key == pages["User Guide"].key
+    assert pages["Welcome"].tags == ["getting started", "intro"]
+    assert pages["Visual Page"].tags == ["visual"]
+    roots = sorted((p for p in r.pages if p.parent_key is None), key=lambda p: p.sort_order)
+    assert roots[0].title == "Welcome"  # Wiki.js home first
+    # Wiki.js metadata is consumed, not dumped as YAML.
+    assert all("```yaml" not in p.content_md for p in r.pages)
+    msgs = [(w["file"], w["message"]) for w in r.warnings]
+    assert ("guide/setup.md", "Page was unpublished in Wiki.js; imported as a normal page") in msgs
+    assert any(f == "notes/readme.adoc" and "Skipped" in m for f, m in msgs)
+
+
+def test_wikijs_links_attrs_callouts_diagrams():
+    r = run(WIKIJS_DUMP)
+    pages = by_title(r)
+    home = pages["Welcome"].content_md
+    guide, setup = pages["User Guide"].slug, pages["Setup"].slug
+    assert home.startswith("*The front page*\n\n")
+    assert "# Welcome" not in home
+    # absolute, locale-prefixed default-locale, and relative-to-home links
+    assert f"[[{guide}|guide]] or [[{setup}|setup]] and [[{setup}|docs]]" in home
+    assert f"[[{pages['指南'].slug}|中文]]" in home
+    assert "Tagged stuff, unknown x" in home
+    logo = next(m for m in r.media if m.original_name == "logo.png")
+    assert f"![Logo](/api/media/{logo.filename})" in home  # =200x and {.align-center} gone
+    assert ":::warning\n\nRead this first  \ntwice\n\n:::" not in home  # markdown: no soft→hard
+    assert ":::warning\n\nRead this first\ntwice\n\n:::" in home
+    assert "{.links-list}" not in home and "{.tabset}" not in home and "# Tabs\n" in home
+    assert "```js\nconst a = {.is-info}\n```" in home  # code untouched
+    svg = next(m for m in r.media if m.original_name == "diagram-1.svg")
+    assert f"![diagram](/api/media/{svg.filename})" in home
+    assert "```diagram\n" in home  # foreignObject SVG rejected → kept as code
+    msgs = " ".join(w["message"] for w in r.warnings)
+    assert "/t/howto" in msgs and "/nowhere" in msgs and "foreignObject" not in msgs
+    # Relative link from a non-home page is a child of that page.
+    assert f"Child: [[{setup}|setup]]. Back [[{pages['Welcome'].slug}|home]]." in pages["User Guide"].content_md
+    # In-quote attribute form
+    assert ":::info\n\nNote\n\n:::" in pages["Setup"].content_md
+    assert f"[[{pages['首頁'].slug}|首頁]]" in pages["指南"].content_md
+
+
+def test_wikijs_html_page_converted():
+    r = run(WIKIJS_DUMP)
+    pages = by_title(r)
+    c = pages["Visual Page"].content_md
+    logo = next(m for m in r.media if m.original_name == "logo.png")
+    assert c.startswith("## Visual\n\nGo to ")
+    assert f"[[{pages['Setup'].slug}|setup]] or [site](https://example.com)." in c
+    assert f"![Logo](/api/media/{logo.filename})" in c
+    assert "- one\n- two" in c
+    assert ":::tip\n\nDone\n\n:::" in c
+    assert "<" not in c
+
+
+def test_wikijs_multiline_description_does_not_leak_metadata():
+    r = run({"a.md": wikijs_file("A", "body", description="line one\nline two")}, flavor="wikijs")
+    c = r.pages[0].content_md
+    assert r.pages[0].title == "A"
+    assert "dateCreated" not in c and c.startswith("*line one*\n\nbody")
+
+
+def test_html_pages_skipped_outside_wikijs():
+    r = run({"a.md": "x", "b.html": "<p>y</p>"}, flavor="markdown")
+    assert [p.title for p in r.pages] == ["a"]
+    assert any(w["file"] == "b.html" and "Skipped" in w["message"] for w in r.warnings)
+
+
 # ── API ─────────────────────────────────────────────────────────────────────
 
 

@@ -158,6 +158,7 @@ docker run -d --name justwiki -p 3000:8000 -v ./data:/app/data \
 | **Markdown 資料夾**（GitHub、MkDocs、Docusaurus…） | 資料夾 → 父頁面（`index.md` / `README.md` 當資料夾頁），相對 `.md` 連結 → wikilink，圖片與附件上傳到媒體庫，常見 HTML 轉成 Markdown，`:::note` 等提示區塊 |
 | **Obsidian vault**（自動偵測 `.obsidian/`） | `[[筆記]]`、別名、`![[圖片]]`、`![[筆記]]` 嵌入、`> [!note]` callout、`#標籤`、`%%註解%%`、換行規則依 vault 的 Strict line breaks 設定 |
 | **HackMD / HedgeDoc** | 第一個 H1 當標題、`###### tags:`、`:::success` / `:::spoiler`、`{%youtube %}` 等嵌入、`[TOC]` |
+| **Wiki.js 2.x**（「本機檔案系統」或 Git 儲存的資料夾，自動偵測） | 頁面路徑 → 階層，`title` / `tags` 等 metadata，絕對路徑連結與 `/uploads` 圖片、語系資料夾，`{.is-info}` 提示區塊，視覺編輯器的 `.html` 頁面轉成 Markdown，`diagram` 區塊轉成 SVG 圖片 |
 
 找不到目標的連結會保留文字並列在匯入報告中。頁面建立者為執行匯入的管理員，不會發送通知；原始的作者、時間與版本歷史不會搬過來。
 

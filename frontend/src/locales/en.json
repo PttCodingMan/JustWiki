@@ -180,13 +180,14 @@
     },
     "import": {
       "title": "Import from Markdown",
-      "intro": "Move content from another tool. Upload a .zip of Markdown files (a folder, an Obsidian vault, a HackMD/HedgeDoc export) or a single .md note.",
+      "intro": "Move content from another tool. Upload a .zip of Markdown files (a folder, an Obsidian vault, a HackMD/HedgeDoc export, a Wiki.js storage folder) or a single .md note.",
       "source": "Source",
       "sources": {
         "auto": "Auto-detect",
         "markdown": "Markdown folder (GitHub, MkDocs, Docusaurus…)",
         "obsidian": "Obsidian vault",
-        "hackmd": "HackMD / HedgeDoc"
+        "hackmd": "HackMD / HedgeDoc",
+        "wikijs": "Wiki.js (storage folder)"
       },
       "parent": "Import under",
       "parentRoot": "Top level",
