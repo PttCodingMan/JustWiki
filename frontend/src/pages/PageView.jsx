@@ -408,7 +408,7 @@ export default function PageView() {
                 {watching ? t('pageView.unwatch') : t('pageView.watch')}
               </button>
             )}
-            {writable && (
+            {manageable && (
             <>
             <div className="border-t border-border my-1" />
             {page.is_public ? (

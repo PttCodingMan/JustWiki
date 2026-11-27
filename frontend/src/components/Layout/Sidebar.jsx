@@ -100,7 +100,8 @@ const TreeNode = memo(function TreeNode({ node, depth = 0, parentId = null, inde
         await movePage(data.slug, parentId, index + 1)
       }
     } catch (err) {
-      console.error('Move failed:', err)
+      // e.g. 403 when the move would change who can see the page.
+      alert(err?.response?.data?.detail || t('sidebar.moveFailed'))
     }
   }
 

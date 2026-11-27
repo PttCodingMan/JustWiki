@@ -291,6 +291,42 @@ async def _m015_user_session_security(db: aiosqlite.Connection) -> None:
         )
 
 
+async def _m016_acl_manage_permission(db: aiosqlite.Connection) -> None:
+    """Allow `manage` in page_acl.permission.
+
+    SQLite can't alter a CHECK constraint, so rebuild the table when its
+    stored DDL predates `manage` (fresh databases already have it). Existing
+    rows are copied unchanged: `write` keeps meaning "edit content"; only
+    admins can manage pages in a restricted space until they grant `manage`.
+    """
+    rows = await db.execute_fetchall(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'page_acl'"
+    )
+    if not rows or "'manage'" in (rows[0]["sql"] or ""):
+        return
+    await db.execute("ALTER TABLE page_acl RENAME TO page_acl_old")
+    await db.execute(
+        """CREATE TABLE page_acl (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            page_id        INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+            principal_type TEXT    NOT NULL CHECK (principal_type IN ('user', 'group')),
+            principal_id   INTEGER NOT NULL,
+            permission     TEXT    NOT NULL CHECK (permission IN ('read', 'write', 'manage')),
+            UNIQUE (page_id, principal_type, principal_id)
+        )"""
+    )
+    await db.execute(
+        "INSERT INTO page_acl (id, page_id, principal_type, principal_id, permission) "
+        "SELECT id, page_id, principal_type, principal_id, permission FROM page_acl_old"
+    )
+    await db.execute("DROP TABLE page_acl_old")
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_page_acl_page ON page_acl(page_id)")
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_page_acl_principal "
+        "ON page_acl(principal_type, principal_id)"
+    )
+
+
 MIGRATIONS: list[Migration] = [
     (1, "user_profile_columns", _m001_user_profile_columns),
     (2, "user_soft_delete", _m002_user_soft_delete),
@@ -307,6 +343,7 @@ MIGRATIONS: list[Migration] = [
     (13, "user_is_active", _m013_user_is_active),
     (14, "hex_page_slugs", _m014_hex_page_slugs),
     (15, "user_session_security", _m015_user_session_security),
+    (16, "acl_manage_permission", _m016_acl_manage_permission),
 ]
 
 

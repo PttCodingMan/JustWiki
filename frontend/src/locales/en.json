@@ -50,7 +50,8 @@
     "noPages": "No pages yet",
     "newSubpage": "New subpage",
     "pageActions": "Page actions",
-    "pageActionsFor": "Page actions for {{title}}"
+    "pageActionsFor": "Page actions for {{title}}",
+    "moveFailed": "Could not move the page."
   },
   "notifications": {
     "title": "Notifications",
@@ -109,11 +110,13 @@
   "acl": {
     "title": "Manage permissions",
     "intro": "Leave empty to keep the page open to everyone (inherits from parent). Add users or groups below to restrict access. Most-permissive rule applies when the same user is granted through multiple rows.",
+    "manageHint": "Write lets someone edit the page. Manage also lets them change these permissions, make the page public, and move it somewhere with different permissions. On an unrestricted page its creator can manage it.",
     "explicitGrants": "Explicit grants",
     "noExplicit": "No explicit rows — page uses inherited permissions.",
     "permission": {
       "read": "Read",
-      "write": "Write"
+      "write": "Write",
+      "manage": "Manage"
     },
     "remove": "Remove",
     "addLabel": "Add",

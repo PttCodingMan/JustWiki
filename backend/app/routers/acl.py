@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from app.auth import get_current_user
 from app.database import fetch_one_or_404, get_db, write_transaction
 from app.routers.activity import log_activity
-from app.services.acl import invalidate_readable_cache, resolve_page_permission
+from app.services.acl import has_permission, invalidate_readable_cache, resolve_page_permission
 
 router = APIRouter(prefix="/api/pages", tags=["acl"])
 
@@ -34,7 +34,7 @@ router = APIRouter(prefix="/api/pages", tags=["acl"])
 class AclRowInput(BaseModel):
     principal_type: Literal["user", "group"]
     principal_id: int
-    permission: Literal["read", "write"]
+    permission: Literal["read", "write", "manage"]
 
 
 class AclPutBody(BaseModel):
@@ -172,15 +172,31 @@ async def get_page_acl(slug: str, user=Depends(get_current_user)):
 
 
 async def _require_manage_permission(db, user, page_id: int):
+    """Editing a page's ACL needs `manage` (page creator, an explicit manage
+    grant, or admin) — plain write only allows editing content."""
     if user.get("role") == "admin":
         return
     perm = await resolve_page_permission(db, user, page_id)
     if perm == "none":
         raise HTTPException(status_code=404, detail="Page not found")
-    if perm in ("read",):
+    if not has_permission(perm, "manage"):
         raise HTTPException(
             status_code=403,
             detail="You do not have permission to manage this page's ACL",
+        )
+
+
+async def _forbid_self_lockout(db, user, page_id: int) -> None:
+    """Call inside the write transaction, after the ACL change: abort (and
+    roll back) if the caller would no longer be able to manage the page.
+    Without this a manager could silently lock themselves out, and the
+    request would then 404 on its own response."""
+    if user.get("role") == "admin":
+        return
+    if not has_permission(await resolve_page_permission(db, user, page_id), "manage"):
+        raise HTTPException(
+            status_code=400,
+            detail="This change would remove your own manage permission on the page",
         )
 
 
@@ -231,6 +247,7 @@ async def put_page_acl(slug: str, body: AclPutBody, user=Depends(get_current_use
                    VALUES (?, ?, ?, ?)""",
                 (page["id"], r.principal_type, r.principal_id, r.permission),
             )
+        await _forbid_self_lockout(db, user, page["id"])
         # Metadata intentionally omits principal details: activity_log is readable
         # by any authenticated user (see pending finding #5), and leaking the
         # principal/permission list would reveal organizational ACL structure.
@@ -253,6 +270,8 @@ async def delete_page_acl(slug: str, user=Depends(get_current_user)):
     await _require_manage_permission(db, user, page["id"])
 
     async with write_transaction(db):
+        # No lockout guard here: clearing the rules is an explicit "open this
+        # page up again" — the caller may end up with plain write, by design.
         await db.execute("DELETE FROM page_acl WHERE page_id = ?", (page["id"],))
         await log_activity(
             db, user["id"], "acl_cleared", "page", page["id"],

@@ -49,7 +49,8 @@
     "noPages": "尚未有任何頁面",
     "newSubpage": "新增子頁面",
     "pageActions": "頁面選項",
-    "pageActionsFor": "「{{title}}」的頁面選項"
+    "pageActionsFor": "「{{title}}」的頁面選項",
+    "moveFailed": "無法移動頁面。"
   },
   "notifications": {
     "title": "通知",
@@ -107,11 +108,13 @@
   "acl": {
     "title": "管理權限",
     "intro": "留空表示維持與父層相同的開放狀態。新增使用者或群組以限制存取；同一使用者若由多列授權，會以最寬鬆的為準。",
+    "manageHint": "「寫入」可以編輯頁面內容；「管理」另外還能修改這些權限、將頁面設為公開，以及把頁面移到權限不同的位置。未設限制的頁面，由建立者負責管理。",
     "explicitGrants": "明確授權",
     "noExplicit": "目前沒有明確授權 — 頁面採繼承的權限。",
     "permission": {
       "read": "讀取",
-      "write": "寫入"
+      "write": "寫入",
+      "manage": "管理"
     },
     "remove": "移除",
     "addLabel": "新增",

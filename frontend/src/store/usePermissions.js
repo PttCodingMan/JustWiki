@@ -5,7 +5,9 @@ import api from '../api/client'
 // responses so the common path doesn't need a round-trip; falls back to
 // /api/pages/{slug}/my-permission when the cache is cold.
 //
-// Permission values: 'admin' | 'write' | 'read' | 'none'.
+// Permission values: 'admin' | 'manage' | 'write' | 'read' | 'none'.
+// `manage` = write + deciding who can see the page (ACL, public sharing,
+// moves that change the inherited ACL).
 const usePermissions = create((set, get) => ({
   cache: {},
 
@@ -48,12 +50,14 @@ const usePermissions = create((set, get) => ({
 
 export function canEdit(permission, role) {
   if (role === 'viewer') return false
-  return permission === 'admin' || permission === 'write'
+  return permission === 'admin' || permission === 'manage' || permission === 'write'
 }
 
+// ACL editing and public sharing. Mirrors `has_permission(perm, "manage")`
+// on the backend, which enforces it regardless of what the UI shows.
 export function canManageAcl(permission, role) {
   if (role === 'viewer') return false
-  return permission === 'admin' || permission === 'write'
+  return permission === 'admin' || permission === 'manage'
 }
 
 export function canRead(permission) {

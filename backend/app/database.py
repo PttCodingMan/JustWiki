@@ -264,7 +264,7 @@ CREATE TABLE IF NOT EXISTS page_acl (
     page_id        INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
     principal_type TEXT    NOT NULL CHECK (principal_type IN ('user', 'group')),
     principal_id   INTEGER NOT NULL,
-    permission     TEXT    NOT NULL CHECK (permission IN ('read', 'write')),
+    permission     TEXT    NOT NULL CHECK (permission IN ('read', 'write', 'manage')),
     UNIQUE (page_id, principal_type, principal_id)
 );
 

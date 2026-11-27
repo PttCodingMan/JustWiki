@@ -49,7 +49,8 @@
     "noPages": "아직 페이지가 없습니다",
     "newSubpage": "새 하위 페이지",
     "pageActions": "페이지 작업",
-    "pageActionsFor": "'{{title}}' 페이지 작업"
+    "pageActionsFor": "'{{title}}' 페이지 작업",
+    "moveFailed": "페이지를 이동할 수 없습니다."
   },
   "notifications": {
     "title": "알림",
@@ -107,11 +108,13 @@
   "acl": {
     "title": "권한 관리",
     "intro": "비워두면 상위 페이지에서 상속받아 모두에게 열려 있습니다. 사용자나 그룹을 추가해 접근을 제한할 수 있습니다. 같은 사용자가 여러 행으로 허용되면 가장 관대한 규칙이 적용됩니다.",
+    "manageHint": "'쓰기'는 페이지를 편집할 수 있습니다. '관리'는 추가로 이 권한을 변경하고, 페이지를 공개하고, 권한이 다른 위치로 옮길 수 있습니다. 제한이 없는 페이지는 작성자가 관리합니다.",
     "explicitGrants": "명시적 권한",
     "noExplicit": "명시적 권한이 없습니다 — 페이지는 상속된 권한을 사용합니다.",
     "permission": {
       "read": "읽기",
-      "write": "쓰기"
+      "write": "쓰기",
+      "manage": "관리"
     },
     "remove": "삭제",
     "addLabel": "추가",
