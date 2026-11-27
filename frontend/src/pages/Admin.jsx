@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import useAuth from '../store/useAuth'
 import useGroups from '../store/useGroups'
 import useSettings from '../store/useSettings'
+import usePages from '../store/usePages'
 import api from '../api/client'
 import Editor from '../components/Editor/Editor'
 import { formatBytes } from '../lib/format'
@@ -260,6 +261,138 @@ function BackupSection() {
         <div className={`mt-4 p-3 rounded-lg text-sm ${message.type === 'success' ? 'bg-green-500/10 text-green-700 dark:text-green-300 border border-green-500/25' : 'bg-red-500/10 text-red-600 dark:text-red-300 border border-red-500/25'}`}>
           {message.text}
         </div>
+      )}
+    </div>
+  )
+}
+
+const IMPORT_SOURCES = ['auto', 'markdown', 'obsidian', 'hackmd', 'wikijs']
+
+function flattenTree(nodes, depth = 0, out = []) {
+  for (const node of nodes || []) {
+    out.push({ slug: node.slug, title: node.title, depth })
+    flattenTree(node.children, depth + 1, out)
+  }
+  return out
+}
+
+function ImportSection() {
+  const { t } = useTranslation()
+  const tree = usePages((s) => s.tree)
+  const fetchTree = usePages((s) => s.fetchTree)
+  const [source, setSource] = useState('auto')
+  const [parentSlug, setParentSlug] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [error, setError] = useState(null)
+  const [report, setReport] = useState(null)
+  const fileRef = useRef(null)
+
+  useEffect(() => {
+    fetchTree().catch(() => {})
+  }, [fetchTree])
+
+  const handleImport = async () => {
+    const file = fileRef.current?.files?.[0]
+    if (!file) return
+    setImporting(true)
+    setError(null)
+    setReport(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('source', source)
+      if (parentSlug) formData.append('parent_slug', parentSlug)
+      const res = await api.post('/import', formData)
+      setReport(res.data)
+      if (fileRef.current) fileRef.current.value = ''
+      fetchTree().catch(() => {})
+    } catch (err) {
+      setError(err?.response?.data?.detail || t('admin.import.failed'))
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const pages = flattenTree(tree)
+
+  return (
+    <div className="bg-surface rounded-2xl shadow-sm border border-hairline p-6">
+      <h2 className="section-title mb-1">{t('admin.import.title')}</h2>
+      <p className="text-sm text-text-secondary mb-4">{t('admin.import.intro')}</p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="block text-sm font-medium text-text mb-1" htmlFor="import-source">{t('admin.import.source')}</label>
+          <select
+            id="import-source"
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-text"
+          >
+            {IMPORT_SOURCES.map((s) => (
+              <option key={s} value={s}>{t(`admin.import.sources.${s}`)}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-text mb-1" htmlFor="import-parent">{t('admin.import.parent')}</label>
+          <select
+            id="import-parent"
+            value={parentSlug}
+            onChange={(e) => setParentSlug(e.target.value)}
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-text"
+          >
+            <option value="">{t('admin.import.parentRoot')}</option>
+            {pages.map((p) => (
+              <option key={p.slug} value={p.slug}>{`${'  '.repeat(p.depth)}${p.title}`}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <p className="text-xs text-text-secondary mt-3">{t('admin.import.hint')}</p>
+      <div className="flex flex-wrap items-center gap-2 mt-3">
+        <input ref={fileRef} type="file" accept=".zip,.md,.markdown" className="text-sm" />
+        <button
+          onClick={handleImport}
+          disabled={importing}
+          className="px-4 py-2 bg-primary text-primary-text rounded-lg text-sm hover:bg-primary-hover disabled:opacity-50"
+        >
+          {importing ? t('admin.import.importing') : t('admin.import.btn')}
+        </button>
+      </div>
+      {error && (
+        <div className="mt-4 p-3 rounded-lg text-sm bg-red-500/10 text-red-600 dark:text-red-300 border border-red-500/25">
+          {error}
+        </div>
+      )}
+      {report && (
+        <div className="mt-4 p-3 rounded-lg text-sm bg-green-500/10 text-green-700 dark:text-green-300 border border-green-500/25">
+          <p>{t('admin.import.success', { pages: report.pages_created, media: report.media_imported })}</p>
+          <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+            {report.root_pages.map((p) => (
+              <li key={p.slug}>
+                <Link to={`/page/${p.slug}`} className="underline">{p.title}</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {report && report.warnings.length > 0 && (
+        <details className="mt-3 text-sm">
+          <summary className="cursor-pointer text-text-secondary">
+            {t('admin.import.warnings', { count: report.warnings.length + report.warnings_truncated })}
+          </summary>
+          <ul className="mt-2 max-h-64 overflow-auto space-y-1 text-xs text-text-secondary">
+            {report.warnings.map((w, i) => (
+              <li key={i}>
+                {w.file && <code className="mr-1">{w.file}</code>}
+                {w.message}
+              </li>
+            ))}
+            {report.warnings_truncated > 0 && (
+              <li>{t('admin.import.moreWarnings', { count: report.warnings_truncated })}</li>
+            )}
+          </ul>
+        </details>
       )}
     </div>
   )
@@ -1699,6 +1832,7 @@ export default function Admin() {
       <TemplatesSection />
       <LibrarySection />
       <WebhooksSection />
+      <ImportSection />
       <BackupSection />
       <ExportSection />
     </div>

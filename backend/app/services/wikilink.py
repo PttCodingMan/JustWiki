@@ -10,10 +10,12 @@ TRANSCLUSION_RE = re.compile(r'!\[\[([^\]|]+)(?:\|[^\]]+)?\]\]')
 def extract_wikilink_slugs(content_md: str) -> set[str]:
     """Extract all referenced slugs from wikilinks and transclusions in markdown."""
     slugs = set()
+    # Inside a GFM table the alias pipe is escaped (`[[slug\|text]]`); the
+    # table parser drops that backslash before rendering, so drop it here too.
     for m in WIKILINK_RE.finditer(content_md):
-        slugs.add(m.group(1).strip())
+        slugs.add(m.group(1).strip().removesuffix("\\").strip())
     for m in TRANSCLUSION_RE.finditer(content_md):
-        slugs.add(m.group(1).strip())
+        slugs.add(m.group(1).strip().removesuffix("\\").strip())
     return slugs
 
 
