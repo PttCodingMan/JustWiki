@@ -11,7 +11,7 @@
 A lightweight, self-hosted wiki for small teams. Markdown-first, and all your data is one SQLite file plus a media folder — no external database. A 1 vCPU / 512 MB VM or a Raspberry Pi is enough.
 
 <p align="center">
-  <img src="docs/images/hero.png" alt="JustWiki main UI: page tree on the left, table of contents on the right, Markdown viewer in the middle" width="100%">
+  <img src="docs/images/hero-en.png" alt="JustWiki main UI: page tree on the left, table of contents on the right, Markdown viewer in the middle" width="100%">
 </p>
 
 **📖 Documentation and live demo: <https://codingman.cc/JustWiki/>**

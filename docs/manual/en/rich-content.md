@@ -2,7 +2,7 @@
 
 Beyond plain text, a JustWiki page can hold callouts, diagrams, math and architecture drawings. Every example on this page is rendering live — compare it with the source shown above it.
 
-![Callouts and Mermaid rendered](/api/media/rich-content.png)
+![Callouts and Mermaid rendered](/api/media/rich-content-en.png)
 
 ## Callouts
 

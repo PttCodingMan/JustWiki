@@ -4,7 +4,7 @@ A wiki is only as useful as the connections between its pages. JustWiki gives yo
 
 ## Wikilinks
 
-![Typing double brackets opens page search](/api/media/wikilink.png)
+![Typing double brackets opens page search](/api/media/wikilink-en.png)
 
 Type `[[` in the editor to search for a page; keep typing to filter, use ↑ ↓ to choose and Enter to insert. The result looks like:
 

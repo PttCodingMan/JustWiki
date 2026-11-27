@@ -4,7 +4,7 @@
 
 JustWiki is a lightweight, self-hosted wiki for small teams. It is Markdown-first, and everything lives in a single SQLite file plus a media folder — no external database. A 1 vCPU / 512 MB VM or a Raspberry Pi is enough to run it.
 
-![JustWiki main UI](/api/media/hero.png)
+![JustWiki main UI](/api/media/hero-en.png)
 
 ## Why JustWiki
 

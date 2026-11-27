@@ -4,7 +4,7 @@ JustWiki's editor is Milkdown, a WYSIWYG editor: what you type is what readers s
 
 ## Slash commands
 
-![Slash command menu](/api/media/slash-commands.png)
+![Slash command menu](/api/media/slash-commands-en.png)
 
 Type `/` in the editor to open the insert menu. Keep typing to filter, use ↑ ↓ to choose and Enter to insert.
 

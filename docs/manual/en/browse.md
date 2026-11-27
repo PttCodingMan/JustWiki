@@ -14,7 +14,7 @@ Try it on this demo: search for "backup" or "ACL".
 
 ## Graph View
 
-![3D knowledge graph](/api/media/graph-3d.png)
+![3D knowledge graph](/api/media/graph-3d-en.png)
 
 **Graph View** in the sidebar draws every page as a node and every wikilink as an edge, so you can spot the hubs and the orphans.
 
@@ -31,7 +31,7 @@ Click the bookmark icon on any page and it appears under **Bookmarks** in the si
 
 ## Themes and fonts
 
-![The 9 built-in themes](/api/media/themes.png)
+![The 9 built-in themes](/api/media/themes-en.png)
 
 The theme menu (top right) has 9 color schemes: **Light, Dark, Lavender, Forest, Rose, Ocean, Sand, Sunset, Nord**. You can also switch the body font to monospace. Your choice is remembered in the browser.
 

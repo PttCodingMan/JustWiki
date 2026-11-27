@@ -4,7 +4,7 @@ Write your first page and get to know the UI in five minutes.
 
 ## A tour of the UI
 
-![Main UI](/api/media/hero.png)
+![Main UI](/api/media/hero-en.png)
 
 - **Left sidebar** — the page tree, bookmarks, and entries for Recent Changes, Graph View, AI Chat, Reviews and Trash
 - **Center** — the page itself; above it are Edit, History, Watch, Bookmark and **⋯ More actions** (export, permissions, public sharing, review settings, delete…)
