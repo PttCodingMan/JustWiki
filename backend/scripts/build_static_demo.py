@@ -16,7 +16,7 @@ page text for the client-side search.
 Each guide page's slug is derived from its name in MANUAL_PAGES, so page URLs
 stay the same from one build to the next even as pages are added. The
 first-launch "Getting Started" pages from ``app/seed/`` are added as a second
-root, with slugs fixed the same way.
+root, listed above the guide, with slugs fixed the same way.
 """
 import asyncio
 import hashlib
@@ -122,7 +122,8 @@ async def _seed_manual(db) -> None:
         sys.exit("Two demo pages hash to the same slug; rename one of them")
 
     page_ids: dict[str, int] = {}
-    next_sort: dict[str | None, int] = {}
+    # Getting Started takes sort_order 0, so the guide's roots start at 1.
+    next_sort: dict[str | None, int] = {None: 1}
     seeded = []
     for name, filename, title, parent, page_type in MANUAL_PAGES:
         content = (MANUAL_DIR / filename).read_text(encoding="utf-8").strip()
@@ -158,9 +159,7 @@ async def _seed_manual(db) -> None:
         await rebuild_search_index(db, page_id, title, content)
         seeded.append((page_id, content))
 
-    await insert_getting_started_pages(
-        db, admin_id, welcome_slugs, hub_sort_order=next_sort.get(None, 0)
-    )
+    await insert_getting_started_pages(db, admin_id, welcome_slugs)
 
     # Second pass so links to pages inserted later still resolve.
     for page_id, content in seeded:

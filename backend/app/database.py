@@ -795,7 +795,7 @@ async def rebuild_all_media_refs(db):
 GETTING_STARTED_PAGES = [("getting-started", "Getting Started", 0, "document"), *WELCOME_PAGES]
 
 
-async def insert_getting_started_pages(db, admin_id, slug_map, hub_sort_order=0):
+async def insert_getting_started_pages(db, admin_id, slug_map):
     """Insert the first-launch "Getting Started" pages as a root of the tree.
 
     ``slug_map`` maps each seed name in GETTING_STARTED_PAGES to its slug.
@@ -813,8 +813,6 @@ async def insert_getting_started_pages(db, admin_id, slug_map, hub_sort_order=0)
     seeded = []
     for seed_name, title, sort_order, page_type in GETTING_STARTED_PAGES:
         content = rewrite_page_slugs(_read_seed(f"{seed_name}.md"), slug_map)
-        if hub_id is None:
-            sort_order = hub_sort_order
         cursor = await db.execute(
             """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, created_by, page_type)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
