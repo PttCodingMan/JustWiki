@@ -2,6 +2,8 @@
 
 一套輕量、自架式的小團隊 Wiki。Clone 下來、執行，就能開始寫。
 
+**線上試用**：[codingman.cc/JustWiki](https://codingman.cc/JustWiki/)（唯讀示範，不用安裝）
+
 <p align="center">
   <img src="docs/images/hero.png" alt="JustWiki 主介面：左側頁面樹、右側目錄、中央 Markdown 檢視" width="100%">
 </p>
@@ -48,7 +50,7 @@
 - **自選模型** — 任何 OpenAI 相容端點都可接（OpenAI、Gemini、Ollama、Groq、DeepSeek…）
 
 **協作與權限**
-- **多使用者 + 群組 ACL** — 頁面層級的權限控制（權限由父頁面繼承）
+- **多使用者 + 群組 ACL** — 頁面層級的權限控制（權限由父頁面繼承），分為閱讀、編輯、管理三級；只有「管理」權限能改頁面的可見範圍（ACL、公開分享、搬到別的空間）
 - **併發編輯保護** — 樂觀鎖機制（`base_version`），多人同時編輯不會默默互蓋
 - **版本歷史** — 每頁修訂紀錄與差異比對，改壞了能回滾
 - **草稿自動儲存** — 編輯中的內容自動存在瀏覽器，關掉分頁或當機後回來可以還原
@@ -57,7 +59,16 @@
 - **活動紀錄與垃圾桶** — 近況一目了然、刪除採軟刪除可救回
 - **SSO 與 API Token** — 內建 OIDC（Google、GitHub、自訂）、LDAP、個人 Bearer Token，可整合企業帳號系統與自動化腳本
 
-**匯出與部署**
+<p align="center">
+  <img src="docs/images/page-review.png" alt="頁面上方的複查狀態列：最後驗證日期、逾期天數、負責人，以及「標記為已驗證」按鈕" width="90%">
+</p>
+
+<p align="center">
+  <img src="docs/images/reviews.png" alt="文件複查清單：依急迫程度排序，標示已逾期、即將到期、正常" width="90%">
+</p>
+
+**匯入、匯出與部署**
+- **從其他工具搬家** — 一次匯入 Markdown 資料夾、Obsidian vault、HackMD / HedgeDoc、Wiki.js 2.x（[說明](#從其他工具搬家)）
 - **多格式匯出** — 單頁匯出為 Markdown / HTML / PDF（瀏覽器列印），整站打包為靜態 zip
 - **單一 SQLite 檔案** — 免外部資料庫，備份就是複製一個檔案
 - **佈景主題** — 內建 9 款配色（[預覽](#佈景主題)）
@@ -98,6 +109,21 @@ docker run -d --name justwiki -p 3000:8000 -v ./data:/app/data \
 >
 > **從舊版（backend + frontend 兩個 image）升級**：改用新版 `docker-compose.yml` 後執行 `docker-compose up -d --remove-orphans`。資料目錄 `./data` 與對外 port 3000 都不變；舊版 compose 會強制開啟 `TRUST_PROXY`，新版不會，若前面有 proxy 請自行在 `.env` 設定。
 
+### 開放到外網之前
+
+只要看起來不是本機開發（在 Docker 裡執行、`PUBLIC_BASE_URL` 不是 localhost、有設 `ALLOWED_ORIGINS` 或 `COOKIE_SECURE`），JustWiki 遇到不安全的設定就會**拒絕啟動**：
+
+- `SECRET_KEY` 還是預設值 → 不啟動，錯誤訊息會附一組隨機金鑰給你用。
+- 管理員密碼是 `admin`、`password` 這類預設弱密碼 → 不啟動；把 `ADMIN_PASS` 設成強密碼後重啟，就會用它取代資料庫裡的弱密碼。
+
+其餘建議：
+
+- 一定要走 HTTPS。`PUBLIC_BASE_URL` 設成 `https://…` 時會自動加上 Secure cookie 與 HSTS。
+- `ALLOWED_ORIGINS` 填對外網址，跨站請求才會被擋下。
+- `TRUST_PROXY` 只在前面真的有 reverse proxy 時開，否則任何人都能偽造 IP 繞過登入限速。
+- `ANONYMOUS_READ` 預設關閉；打開後未登入的訪客能讀所有沒設 ACL 的頁面。
+- 登入只有每個 IP 每分鐘 5 次的限速，沒有帳號鎖定或兩步驟驗證。對外開放時建議在前端（Cloudflare、反向代理）再加一層限速或存取控制，或改用 SSO 登入。
+
 ### 設定
 
 所有設定都集中在單一 `.env` 檔案。完整選項請參考 [.env.example](.env.example)。
@@ -106,9 +132,14 @@ docker run -d --name justwiki -p 3000:8000 -v ./data:/app/data \
 
 | 變數              | 說明                          | 預設值                |
 | ----------------- | ----------------------------- | --------------------- |
-| `SECRET_KEY`      | Session 簽章金鑰              | `change-me-...`       |
+| `SECRET_KEY`      | Session 簽章金鑰（正式環境必改） | `change-me-...`       |
 | `ADMIN_USER`      | 管理員帳號                    | `admin`               |
-| `ADMIN_PASS`      | 管理員密碼                    | `admin`               |
+| `ADMIN_PASS`      | 首次啟動時的管理員密碼（正式環境必改） | `admin`               |
+| `PUBLIC_BASE_URL` | 對外網址，用於 SSO 回呼與判斷是否為正式環境 | `http://localhost:8000` |
+| `ALLOWED_ORIGINS` | 允許的來源網址（CSRF / CORS），逗號分隔 | —                     |
+| `COOKIE_SECURE`   | Cookie 只走 HTTPS（`PUBLIC_BASE_URL` 是 https 時自動開啟） | `false`               |
+| `TRUST_PROXY`     | 從 `X-Forwarded-For` 取得真實 IP，前面有 proxy 時才開 | `false`               |
+| `ANONYMOUS_READ`  | 允許未登入訪客閱讀未設 ACL 的頁面 | `false`               |
 | `DB_PATH`         | SQLite 資料庫路徑             | `./backend/data/just-wiki.db` |
 | `AI_ENABLED`      | 啟用 AI 問答功能              | `false`               |
 | `AI_API_KEY`      | LLM 供應商 API 金鑰（啟用時必填） | —                     |
@@ -151,7 +182,13 @@ docker run -d --name justwiki -p 3000:8000 -v ./data:/app/data \
 
 ### 從其他工具搬家
 
-管理員可在 **Admin → 從 Markdown 匯入** 上傳 `.zip`（或單一 `.md`），支援：
+管理員可在 **管理 → 從 Markdown 匯入** 上傳 `.zip`（或單一 `.md`），並選擇要匯入到哪個頁面底下。
+
+<p align="center">
+  <img src="docs/images/import.png" alt="從 Markdown 匯入：選擇來源與目標位置，匯入後顯示建立的頁面與警告" width="80%">
+</p>
+
+支援的來源：
 
 | 來源 | 會轉換的內容 |
 | --- | --- |
