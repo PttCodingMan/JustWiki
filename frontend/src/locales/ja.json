@@ -13,6 +13,8 @@
     "newPage": "+ 新規",
     "logout": "ログアウト",
     "signIn": "ログイン",
+    "demoBadge": "閲覧専用デモ",
+    "demoHint": "静的な閲覧専用デモです。JustWiki は GitHub で入手できます。",
     "profile": "プロフィール",
     "previous": "前へ",
     "next": "次へ",

@@ -30,7 +30,8 @@ const SANITIZE_STRIP_CHARS = /[「」『』]/g
 // protocol-relative URL is rejected so the SVG <image href> can never reach
 // out cross-origin or trigger a script handler. The wiki's upload endpoint
 // returns paths of the shape `/api/media/{filename}` (see routers/media.py).
-const SAFE_IMG_PREFIX = '/api/media/'
+// The static demo serves media under its base path (lib/demoApi.js).
+const SAFE_IMG_PREFIX = `${import.meta.env.BASE_URL}api/media/`
 
 export class MindmapParseError extends Error {
   constructor(message) {

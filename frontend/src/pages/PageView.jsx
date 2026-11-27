@@ -17,6 +17,7 @@ import AclManager from '../components/AclManager'
 import { ReviewBanner, ReviewSettingsDialog } from '../components/PageReview'
 import { stripBrTags } from '../lib/markdown'
 import api from '../api/client'
+import { IS_DEMO } from '../lib/demoApi'
 
 // Walk the sidebar tree to find the chain of ancestors for a slug so the
 // header can render breadcrumbs without an extra request.
@@ -491,18 +492,21 @@ export default function PageView() {
               </svg>
               {t('pageView.downloadMarkdown')}
             </button>
-            <button
-              onClick={() => {
-                setMenuOpen(false)
-                window.open(`/api/export/page/${slug}?format=html`, '_blank')
-              }}
-              className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
-            >
-              <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              {t('pageView.exportHtml')}
-            </button>
+            {/* Server-rendered export; the static demo has no server. */}
+            {!IS_DEMO && (
+              <button
+                onClick={() => {
+                  setMenuOpen(false)
+                  window.open(`/api/export/page/${slug}?format=html`, '_blank')
+                }}
+                className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
+              >
+                <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                {t('pageView.exportHtml')}
+              </button>
+            )}
             <button
               onClick={() => {
                 setMenuOpen(false)

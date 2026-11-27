@@ -27,6 +27,7 @@ import Reviews from './pages/Reviews'
 import Chat from './pages/Chat'
 import PublicPageView from './pages/PublicPageView'
 import PageOrPublicView from './pages/PageOrPublicView'
+import { IS_DEMO } from './lib/demoApi'
 
 // Routes a guest (ANONYMOUS_READ visitor without a real session) is not
 // allowed on. The matchers cover the path prefixes in the route table that
@@ -134,7 +135,8 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      {/* The static demo has no sign-in, so login redirects land on the home page. */}
+      <Route path="/login" element={IS_DEMO ? <Navigate to="/" replace /> : <Login />} />
       {/* Legacy alias — existing copied links still work. */}
       <Route path="/public/page/:slug" element={<PublicPageView />} />
 

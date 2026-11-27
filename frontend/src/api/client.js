@@ -1,9 +1,12 @@
 import axios from 'axios'
 import { isGuestMode } from '../lib/authState'
+import { IS_DEMO, demoAdapter } from '../lib/demoApi'
 
 const api = axios.create({
   baseURL: '/api',
   withCredentials: true,
+  // The static demo build answers from pre-rendered JSON instead of a server.
+  ...(IS_DEMO ? { adapter: demoAdapter } : {}),
 })
 
 // Redirect to login on 401 (auth is handled via httpOnly cookies).

@@ -13,6 +13,8 @@
     "newPage": "+ New",
     "logout": "Logout",
     "signIn": "Sign in",
+    "demoBadge": "Read-only demo",
+    "demoHint": "This is a static, read-only demo. Get JustWiki on GitHub.",
     "profile": "Profile",
     "previous": "Previous",
     "next": "Next",
