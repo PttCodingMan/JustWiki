@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import DOMPurify from 'dompurify'
+import { sanitizeDiagramSvg } from '../lib/diagramSvg'
 import usePages from '../store/usePages'
 import useAuth from '../store/useAuth'
 import { canEdit } from '../store/usePermissions'
@@ -461,7 +461,7 @@ export default function PageEdit() {
                     {diagrams[id]?.svg_cache ? (
                       <div
                         className="diagram-edit-preview-svg"
-                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(diagrams[id].svg_cache, { USE_PROFILES: { svg: true, svgFilters: true } }) }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeDiagramSvg(diagrams[id].svg_cache) }}
                       />
                     ) : (
                       <div className="diagram-edit-preview-placeholder">

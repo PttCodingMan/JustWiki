@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.auth import get_current_user, require_real_user
 from app.database import fetch_one_or_404, get_db, write_transaction
+from app.services.acl import list_readable_page_ids
 
 # Notifications are personal — guests don't receive any, so the whole
 # router is real-user-only.
@@ -43,8 +44,18 @@ async def list_notifications(
         "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND read_at IS NULL",
         (user["id"],),
     )
+    items = [dict(r) for r in rows]
+    # The joined slug/title are the page's *current* values. Blank them for
+    # pages the user can no longer read so a later rename of a restricted
+    # page doesn't leak through an old notification.
+    if user.get("role") != "admin" and any(i["page_id"] is not None for i in items):
+        readable = await list_readable_page_ids(db, user)
+        for i in items:
+            if i["page_id"] is not None and i["page_id"] not in readable:
+                i["page_slug"] = None
+                i["page_title"] = None
     return {
-        "items": [dict(r) for r in rows],
+        "items": items,
         "unread_count": unread_row[0]["cnt"],
     }
 

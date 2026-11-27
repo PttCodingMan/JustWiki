@@ -149,7 +149,7 @@ function Message({ message }) {
           <div className="text-sm text-red-600">{message.content || t('chat.errorFallback')}</div>
         ) : message.content ? (
           <div className="text-sm text-text break-words chat-markdown">
-            <MarkdownViewer content={message.content} />
+            <MarkdownViewer content={message.content} allowExternalImages={false} />
           </div>
         ) : (
           <div className="text-sm text-text-secondary italic">{t('chat.thinking')}</div>

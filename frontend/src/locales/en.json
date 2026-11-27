@@ -259,6 +259,9 @@
       "deactivate": "Deactivate",
       "confirmDeactivate": "Deactivate \"{{username}}\"? They will be signed out and unable to log in until reactivated. Their pages and history are kept.",
       "statusUpdateFailed": "Failed to update status",
+      "confirmEmail": "Confirm email",
+      "confirmEmailPrompt": "Confirm that {{email}} belongs to \"{{username}}\"? Their next SSO sign-in with this address will be linked to this account.",
+      "confirmEmailFailed": "Failed to confirm email",
       "delete": "Delete",
       "confirmDelete": "Delete user \"{{username}}\"?\n\nThis is a soft-delete — the account is deactivated, the username \"{{username}}\" is freed for reuse, and pages they authored keep their authorship. You can restore the account from the Deleted tab.",
       "deleteFailed": "Failed to delete user",
@@ -472,6 +475,7 @@
     "shortcutHint": "Enter to send · Shift+Enter for newline",
     "thinking": "Thinking…",
     "errorFallback": "Something went wrong.",
+    "externalImageBlocked": "[external image not loaded: {{name}}]",
     "disabledTitle": "AI Chat",
     "disabledIntro": "AI chat is not enabled on this server. Ask an administrator to set",
     "disabledAnd": "and provide"
@@ -824,6 +828,7 @@
       "oauth_failed": "SSO sign-in failed. Please try again.",
       "user_disabled": "Account is disabled. Contact an administrator.",
       "unknown_provider": "SSO provider is not configured.",
+      "email_link_blocked": "An account with this email exists but can't be linked automatically. Ask an admin to confirm your email.",
       "username_collision": "Could not generate a username. Ask an admin to invite you.",
       "default": "Sign-in failed."
     }

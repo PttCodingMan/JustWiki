@@ -13,6 +13,7 @@ from app.auth import (
     is_cookie_session,
     require_real_user,
     resolve_request_credentials,
+    revoke_sessions,
     set_session_cookie,
 )
 from app.config import settings
@@ -186,8 +187,24 @@ async def update_profile(body: ProfileUpdateRequest, user=Depends(require_real_u
         updates.append("display_name = ?")
         values.append(body.display_name)
     if body.email is not None:
+        email = body.email.strip()
+        current = await db.execute_fetchall(
+            "SELECT email FROM users WHERE id = ?", (user["id"],)
+        )
+        if email.lower() != (current[0]["email"] or "").lower():
+            if email:
+                taken = await db.execute_fetchall(
+                    "SELECT 1 FROM users WHERE LOWER(email) = ? AND id != ? "
+                    "AND deleted_at IS NULL",
+                    (email.lower(), user["id"]),
+                )
+                if taken:
+                    raise HTTPException(status_code=409, detail="Email is already in use")
+            # A self-typed address is unverified, so SSO must not auto-link
+            # an identity to this account by email (see services/oidc.py).
+            updates.append("email_trusted = 0")
         updates.append("email = ?")
-        values.append(body.email)
+        values.append(email)
     if body.bio is not None:
         if len(body.bio) > BIO_MAX_LEN:
             raise HTTPException(
@@ -219,7 +236,12 @@ class ChangePasswordRequest(BaseModel):
 
 
 @router.put("/password")
-async def change_password(body: ChangePasswordRequest, user=Depends(require_real_user)):
+async def change_password(
+    body: ChangePasswordRequest,
+    request: Request,
+    response: Response,
+    user=Depends(require_real_user),
+):
     await check_password_policy(body.new_password)
 
     db = await get_db()
@@ -244,4 +266,9 @@ async def change_password(body: ChangePasswordRequest, user=Depends(require_real
             "UPDATE users SET password_hash = ? WHERE id = ?",
             (new_hash, user["id"]),
         )
+        # Kill every other session (e.g. one a thief is holding)...
+        await revoke_sessions(db, user["id"])
+    # ...but keep the browser that just changed the password signed in.
+    if is_cookie_session(request):
+        await set_session_cookie(response, user)
     return {"ok": True}

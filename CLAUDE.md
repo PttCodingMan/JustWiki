@@ -38,10 +38,11 @@ cd frontend && npm test -- src/path/to/file.test.jsx
 - **Framework**: FastAPI (async), aiosqlite for SQLite access (WAL mode)
 - **Entry**: `main.py` — app creation, CORS, lifespan hooks, router mounting, origin-based CSRF middleware
 - **Auth**: `auth.py` — issues and verifies credentials across three paths:
-  - **Cookie session** (web UI): JWT in httpOnly `token` cookie, bcrypt passwords, rate-limited login
+  - **Cookie session** (web UI): JWT in httpOnly `token` cookie, bcrypt passwords, rate-limited login. `auth.revoke_sessions` sets `users.sessions_revoked_at`; JWTs with an older `iat` are rejected (password change, admin reset, deactivation). The cookie only ever carries a JWT — `jwk_` API tokens are accepted from the `Authorization` header only
   - **Bearer API token** (`Authorization: Bearer jwk_…`): hashed SHA-256 on store, plaintext returned once at creation, revocable; managed via `routers/tokens.py`
-  - **SSO**: OIDC (Google/GitHub/generic, PKCE, authlib state stored in signed session cookie) via `routers/oauth_router.py` + `services/oidc.py`; LDAP via `services/ldap_auth.py`; invitation-only mode gates first-time signup
+  - **SSO**: OIDC (Google/GitHub/generic, PKCE, authlib state stored in signed session cookie) via `routers/oauth_router.py` + `services/oidc.py`; LDAP via `services/ldap_auth.py`; invitation-only mode gates first-time signup. SSO links to an existing account by email only when `users.email_trusted=1` (set by admin/invite/LDAP; a self-edited profile email clears it)
   - **CSRF**: origin/referer check in `main.py` for mutating cookie-auth requests; Bearer-token and login/logout paths are exempt
+  - **Startup / headers**: `main._check_security` + `_enforce_admin_password` refuse to boot an exposed instance (Docker image sets `RUNNING_IN_DOCKER`) with a default SECRET_KEY or admin password. `security_headers` middleware adds CSP (SPA HTML only), `X-Frame-Options`, `nosniff`, `Referrer-Policy`, HSTS when cookies are secure — new frontend features that load third-party scripts/frames/fonts must update `_CSP`
 - **Config**: `config.py` — Pydantic Settings reading from `.env`
 - **Schemas**: `schemas.py` — shared Pydantic request/response models
 - **Database**: `database.py` — schema DDL and FTS5 search index setup; first-launch welcome pages and default templates are markdown files in `app/seed/`; startup-time migrations live in `migrations.py` and record applied versions in the `schema_migrations` ledger so each migration runs once per DB

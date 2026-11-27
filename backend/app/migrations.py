@@ -270,6 +270,27 @@ async def _m014_hex_page_slugs(db: aiosqlite.Connection) -> None:
         )
 
 
+async def _m015_user_session_security(db: aiosqlite.Connection) -> None:
+    """Add `sessions_revoked_at` and `email_trusted` to users.
+
+    `sessions_revoked_at` (unix seconds) is set on password change, admin
+    reset and deactivation; session JWTs issued before it are rejected. NULL
+    for every existing user, so the upgrade itself logs nobody out.
+
+    `email_trusted` records whether the email was set by an admin / directory
+    (1) or typed by the user on their own profile (0). SSO only auto-links a
+    new identity to an existing account by email when the email is trusted,
+    so a user can't claim someone else's address and capture their first SSO
+    login. Existing rows default to trusted to keep current linking behaviour.
+    """
+    if not await _column_exists(db, "users", "sessions_revoked_at"):
+        await db.execute("ALTER TABLE users ADD COLUMN sessions_revoked_at INTEGER")
+    if not await _column_exists(db, "users", "email_trusted"):
+        await db.execute(
+            "ALTER TABLE users ADD COLUMN email_trusted INTEGER NOT NULL DEFAULT 1"
+        )
+
+
 MIGRATIONS: list[Migration] = [
     (1, "user_profile_columns", _m001_user_profile_columns),
     (2, "user_soft_delete", _m002_user_soft_delete),
@@ -285,6 +306,7 @@ MIGRATIONS: list[Migration] = [
     (12, "user_bio", _m012_user_bio),
     (13, "user_is_active", _m013_user_is_active),
     (14, "hex_page_slugs", _m014_hex_page_slugs),
+    (15, "user_session_security", _m015_user_session_security),
 ]
 
 

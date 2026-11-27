@@ -149,6 +149,16 @@ async def get_page_acl(slug: str, user=Depends(get_current_user)):
             break  # anchor found — deeper ancestors are shadowed
         ancestor_id = anc["parent_id"]
 
+    # With explicit rows the page is its own anchor and the inherited rows are
+    # shown only as context. They then come from an ancestor whose ACL may
+    # exclude the caller, so don't reveal its title, slug or member list
+    # unless the caller can read that ancestor. (Without explicit rows the
+    # ancestor's rows are what grant access here, so it is readable anyway.)
+    if explicit and inherited and user.get("role") != "admin":
+        anchor_perm = await resolve_page_permission(db, user, inherited[0]["source_page_id"])
+        if anchor_perm == "none":
+            inherited = []
+
     # Batch-load all principal labels in at most two queries (one for users,
     # one for groups) instead of two per row.
     all_principals = [(r["principal_type"], r["principal_id"]) for r in explicit + inherited]

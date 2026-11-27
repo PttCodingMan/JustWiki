@@ -568,6 +568,21 @@ function UsersSection() {
     }
   }
 
+  // A self-edited profile email isn't trusted for SSO email linking (so
+  // nobody can claim a colleague's address). Re-saving it as an admin marks
+  // it trusted, letting that user's first SSO login link to this account.
+  const handleConfirmEmail = async (u) => {
+    if (!confirm(t('admin.users.confirmEmailPrompt', { username: u.username, email: u.email }))) {
+      return
+    }
+    try {
+      await api.put(`/users/${u.id}`, { email: u.email })
+      loadUsers()
+    } catch (err) {
+      alert(err?.response?.data?.detail || t('admin.users.confirmEmailFailed'))
+    }
+  }
+
   // Try restoring to the original username; if that slot is now occupied,
   // backend replies 409 — we prompt the admin for a replacement and retry once.
   const handleRestore = async (u) => {
@@ -761,6 +776,15 @@ function UsersSection() {
                   </td>
                   <td className="py-2 px-3 text-text-secondary">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '-'}</td>
                   <td className="py-2 px-3 text-right whitespace-nowrap">
+                    {u.email && !u.email_trusted && (
+                      <button
+                        onClick={() => handleConfirmEmail(u)}
+                        title={u.email}
+                        className="text-text-secondary hover:text-text text-sm mr-3"
+                      >
+                        {t('admin.users.confirmEmail')}
+                      </button>
+                    )}
                     <button
                       onClick={() => handleToggleActive(u)}
                       className="text-text-secondary hover:text-text text-sm mr-3"

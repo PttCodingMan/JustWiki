@@ -257,6 +257,9 @@
       "deactivate": "비활성화",
       "confirmDeactivate": "\"{{username}}\"을(를) 비활성화할까요? 로그아웃되며 다시 활성화하기 전까지 로그인할 수 없습니다. 페이지와 기록은 유지됩니다.",
       "statusUpdateFailed": "상태 업데이트에 실패했습니다",
+      "confirmEmail": "이메일 확인",
+      "confirmEmailPrompt": "{{email}}이(가) \"{{username}}\"의 이메일이 맞습니까? 이 주소로 다음에 SSO 로그인하면 이 계정에 연결됩니다.",
+      "confirmEmailFailed": "이메일 확인에 실패했습니다",
       "delete": "삭제",
       "confirmDelete": "사용자 \"{{username}}\"을(를) 삭제할까요?\n\n소프트 삭제입니다 — 계정이 비활성화되고, 사용자명 \"{{username}}\"은 다시 사용할 수 있게 풀리며, 작성한 페이지는 작성자 정보를 유지합니다. 삭제됨 탭에서 복원할 수 있습니다.",
       "deleteFailed": "사용자 삭제에 실패했습니다",
@@ -470,6 +473,7 @@
     "shortcutHint": "Enter로 전송 · Shift+Enter로 줄바꿈",
     "thinking": "생각 중…",
     "errorFallback": "문제가 발생했습니다.",
+    "externalImageBlocked": "[외부 이미지는 불러오지 않음: {{name}}]",
     "disabledTitle": "AI 챗",
     "disabledIntro": "이 서버에서는 AI 챗이 활성화되지 않았습니다. 관리자에게 다음 설정을 요청하세요:",
     "disabledAnd": "그리고"
@@ -822,6 +826,7 @@
       "oauth_failed": "SSO 로그인에 실패했습니다. 다시 시도해 주세요.",
       "user_disabled": "계정이 비활성화되었습니다. 관리자에게 문의하세요.",
       "unknown_provider": "SSO 공급자가 설정되어 있지 않습니다.",
+      "email_link_blocked": "이 이메일의 계정이 있지만 자동으로 연결할 수 없습니다. 관리자에게 이메일 확인을 요청하세요.",
       "username_collision": "사용자명을 생성할 수 없습니다. 관리자에게 초대를 요청하세요.",
       "default": "로그인에 실패했습니다."
     }

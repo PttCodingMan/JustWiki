@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS users (
     bio               TEXT NOT NULL DEFAULT '',
     original_username TEXT,
     is_active         INTEGER NOT NULL DEFAULT 1,
+    sessions_revoked_at INTEGER,
+    email_trusted     INTEGER NOT NULL DEFAULT 1,
     deleted_at        TIMESTAMP,
     created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

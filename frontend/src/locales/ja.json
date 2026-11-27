@@ -257,6 +257,9 @@
       "deactivate": "無効化",
       "confirmDeactivate": "「{{username}}」を無効化しますか？サインアウトされ、再有効化するまでログインできなくなります。ページと履歴は保持されます。",
       "statusUpdateFailed": "ステータスの更新に失敗しました",
+      "confirmEmail": "メールを確認",
+      "confirmEmailPrompt": "{{email}} が「{{username}}」のものであることを確認しますか？このアドレスでの次回の SSO サインインはこのアカウントにリンクされます。",
+      "confirmEmailFailed": "メールの確認に失敗しました",
       "delete": "削除",
       "confirmDelete": "ユーザー「{{username}}」を削除しますか？\n\nこれはソフト削除です。アカウントは無効化され、ユーザー名「{{username}}」は再利用可能になります。作成済みのページは作者情報を保持します。「削除済み」タブから復元できます。",
       "deleteFailed": "ユーザーの削除に失敗しました",
@@ -470,6 +473,7 @@
     "shortcutHint": "Enter で送信 · Shift+Enter で改行",
     "thinking": "考え中…",
     "errorFallback": "問題が発生しました。",
+    "externalImageBlocked": "[外部画像は読み込まれません: {{name}}]",
     "disabledTitle": "AI チャット",
     "disabledIntro": "このサーバーでは AI チャットが有効化されていません。管理者に次の設定を依頼してください：",
     "disabledAnd": "と"
@@ -822,6 +826,7 @@
       "oauth_failed": "SSO サインインに失敗しました。もう一度お試しください。",
       "user_disabled": "アカウントは無効化されています。管理者にご連絡ください。",
       "unknown_provider": "SSO プロバイダーが設定されていません。",
+      "email_link_blocked": "このメールアドレスのアカウントは存在しますが、自動でリンクできません。管理者にメールアドレスの確認を依頼してください。",
       "username_collision": "ユーザー名を生成できませんでした。管理者に招待を依頼してください。",
       "default": "サインインに失敗しました。"
     }

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.auth import get_current_user, require_real_user
 from app.database import get_db, write_transaction
-from app.services.acl import PageAccess, page_dep
+from app.services.acl import PageAccess, list_readable_page_ids, page_dep
 
 # Bookmarks are inherently per-user; the synthetic guest has no place here,
 # so reject it at the router boundary instead of repeating the check on
@@ -24,7 +24,12 @@ async def list_bookmarks(user=Depends(get_current_user)):
            ORDER BY b.created_at DESC""",
         (user["id"],),
     )
-    return [dict(r) for r in rows]
+    items = [dict(r) for r in rows]
+    # Drop bookmarks to pages the user has since lost access to.
+    if user.get("role") != "admin" and items:
+        readable = await list_readable_page_ids(db, user)
+        items = [i for i in items if i["id"] in readable]
+    return items
 
 
 @router.post("/{slug}")
