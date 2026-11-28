@@ -15,8 +15,8 @@ page text for the client-side search.
 
 Each guide page's slug is derived from its name in MANUAL_PAGES, so page URLs
 stay the same from one build to the next even as pages are added. The
-first-launch "Getting Started" pages from ``app/seed/`` are added as a second
-root, listed above the guide, with slugs fixed the same way.
+first-launch "Getting Started" pages from ``app/seed/`` go last under the
+demo home page, with slugs fixed the same way, so the tree has one root.
 """
 import asyncio
 import hashlib
@@ -37,7 +37,7 @@ IMAGES_DIR = REPO_ROOT / "docs" / "images"
 # link to each other as [[name]] / [[name|text]], rewritten to the slugs.
 # Renaming an entry changes that page's URL.
 MANUAL_PAGES = [
-    ("index", "index.md", "JustWiki 說明文件 · Documentation", None, "document"),
+    ("index", "index.md", "從這裡開始 · Start Here", None, "document"),
     ("zh-guide", "zh-TW/guide.md", "使用手冊（中文）", "index", "document"),
     ("zh-quick-start", "zh-TW/quick-start.md", "快速上手", "zh-guide", "document"),
     ("zh-shortcuts", "zh-TW/shortcuts.md", "鍵盤快捷鍵", "zh-quick-start", "document"),
@@ -111,9 +111,9 @@ async def _seed_manual(db) -> None:
         "SELECT id FROM users WHERE role = 'admin' LIMIT 1"
     ))[0]["id"]
     slug_map = {name: _manual_slug(name) for name, *_ in MANUAL_PAGES}
-    # The pages a fresh install starts with, kept as a second root so the
-    # demo also shows what a new wiki looks like. Guide pages can link to
-    # them by seed name, e.g. [[getting-started]].
+    # The pages a fresh install starts with, nested under the home page so
+    # the demo also shows what a new wiki looks like. Guide pages can link
+    # to them by seed name, e.g. [[getting-started]].
     welcome_slugs = {name: _manual_slug(f"seed:{name}") for name, *_ in GETTING_STARTED_PAGES}
     if slug_map.keys() & welcome_slugs.keys():
         sys.exit("A guide page shares its name with a first-launch seed page")
@@ -122,8 +122,7 @@ async def _seed_manual(db) -> None:
         sys.exit("Two demo pages hash to the same slug; rename one of them")
 
     page_ids: dict[str, int] = {}
-    # Getting Started takes sort_order 0, so the guide's roots start at 1.
-    next_sort: dict[str | None, int] = {None: 1}
+    next_sort: dict[str | None, int] = {}
     seeded = []
     for name, filename, title, parent, page_type in MANUAL_PAGES:
         content = (MANUAL_DIR / filename).read_text(encoding="utf-8").strip()
@@ -159,7 +158,11 @@ async def _seed_manual(db) -> None:
         await rebuild_search_index(db, page_id, title, content)
         seeded.append((page_id, content))
 
-    await insert_getting_started_pages(db, admin_id, welcome_slugs)
+    # After the guide, so it is the home page's last child.
+    await insert_getting_started_pages(
+        db, admin_id, welcome_slugs,
+        parent_id=page_ids["index"], sort_order=next_sort["index"],
+    )
 
     # Second pass so links to pages inserted later still resolve.
     for page_id, content in seeded:

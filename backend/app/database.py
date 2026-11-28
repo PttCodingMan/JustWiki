@@ -795,12 +795,13 @@ async def rebuild_all_media_refs(db):
 GETTING_STARTED_PAGES = [("getting-started", "Getting Started", 0, "document"), *WELCOME_PAGES]
 
 
-async def insert_getting_started_pages(db, admin_id, slug_map):
-    """Insert the first-launch "Getting Started" pages as a root of the tree.
+async def insert_getting_started_pages(db, admin_id, slug_map, parent_id=None, sort_order=0):
+    """Insert the first-launch "Getting Started" pages.
 
     ``slug_map`` maps each seed name in GETTING_STARTED_PAGES to its slug.
-    Also used by scripts/build_static_demo.py, which passes fixed slugs.
-    Does not commit.
+    The hub goes under ``parent_id`` (a root by default) at ``sort_order``.
+    Also used by scripts/build_static_demo.py, which passes fixed slugs and
+    nests the hub under the demo home page. Does not commit.
     """
     from app.services.page_slug import rewrite_page_slugs
     from app.services.search import rebuild_search_index
@@ -811,15 +812,22 @@ async def insert_getting_started_pages(db, admin_id, slug_map):
     # are not silently dropped.
     hub_id = None
     seeded = []
-    for seed_name, title, sort_order, page_type in GETTING_STARTED_PAGES:
+    for seed_name, title, page_sort_order, page_type in GETTING_STARTED_PAGES:
+        is_hub = hub_id is None  # the first page is the hub
         content = rewrite_page_slugs(_read_seed(f"{seed_name}.md"), slug_map)
         cursor = await db.execute(
             """INSERT INTO pages (slug, title, content_md, parent_id, sort_order, created_by, page_type)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (slug_map[seed_name], title, content, hub_id, sort_order, admin_id, page_type),
+            (
+                slug_map[seed_name], title, content,
+                parent_id if is_hub else hub_id,
+                sort_order if is_hub else page_sort_order,
+                admin_id, page_type,
+            ),
         )
         page_id = cursor.lastrowid
-        hub_id = hub_id or page_id  # the first page is the hub
+        if is_hub:
+            hub_id = page_id
 
         await db.execute(
             """INSERT INTO page_versions (page_id, title, content_md, edited_by, version_num)
